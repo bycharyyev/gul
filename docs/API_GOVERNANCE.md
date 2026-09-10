@@ -296,8 +296,12 @@ to the successor. The date is a promise — it must not pass without either the 
 moved or the date having been pushed out on purpose. A sunset that slips silently teaches
 integrators that our headers can be ignored, and then no future deprecation works.
 
-`DeprecatedVersionInterceptor` adds those headers only to requests that arrived without a version
-segment, so a caller who has already moved is never told to move again.
+`deprecatedVersionHeaders` is **middleware**, not an interceptor, and that distinction was a bug
+before it was a decision: Nest runs guards before interceptors, so the first version never fired
+for a request the API-key guard rejected — a partner whose key had expired got a bare 401 and no
+hint that the path was going away either. Middleware runs first, so the headers are on every
+response, and only on requests that arrived without a version segment: a caller who has already
+moved is never told to move again.
 
 Before a version is switched off, `apiusage:key:*` answers the question that actually matters —
 whether anybody is still calling it, and which key.
@@ -311,7 +315,7 @@ whether anybody is still calling it, and which key.
 | A — counting | 6 | 22 |
 | B — quotas | 4 | 21 |
 | C — key lifecycle | 5 | 15 |
-| D — versioning | 4 | 8 |
+| D — versioning | 5 | 12 |
 
 No new runtime dependency, no new service to operate: everything runs on the Redis and Postgres
 already deployed. 286 API tests pass.

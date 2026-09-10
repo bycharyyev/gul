@@ -5,7 +5,6 @@ import {
   Param,
   Post,
   UseGuards,
-  UseInterceptors,
   VERSION_NEUTRAL,
 } from "@nestjs/common";
 import { ApiHeader, ApiTags } from "@nestjs/swagger";
@@ -15,8 +14,6 @@ import { CreateOrderDto } from "../orders/dto/create-order.dto";
 import { ApiKeyGuard } from "./api-key.guard";
 import { RequiresScope } from "./api-key-scopes";
 import { CurrentApiKey } from "./current-api-key.decorator";
-import { DeprecatedVersionInterceptor } from "../common/deprecated-version.interceptor";
-import { PARTNER_UNVERSIONED_SUNSET } from "./partner-sunset";
 
 /**
  * Wholesale/reseller surface: external platforms authenticate with an API key
@@ -30,10 +27,7 @@ import { PARTNER_UNVERSIONED_SUNSET } from "./partner-sunset";
 // Both paths, one handler. This surface shipped before versioning existed, so somebody's program
 // may be pointed at the unversioned one right now; removing it to tidy up would break them with
 // no notice. `/api/v1/partner/...` is the address to use, `/api/partner/...` keeps working and
-// says so in its response headers until the sunset date.
-@UseInterceptors(
-  new DeprecatedVersionInterceptor("/api/v1/partner", PARTNER_UNVERSIONED_SUNSET),
-)
+// says so in its response headers until the sunset date -- see the middleware in partner.module.
 @Controller({ path: "partner", version: [VERSION_NEUTRAL, "1"] })
 export class PartnerController {
   constructor(
