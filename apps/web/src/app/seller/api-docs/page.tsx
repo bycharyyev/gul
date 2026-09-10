@@ -35,7 +35,7 @@ export default function SellerApiDocsPage() {
       {/* Everything needed for a first successful request, before any reference. */}
       <Card className="space-y-4 p-5">
         <h3 className="font-semibold">{t("sellerCabinet.apiDocs.startTitle")}</h3>
-        <Field label={t("sellerCabinet.apiDocs.baseUrl")} value={`${API_BASE}/seller-api`} />
+        <Field label={t("sellerCabinet.apiDocs.baseUrl")} value={`${API_BASE}/v1/seller-api`} />
         <Field label={t("sellerCabinet.apiDocs.authHeader")} value="X-Api-Key: sk_shop_…" />
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {t("sellerCabinet.apiDocs.tokenHint")}{" "}
@@ -45,7 +45,7 @@ export default function SellerApiDocsPage() {
           .
         </p>
         <CodeBlock
-          code={`curl ${API_BASE}/seller-api/me \\
+          code={`curl ${API_BASE}/v1/seller-api/me \\
   -H "X-Api-Key: $GULYALY_TOKEN"`}
         />
         <p className="text-sm text-slate-500 dark:text-slate-400">

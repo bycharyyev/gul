@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ValidationPipe } from "@nestjs/common";
+import { VERSION_NEUTRAL, ValidationPipe, VersioningType } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -53,6 +53,15 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter());
   app.setGlobalPrefix("api");
+
+  // Versioning, but only where a version means something.
+  //
+  // VERSION_NEUTRAL is the default on purpose: web and admin ship in the same deploy as this
+  // process, so their routes cannot fall out of step and a version segment on them would be a
+  // number nobody ever reads. The surfaces that DO need one are the two reached with an API key
+  // — a partner or a shop writes a program against them, and that program is released on
+  // somebody else's schedule. Those controllers opt in with @Version.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: VERSION_NEUTRAL });
 
   const config = new DocumentBuilder()
     .setTitle("Topup Hub API")

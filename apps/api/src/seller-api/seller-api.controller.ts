@@ -41,7 +41,10 @@ import { CreateChannelDto } from "../chat/dto/chat.dto";
  */
 @ApiExcludeController()
 @UseGuards(ApiKeyGuard, ShopKeyGuard)
-@Controller("seller-api")
+// Versioned from its first day, with no unversioned path to keep alive. Nothing has integrated
+// against this yet, so the cost of the segment is zero now and would be a migration of somebody
+// else's program later.
+@Controller({ path: "seller-api", version: "1" })
 export class SellerApiController {
   constructor(
     private gallery: GalleryService,

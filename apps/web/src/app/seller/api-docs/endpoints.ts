@@ -38,7 +38,7 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/me",
+        path: "/v1/seller-api/me",
         scope: "products:read",
         summary: "sellerCabinet.apiDocs.ep.me",
       },
@@ -51,19 +51,19 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/products",
+        path: "/v1/seller-api/products",
         scope: "products:read",
         summary: "sellerCabinet.apiDocs.ep.listProducts",
       },
       {
         method: "GET",
-        path: "/seller-api/products/{id}",
+        path: "/v1/seller-api/products/{id}",
         scope: "products:read",
         summary: "sellerCabinet.apiDocs.ep.getProduct",
       },
       {
         method: "POST",
-        path: "/seller-api/products",
+        path: "/v1/seller-api/products",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.createProduct",
         body: `{
@@ -79,14 +79,14 @@ export const API_SECTIONS: DocSection[] = [
       },
       {
         method: "PATCH",
-        path: "/seller-api/products/{id}",
+        path: "/v1/seller-api/products/{id}",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.updateProduct",
         body: `{ "priceTmt": 390 }`,
       },
       {
         method: "DELETE",
-        path: "/seller-api/products/{id}",
+        path: "/v1/seller-api/products/{id}",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.deleteProduct",
       },
@@ -99,27 +99,27 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/storefronts",
+        path: "/v1/seller-api/storefronts",
         scope: "products:read",
         summary: "sellerCabinet.apiDocs.ep.listStorefronts",
       },
       {
         method: "POST",
-        path: "/seller-api/storefronts",
+        path: "/v1/seller-api/storefronts",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.createStorefront",
         body: `{ "name": "Новинки", "description": "Что приехало на этой неделе" }`,
       },
       {
         method: "PATCH",
-        path: "/seller-api/storefronts/{id}",
+        path: "/v1/seller-api/storefronts/{id}",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.updateStorefront",
         body: `{ "isEnabled": false }`,
       },
       {
         method: "DELETE",
-        path: "/seller-api/storefronts/{id}",
+        path: "/v1/seller-api/storefronts/{id}",
         scope: "products:write",
         summary: "sellerCabinet.apiDocs.ep.deleteStorefront",
       },
@@ -132,13 +132,13 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/orders",
+        path: "/v1/seller-api/orders",
         scope: "shop-orders:read",
         summary: "sellerCabinet.apiDocs.ep.listOrders",
       },
       {
         method: "PATCH",
-        path: "/seller-api/orders/{id}/status",
+        path: "/v1/seller-api/orders/{id}/status",
         scope: "shop-orders:write",
         summary: "sellerCabinet.apiDocs.ep.updateOrderStatus",
         body: `{ "status": "SHIPPED" }`,
@@ -152,26 +152,26 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/channels",
+        path: "/v1/seller-api/channels",
         scope: "chat:read",
         summary: "sellerCabinet.apiDocs.ep.listChannels",
       },
       {
         method: "POST",
-        path: "/seller-api/channels",
+        path: "/v1/seller-api/channels",
         scope: "chat:write",
         summary: "sellerCabinet.apiDocs.ep.createChannel",
         body: `{ "title": "Гульбахар · новинки", "description": "Букеты недели" }`,
       },
       {
         method: "GET",
-        path: "/seller-api/channels/{id}/messages?limit=50",
+        path: "/v1/seller-api/channels/{id}/messages?limit=50",
         scope: "chat:read",
         summary: "sellerCabinet.apiDocs.ep.channelMessages",
       },
       {
         method: "POST",
-        path: "/seller-api/channels/{id}/messages",
+        path: "/v1/seller-api/channels/{id}/messages",
         scope: "chat:write",
         summary: "sellerCabinet.apiDocs.ep.postToChannel",
         body: `{ "body": "Завтра привезём пионы" }`,
@@ -185,19 +185,19 @@ export const API_SECTIONS: DocSection[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/seller-api/chats?limit=50",
+        path: "/v1/seller-api/chats?limit=50",
         scope: "chat:read",
         summary: "sellerCabinet.apiDocs.ep.listChats",
       },
       {
         method: "GET",
-        path: "/seller-api/chats/{id}/messages",
+        path: "/v1/seller-api/chats/{id}/messages",
         scope: "chat:read",
         summary: "sellerCabinet.apiDocs.ep.chatMessages",
       },
       {
         method: "POST",
-        path: "/seller-api/chats/{id}/messages",
+        path: "/v1/seller-api/chats/{id}/messages",
         scope: "chat:write",
         summary: "sellerCabinet.apiDocs.ep.replyToChat",
         body: `{ "body": "Собираем, будет готов к 15:00" }`,

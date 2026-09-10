@@ -18,7 +18,7 @@ apart.
 | **public** | nothing | `/catalog/*`, `/gallery/products`, `/stories`, `/home-slides`, `/social-links`, `/content-pages/:slug`, `/order-tracking`, `/health*` |
 | **customer** | JWT access token | `/auth/me`, `/orders/*`, `/gallery/orders/*`, `/support/*`, `/referrals/me`, `/account/*` |
 | **staff** | JWT + `@Roles(...)` | `/admin/*` and every management route |
-| **partner** | `X-Api-Key` header | `/partner/*` |
+| **partner** | `X-Api-Key` header | `/v1/partner/*` and `/v1/seller-api/*` (see Part D) |
 
 `ApiMetricsInterceptor.tierOf` derives the tier from the request itself — an attached `apiKey`
 means partner, a `CUSTOMER` role means customer, any other role means staff, nothing means public.
@@ -248,6 +248,62 @@ down for a schema change it did not ask for. Covered by a test.
 
 ---
 
+## Part D — versioning
+
+A version number is only worth having where the caller's release cycle is not ours.
+
+| Surface | Path | Versioned? |
+| --- | --- | --- |
+| public, customer, staff | `/api/...` | no — web and admin ship in the same deploy as this process, so their routes cannot fall out of step |
+| partner | `/api/v1/partner/...` | yes, and `/api/partner/...` still answers |
+| seller (shop keys) | `/api/v1/seller-api/...` | yes, and there is no unversioned path |
+
+`main.ts` calls `enableVersioning({ type: URI, defaultVersion: VERSION_NEUTRAL })`. Neutral by
+default is the point: every existing controller keeps its exact path, and the two surfaces that
+need a version opt in through `@Controller({ path, version })`. Nothing was renamed to introduce
+this.
+
+The seller API was versioned on the day it shipped, before any key existed. That is the only
+cheap moment — a version segment added after somebody integrates is a migration of a program we
+do not control.
+
+### What may change inside v1
+
+Additive changes only. A caller written against v1 today must keep working against v1 in a year:
+
+* a **new endpoint**;
+* a **new field in a response** — clients must ignore fields they do not know;
+* a **new optional request field**, or a new optional query parameter;
+* a **new enum value**, only where the documentation already told callers to expect unknown ones;
+* anything invisible over the wire.
+
+### What needs v2
+
+* removing or renaming a field, an endpoint, or a query parameter;
+* changing a field's type, or what it means;
+* making an optional request field required, or narrowing what is accepted;
+* changing a default, a sort order, a page size, or the shape of an error;
+* a new enum value on a field a caller must exhaustively switch on.
+
+The test to apply is not "is this a small change" but "could a program written last month notice
+it". A response field renamed from `title` to `name` is one word and a broken integration.
+
+### Retiring a version
+
+The unversioned partner path is the first thing due for retirement, and it shows the shape of it:
+it keeps working, and every response carries `Deprecation: true`, a `Sunset` date, and a `Link`
+to the successor. The date is a promise — it must not pass without either the callers having
+moved or the date having been pushed out on purpose. A sunset that slips silently teaches
+integrators that our headers can be ignored, and then no future deprecation works.
+
+`DeprecatedVersionInterceptor` adds those headers only to requests that arrived without a version
+segment, so a caller who has already moved is never told to move again.
+
+Before a version is switched off, `apiusage:key:*` answers the question that actually matters —
+whether anybody is still calling it, and which key.
+
+---
+
 ## What this cost
 
 | | Files | Tests |
@@ -255,6 +311,7 @@ down for a schema change it did not ask for. Covered by a test.
 | A — counting | 6 | 22 |
 | B — quotas | 4 | 21 |
 | C — key lifecycle | 5 | 15 |
+| D — versioning | 4 | 8 |
 
 No new runtime dependency, no new service to operate: everything runs on the Redis and Postgres
 already deployed. 286 API tests pass.
