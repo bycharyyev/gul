@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly Postgres backup for gul
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/gul
+ExecStart=/opt/gul/scripts/backup-db.sh

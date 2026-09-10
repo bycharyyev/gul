@@ -1,0 +1,22 @@
+name: One-off certbot bootstrap
+
+on:
+  workflow_dispatch:
+
+jobs:
+  certbot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ROOT_SSH_KEY }}" > ~/.ssh/root_key
+          chmod 600 ~/.ssh/root_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run certbot
+        run: |
+          ssh -i ~/.ssh/root_key root@${{ secrets.DEPLOY_HOST }} '
+            certbot --nginx --non-interactive --agree-tos -m malobiznes@gmail.com -d gulyaly.pro -d www.gulyaly.pro -d admin.gulyaly.pro -d api.gulyaly.pro
+            nginx -t
+          '

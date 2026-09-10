@@ -1,0 +1,92 @@
+name: Set the top-up fulfilment gateway on both hosts
+
+# Writes TOPUP_GATEWAY (and, for "mock", the production opt-in) into /opt/gul/.env and
+# /opt/gul-secondary/.env, then recreates api on both nodes.
+#
+# Since 2026-09-07 the API fails closed: with nothing set, a paid order is never sent to any
+# operator and sits in PROCESSING until a human looks (the orders-stuck-sent alert fires after
+# 30 minutes). That is the correct posture for a real launch and the wrong one for a platform
+# with no customers yet that still needs to demonstrate the flow end to end -- hence this.
+#
+# "mock" marks every order COMPLETED without contacting anyone. In production it additionally
+# demands TOPUP_ALLOW_MOCK_IN_PRODUCTION=true, written here, precisely so that turning it on is
+# a deliberate, greppable act. Re-run with gateway="" the day a real operator is wired up.
+#
+# Safe to re-run: it writes fixed values rather than deriving them from current state.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway:
+        description: 'Fulfilment adapter: mock (no real operator), http (reseller bridge), or empty to fail closed'
+        type: choice
+        options: ["mock", "http", ""]
+        default: "mock"
+        required: true
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write the values and restart api on both hosts
+        env:
+          GATEWAY: ${{ inputs.gateway }}
+        run: |
+          cat > /tmp/set-gateway.sh <<'SCRIPT'
+          set -e
+          cd "$1"
+          gateway="$2"
+
+          set_kv() {
+            if grep -q "^$1=" .env; then
+              sed -i "s#^$1=.*#$1=\"$2\"#" .env
+            else
+              echo "$1=\"$2\"" >> .env
+            fi
+          }
+
+          set_kv TOPUP_GATEWAY "$gateway"
+          # Only "mock" needs the production opt-in. For anything else clear it, so the flag can
+          # never outlive the reason it was set.
+          if [ "$gateway" = "mock" ]; then
+            set_kv TOPUP_ALLOW_MOCK_IN_PRODUCTION "true"
+          else
+            set_kv TOPUP_ALLOW_MOCK_IN_PRODUCTION ""
+          fi
+
+          # `up -d` races with its own teardown: the API stops gracefully (shutdown hooks, so
+          # SIGTERM is not instant) and compose can ask to create the replacement while the daemon
+          # is still removing the old one -- "removal of container ... is already in progress".
+          # It clears itself within seconds, so it is a wait, not an error. deploy.yml learned
+          # this the same way; this workflow had to learn it too.
+          for attempt in 1 2 3; do
+            docker compose up -d --force-recreate --no-deps api && break
+            echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
+            sleep $((attempt * 10))
+          done
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo "healthy: $1" && break
+            sleep 2
+            [ "$i" = "20" ] && { echo "did NOT come back healthy: $1" >&2; exit 1; }
+          done
+
+          # The selection is logged at every start. Print it so the run itself is the evidence
+          # of which adapter is live, rather than someone's assumption about it.
+          docker compose logs api --tail=200 2>/dev/null | grep -i "Top-up fulfilment" | tail -3 || true
+          SCRIPT
+
+          scp -i ~/.ssh/id_ed25519 /tmp/set-gateway.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/set-gateway.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /tmp/set-gateway.sh /opt/gul '$GATEWAY' && rm -f /tmp/set-gateway.sh" < /dev/null
+
+          scp -i ~/.ssh/id_ed25519 /tmp/set-gateway.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/set-gateway.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "bash /tmp/set-gateway.sh /opt/gul-secondary '$GATEWAY' && rm -f /tmp/set-gateway.sh" < /dev/null

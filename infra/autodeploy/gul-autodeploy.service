@@ -1,0 +1,17 @@
+[Unit]
+Description=Deploy topup-hub from main when it moves
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/gul
+ExecStart=/opt/gul/bin/gul-autodeploy.sh
+# A build on this box takes minutes, not seconds. Long enough to finish, short enough that a
+# wedged build cannot hold the lock forever.
+TimeoutStartSec=45min
+# Output goes to the journal: `journalctl -u gul-autodeploy -f` is the whole story of a deploy.
+StandardOutput=journal
+StandardError=journal

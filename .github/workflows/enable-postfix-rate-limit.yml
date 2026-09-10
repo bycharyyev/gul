@@ -1,0 +1,55 @@
+name: Mail-split step 4b -- Postfix client rate limit (safety net)
+
+# Postfix's built-in throttle (anvil) is keyed by client IP, not SASL login -- both transactional
+# and marketing mail come from the same client (the app server), so this can only be one shared
+# ceiling, not separate per-account limits. The per-account "soft" limit for marketing is handled
+# at the app level instead (email.service.ts, MARKETING_SEND_DELAY_MS). This is just the safety
+# net: caps runaway sends (a bug, a compromised app) at 120/min combined, well above real order-
+# confirmation + paced-broadcast volume in the test phase.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Show before/after diff, apply, reload
+        run: |
+          cat > /tmp/rate-limit.sh <<'SCRIPT'
+          set -e
+          cp /etc/postfix/main.cf /tmp/main.cf.before
+          postconf -e 'smtpd_client_message_rate_limit = 120'
+          postconf -e 'anvil_rate_time_unit = 60s'
+          echo "--- diff ---"
+          diff -u /tmp/main.cf.before /etc/postfix/main.cf || true
+          rm -f /tmp/main.cf.before
+          postfix check
+          systemctl reload postfix
+          sleep 1
+          systemctl is-active postfix
+          postconf smtpd_client_message_rate_limit anvil_rate_time_unit
+          SCRIPT
+          scp -i ~/.ssh/id_ed25519 /tmp/rate-limit.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/rate-limit.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/rate-limit.sh:/host/tmp/rate-limit.sh alpine chroot /host /bin/bash /tmp/rate-limit.sh
+            status=$?
+            rm -f /tmp/rate-limit.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/rate-limit.sh
+
+      - name: Verify -- relay still healthy
+        run: |
+          for i in $(seq 1 10); do
+            curl -fsS -m 5 https://api.gulyaly.pro/api/health/ready > /dev/null && echo healthy && exit 0
+            sleep 2
+          done
+          exit 1

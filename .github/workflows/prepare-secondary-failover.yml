@@ -1,0 +1,117 @@
+name: Prepare secondary for failover
+
+# Safe to run any time, non-disruptive to the running standby or to production: attaches the
+# already-running pg-standby replica to a shared docker network (live, no restart), copies the
+# current .env + TLS certs + nginx vhosts from primary onto the secondary so nginx there is
+# already serving the right certs, and re-points the copied .env at primary's database over the
+# network (this node runs active/active against primary's DB day-to-day -- see
+# enable-active-active.yml). Run this again any time primary's secrets or certs change, to keep
+# the secondary in sync. Does NOT promote the replica or touch DNS -- that's
+# failover-to-secondary.yml, deliberately separate since promoting ends replication and isn't
+# something to fire by accident.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Attach pg-standby to a shared network aliased "postgres" (live, no restart)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            docker network create gul-net >/dev/null 2>&1 || true
+            docker network connect gul-net pg-standby --alias postgres >/dev/null 2>&1 || true
+            docker network inspect gul-net --format "{{range .Containers}}{{.Name}} {{end}}"
+          ' < /dev/null
+
+      - name: Pack primary .env + TLS certs, pull to runner
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            docker run --rm -v /etc/letsencrypt:/letsencrypt:ro -v /tmp:/out alpine \
+              sh -c "tar czf /out/le.tar.gz -C / letsencrypt && chown $(id -u):$(id -g) /out/le.tar.gz"
+          ' < /dev/null
+          scp -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/le.tar.gz" ./le.tar.gz
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'rm -f /tmp/le.tar.gz' < /dev/null
+          scp -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/gul/.env" ./primary.env
+
+      - name: Ship certs, .env, compose file and nginx vhosts to the secondary
+        # /opt/gul-secondary is root-owned territory: on a rebuilt box it does not exist yet and
+        # `deploy` cannot create it, which is where a from-scratch rebuild first falls over
+        # (2026-09-05). Create it via the docker-chroot root trick first, then everything below
+        # runs as `deploy` against a directory it owns.
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" bash -s <<'REMOTE'
+            set -e
+            if [ ! -d /opt/gul-secondary ]; then
+              printf '%s\n' '#!/bin/sh' 'set -e' 'mkdir -p /opt/gul-secondary' 'chown -R deploy:deploy /opt/gul-secondary' > /tmp/mkdir-app.sh
+              docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/mkdir-app.sh
+              rm -f /tmp/mkdir-app.sh
+            fi
+            mkdir -p /tmp/nginx-sync
+          REMOTE
+          scp -i ~/.ssh/id_ed25519 ./le.tar.gz "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/le.tar.gz"
+          scp -i ~/.ssh/id_ed25519 ./primary.env "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/opt/gul-secondary/.env"
+          scp -i ~/.ssh/id_ed25519 docker-compose.secondary.yml "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/opt/gul-secondary/docker-compose.yml"
+          scp -i ~/.ssh/id_ed25519 infra/nginx/*.conf "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/nginx-sync/"
+          rm -f ./le.tar.gz ./primary.env
+
+      - name: Re-point the freshly-copied .env at primary's DB over the network (active/active mode)
+        # This file is a raw copy of primary's own .env, whose DATABASE_URL says host "postgres"
+        # (its own docker-compose service name). Left as-is, the secondary's api would try the
+        # local pg-standby -- a read-only replica -- and every write would fail. Keep this in sync
+        # with enable-active-active.yml's own rewrite so a re-run of either doesn't fight the other.
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "PRIMARY_IP='${{ secrets.DEPLOY_HOST }}' bash -s" <<'REMOTE'
+            set -e
+            sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" /opt/gul-secondary/.env
+            if grep -q '^PRIMARY_REDIS_HOST=' /opt/gul-secondary/.env; then
+              sed -i "s/^PRIMARY_REDIS_HOST=.*/PRIMARY_REDIS_HOST=$PRIMARY_IP/" /opt/gul-secondary/.env
+            else
+              echo "PRIMARY_REDIS_HOST=$PRIMARY_IP" >> /opt/gul-secondary/.env
+            fi
+          REMOTE
+
+      - name: Install nginx/certbot, certs, vhosts; start nginx (idle until DNS points here)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "GHCR_OWNER='${{ github.repository_owner }}' bash -s" <<'REMOTE'
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "command -v nginx >/dev/null 2>&1 || (apt-get update -y && apt-get install -y nginx certbot)"
+              echo "tar xzf /tmp/le.tar.gz -C /etc"
+              echo "rm -f /tmp/le.tar.gz"
+              echo "mkdir -p /var/www/certbot"
+              # gulyaly-cache.conf declares proxy_cache_path here; nginx -t fails outright if the
+              # directory is missing, which is the second thing a from-scratch rebuild trips on.
+              echo "mkdir -p /var/cache/nginx/gul"
+              echo "chown -R www-data:www-data /var/cache/nginx"
+              echo "sed -i 's/^authenticator = .*/authenticator = webroot/' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || true"
+              echo "grep -q '^webroot_path' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || echo 'webroot_path = /var/www/certbot,' >> /etc/letsencrypt/renewal/gulyaly.pro.conf"
+              echo "sed -i '/^installer = /d' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || true"
+              echo "cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/"
+              echo "for f in /etc/nginx/sites-available/*.conf; do ln -sf \"\$f\" \"/etc/nginx/sites-enabled/\$(basename \"\$f\")\"; done"
+              echo "rm -f /etc/nginx/sites-enabled/default"
+              echo "rm -rf /tmp/nginx-sync"
+              echo "nginx -t"
+              echo "systemctl enable --now nginx"
+              echo "systemctl reload nginx"
+              echo "grep -q '^GHCR_OWNER=' /opt/gul-secondary/.env || echo GHCR_OWNER=$GHCR_OWNER >> /opt/gul-secondary/.env"
+              echo "echo prepared"
+            } > /tmp/prep.sh
+            chmod +x /tmp/prep.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/prep.sh
+            rm -f /tmp/prep.sh
+          REMOTE

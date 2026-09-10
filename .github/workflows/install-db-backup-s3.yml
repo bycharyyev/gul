@@ -1,0 +1,69 @@
+name: Install DB backups to S3
+
+# Installs the hourly Postgres dump on the primary. Backups use a dedicated, Object-Lock-enabled
+# bucket and identity; they must not share the API's object-storage credentials.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_now:
+        description: "Run one backup immediately after installing"
+        type: boolean
+        default: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copy the script and units
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p /opt/gul/scripts"
+          scp -i ~/.ssh/deploy_key infra/backups/backup-db.sh "$TARGET:/opt/gul/scripts/backup-db.sh"
+          scp -i ~/.ssh/deploy_key infra/backups/gul-db-backup.service infra/backups/gul-db-backup.timer "$TARGET:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "chmod 750 /opt/gul/scripts/backup-db.sh"
+
+      - name: Require dedicated immutable-backup configuration
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" 'set -e
+            for key in BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_BUCKET; do
+              grep -q "^${key}=.." /opt/gul/.env || {
+                echo "missing non-empty ${key} in /opt/gul/.env" >&2; exit 1;
+              }
+            done'
+
+      - name: Install the timer
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          # The deploy user has no sudo but is in the docker group, which is root-equivalent on
+          # this host. Built line by line into a file rather than as a heredoc: heredocs inside a
+          # run block have caused real bugs in this repo before.
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'set -e' > /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'cp /tmp/gul-db-backup.service /etc/systemd/system/' >> /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'cp /tmp/gul-db-backup.timer /etc/systemd/system/' >> /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl daemon-reload' >> /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl enable --now gul-db-backup.timer' >> /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl list-timers gul-db-backup.timer --no-pager' >> /tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/install-backup.sh"
+
+      - name: Run one backup now and show what happened
+        if: ${{ inputs.run_now }}
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'set -e' > /tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl start gul-db-backup.service' >> /tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl is-failed gul-db-backup.service || true' >> /tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'journalctl -u gul-db-backup.service -n 25 --no-pager' >> /tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/run-backup.sh"
+          echo "--- anything left in the staging directory means an upload failed ---"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "ls -la /opt/gul/backups 2>/dev/null || echo 'staging directory is empty or absent'"

@@ -1,0 +1,6 @@
+[Unit]
+Description=Gulyaly disk usage email alert
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gul-disk-alert.sh

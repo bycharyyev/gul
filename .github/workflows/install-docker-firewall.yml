@@ -1,0 +1,95 @@
+name: Install docker port firewall (WRITES)
+
+# Closes 5432 and 6379 on the primary to everyone except the secondary.
+#
+# They were open to the internet. ufw carried rules that said otherwise and those rules were real
+# -- they simply never applied, because docker publishes a port by writing its own iptables rules
+# and packets to a published port meet docker's chains before ufw's. Confirmed from a GitHub
+# runner: 5432 and 6379 answered, while netdata's 19999 -- a host process, genuinely governed by
+# ufw -- did not.
+#
+# Installs the script, a unit that applies it after docker, and a timer that re-asserts it,
+# because the rules live in a chain another program manages and a daemon restart can drop them
+# silently.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship the script with the secondary's address baked in
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          set -e
+          # Substituted here rather than passed through ssh and chroot quoting. '#' as the sed
+          # delimiter, per the pattern the rest of this repo's ops scripts use.
+          sed "s#__SECONDARY_IP__#$SECONDARY_IP#" infra/firewall/gul-docker-firewall.sh > /tmp/fw.sh
+          grep -q "__SECONDARY_IP__" /tmp/fw.sh && { echo "substitution failed" >&2; exit 1; }
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            /tmp/fw.sh \
+            infra/firewall/gul-docker-firewall.service \
+            infra/firewall/gul-docker-firewall.timer \
+            "$TARGET:/tmp/"
+
+      - name: Install, enable, and apply now
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -e
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$TARGET" '
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "install -m 0755 /tmp/fw.sh /usr/local/sbin/gul-docker-firewall.sh"
+              echo "cp /tmp/gul-docker-firewall.service /etc/systemd/system/"
+              echo "cp /tmp/gul-docker-firewall.timer /etc/systemd/system/"
+              echo "systemctl daemon-reload"
+              echo "systemctl enable --now gul-docker-firewall.service"
+              echo "systemctl enable --now gul-docker-firewall.timer"
+              echo "echo --- rules now in DOCKER-USER ---"
+              echo "iptables -S DOCKER-USER"
+            } > /tmp/install-fw.sh
+            chmod +x /tmp/install-fw.sh
+            # --network=host: without it the container edits its own isolated network stack and
+            # reports success having changed nothing on the host. Same trap ufw operations hit.
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine \
+              chroot /host /bin/sh /tmp/install-fw.sh
+            rm -f /tmp/install-fw.sh /tmp/fw.sh /tmp/gul-docker-firewall.*
+          '
+
+      - name: The database must still be reachable from where it should be
+        env:
+          SECONDARY: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -e
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          # A firewall that also locks out the machine that is supposed to get through would take
+          # the site down on the next restart rather than protect it, so check before calling this
+          # done: the replica and the shared queue both cross this boundary.
+          # bash's /dev/tcp rather than nc: netcat is not installed on the secondary, and its
+          # absence looked exactly like a blocked port -- this step reported the replica locked
+          # out while replication was in fact reconnecting normally fifteen seconds later.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$SECONDARY" "
+            for p in 5432 6379; do
+              if timeout 5 bash -c \"exec 3<>/dev/tcp/$PRIMARY_IP/\$p\" 2>/dev/null; then
+                echo \"  secondary -> primary:\$p reachable\"
+              else
+                echo \"  secondary -> primary:\$p BLOCKED\" >&2; exit 1
+              fi
+            done
+          "

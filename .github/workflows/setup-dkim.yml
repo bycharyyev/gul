@@ -1,0 +1,113 @@
+name: Set up DKIM signing on the mail relay
+
+# Generates a real DKIM keypair on the secondary (mail relay) VPS and wires Postfix to sign every
+# outgoing message with it via OpenDKIM (milter). The PRIVATE key never leaves that box. The
+# PUBLIC key is printed at the end (safe -- it's public by design) as the exact DNS TXT record to
+# add: this workflow cannot publish DNS itself (no DNS-provider API access configured -- same
+# reason the second A-record for active/active and the mail A-record are manual steps, see
+# CLAUDE.md). Idempotent: re-running regenerates the same selector's key and re-applies config.
+#
+# Signing domain is gulyaly.pro (that's the visible From: domain -- MAIL_FROM is
+# noreply@gulyaly.pro), selector "mail", even though the relay host itself is mail.gulyaly.pro --
+# those are two independent things.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dkim:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Install OpenDKIM and generate the keypair
+        run: |
+          cat > /tmp/dkim-setup.sh <<'SCRIPT'
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq opendkim opendkim-tools >/dev/null
+
+          mkdir -p /etc/opendkim/keys/gulyaly.pro
+          cd /etc/opendkim/keys/gulyaly.pro
+          if [ ! -f mail.private ]; then
+            opendkim-genkey -b 2048 -d gulyaly.pro -s mail -D /etc/opendkim/keys/gulyaly.pro
+          fi
+          chown -R opendkim:opendkim /etc/opendkim
+          chmod 600 mail.private
+
+          mkdir -p /etc/opendkim
+          {
+          echo "127.0.0.1"
+          echo "localhost"
+          echo "mail.gulyaly.pro"
+          echo "PRIMARY_IP_PLACEHOLDER"
+          } > /etc/opendkim/TrustedHosts
+
+          echo "mail._domainkey.gulyaly.pro gulyaly.pro:mail:/etc/opendkim/keys/gulyaly.pro/mail.private" > /etc/opendkim/KeyTable
+          echo "*@gulyaly.pro mail._domainkey.gulyaly.pro" > /etc/opendkim/SigningTable
+
+          # The FILE is conventionally named "TrustedHosts", but the config DIRECTIVE that points
+          # at it is "InternalHosts" -- using "TrustedHosts" as a directive name is what caused
+          # "configuration error at line 11: unrecognized parameter" on the first attempt.
+          {
+          echo "Syslog yes"
+          echo "UMask 002"
+          echo "Domain gulyaly.pro"
+          echo "KeyFile /etc/opendkim/keys/gulyaly.pro/mail.private"
+          echo "Selector mail"
+          echo "Socket inet:12301@localhost"
+          echo "PidFile /run/opendkim/opendkim.pid"
+          echo "Mode sv"
+          echo "SubDomains no"
+          echo "InternalHosts /etc/opendkim/TrustedHosts"
+          echo "KeyTable /etc/opendkim/KeyTable"
+          # `refile:` is what makes the "*@gulyaly.pro" wildcard a pattern. Without it the table
+          # is an exact-match lookup, the literal string "*@gulyaly.pro" is never anybody's
+          # sender, and every message leaves unsigned while opendkim logs nothing at default
+          # verbosity -- silent for as long as nobody reads a delivered message's headers.
+          # (Found 2026-09-05: mail had been going out unsigned the whole time. DMARC still
+          # passed on SPF alone, which is exactly why it went unnoticed.)
+          echo "SigningTable refile:/etc/opendkim/SigningTable"
+          # Without UserID, opendkim runs as root while /etc/opendkim belongs to uid opendkim,
+          # and its own safety check then refuses the key: "key data is not secure ... not the
+          # executing uid". Signing fails closed with a 451 to the sender.
+          echo "UserID opendkim"
+          } > /etc/opendkim.conf
+
+          # Postfix milter integration -- chroot is already disabled for smtpd (set up alongside
+          # the SASL fix), so a plain localhost TCP socket works without chroot-jail path games.
+          postconf -e "milter_default_action = accept"
+          postconf -e "milter_protocol = 6"
+          postconf -e "smtpd_milters = inet:localhost:12301"
+          postconf -e "non_smtpd_milters = inet:localhost:12301"
+
+          systemctl enable opendkim >/dev/null 2>&1 || true
+          systemctl restart opendkim
+          systemctl restart postfix
+          sleep 1
+          systemctl is-active opendkim
+          systemctl is-active postfix
+
+          echo "--- DKIM PUBLIC KEY DNS RECORD (public, safe to print) ---"
+          cat /etc/opendkim/keys/gulyaly.pro/mail.txt
+          SCRIPT
+          sed -i "s#PRIMARY_IP_PLACEHOLDER#${{ secrets.DEPLOY_HOST }}#" /tmp/dkim-setup.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/dkim-setup.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/dkim-setup.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/dkim-setup.sh:/host/tmp/dkim-setup.sh alpine chroot /host /bin/bash /tmp/dkim-setup.sh
+            status=$?
+            rm -f /tmp/dkim-setup.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/dkim-setup.sh
+
+      - name: Send a real test email so the DKIM signature can be checked end to end
+        run: |
+          echo "Trigger a test send from the admin Mail page (or ask Claude to) after this run --"
+          echo "then check the received message's headers for 'DKIM-Signature' and dkim=pass."

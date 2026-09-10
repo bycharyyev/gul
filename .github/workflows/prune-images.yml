@@ -1,0 +1,83 @@
+name: Prune unused images (WRITES)
+
+# Routine hygiene, not an incident response -- for that, see emergency-disk-recovery.yml, written
+# for the day disk hit 0 free and Postgres would not start.
+#
+# deploy.yml's own post-success prune only reclaims images older than 48h, so on a day with many
+# deploys (this repo has had well over a dozen today) the grace window keeps nearly everything and
+# never catches up. Found via server-audit.sh on 2026-09-03: primary at 57 images, 24.63GB
+# reclaimable, disk 81% full with 7.5GB free -- the same failure mode that took the site to 100%
+# disk and a Postgres outage on 2026-09-02, just not there yet.
+#
+# Removes only what is unused and re-pullable from GHCR: build cache, then any image not backing a
+# running container. Touches no volume, no database data, no backup. Health-checks the API
+# afterward -- a prune cannot restart a container, but this confirms nothing else moved under it.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily, independent of how many deploys happened that day. deploy.yml's own post-success
+    # prune only reclaims images older than 48h, which a day of many deploys can outrun entirely --
+    # exactly what left primary at 57 images and 7.5GB free on 2026-09-03. This does not replace
+    # that in-band safety net (still useful mid-deploy on a nearly-full disk); it is the backstop
+    # for the case that net is too slow to catch.
+    - cron: "17 3 * * *"
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+            app_dir: /opt/gul
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+            app_dir: /opt/gul-secondary
+    name: prune (${{ matrix.name }})
+    steps:
+      - name: Set up SSH
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Reclaim, then confirm the stack is untouched
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+          USER_NAME: ${{ secrets[matrix.user_secret] }}
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$USER_NAME@$HOST" '
+            echo "=== before ==="
+            df -Pm / | awk "NR==2{print \$4\" MB free\"}"
+            docker system df
+
+            echo
+            echo "=== reclaiming ==="
+            docker builder prune -a -f || true
+            docker image prune -a -f || true
+
+            echo
+            echo "=== after ==="
+            df -Pm / | awk "NR==2{print \$4\" MB free\"}"
+            docker system df
+
+            echo
+            echo "=== containers still running (must be unchanged) ==="
+            docker ps --format "{{.Names}}\t{{.Status}}"
+          ' < /dev/null
+
+      - name: API still healthy
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+        run: |
+          code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" --resolve "api.gulyaly.pro:443:$HOST" https://api.gulyaly.pro/api/health/ready)
+          echo "  api.gulyaly.pro via $HOST -> $code"
+          [ "$code" = "200" ] || { echo "  not healthy after prune" >&2; exit 1; }

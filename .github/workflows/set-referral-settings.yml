@@ -1,0 +1,87 @@
+name: Set referral settings (WRITES)
+
+# Switches the referral programme on or off and sets the two reward amounts.
+#
+# This is a **write** to production, and to a setting that moves money: once enabled, a completed
+# qualifying order credits the inviter. The name says so, and it is deliberately the only
+# non-read-only workflow in the infra/checks family.
+#
+# The admin console already does all of this (Referrals -> toggle + the two amount fields), and
+# that is the better route for day-to-day changes: it records the change against the staff account
+# that made it, via AuditLogService. This workflow does not -- the only trace it leaves is this
+# run and whoever dispatched it. Use it to flip the programme on when nobody is at a browser;
+# change the amounts from the console.
+
+on:
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: Referral programme on or off
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      customerRewardTmt:
+        description: TMT credited to a customer who invited someone
+        default: "12"
+      sellerRewardTmt:
+        description: TMT credited to a seller who invited someone
+        default: "12"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate the amounts
+        # The values are interpolated into SQL below. `enabled` is a choice and cannot be anything
+        # else; these two are free text, so they are checked to be plain decimals here and the run
+        # fails outright rather than sending whatever was typed to the database.
+        env:
+          CUSTOMER: ${{ inputs.customerRewardTmt }}
+          SELLER: ${{ inputs.sellerRewardTmt }}
+        run: |
+          for v in "$CUSTOMER" "$SELLER"; do
+            case "$v" in
+              ''|*[!0-9.]*|*.*.*) echo "not a plain decimal amount: $v" >&2; exit 1 ;;
+            esac
+          done
+          echo "amounts ok: customer=$CUSTOMER seller=$SELLER enabled=${{ inputs.enabled }}"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Apply, and show before and after
+        env:
+          CUSTOMER: ${{ inputs.customerRewardTmt }}
+          SELLER: ${{ inputs.sellerRewardTmt }}
+          ENABLED: ${{ inputs.enabled }}
+        run: |
+          # INSERT .. ON CONFLICT rather than UPDATE: the row is created lazily by getSettings(),
+          # so on a fresh database there may be nothing to update and an UPDATE would report
+          # success having changed nothing at all.
+          cat > /tmp/apply.sql <<SQL
+          \echo '=== before ==='
+          SELECT enabled, "customerRewardTmt", "sellerRewardTmt", "updatedAt" FROM "ReferralSettings";
+
+          INSERT INTO "ReferralSettings" (id, enabled, "customerRewardTmt", "sellerRewardTmt", "updatedAt")
+          VALUES ('singleton', $ENABLED, $CUSTOMER, $SELLER, now())
+          ON CONFLICT (id) DO UPDATE
+            SET enabled = EXCLUDED.enabled,
+                "customerRewardTmt" = EXCLUDED."customerRewardTmt",
+                "sellerRewardTmt" = EXCLUDED."sellerRewardTmt",
+                "updatedAt" = now();
+
+          \echo '=== after ==='
+          SELECT enabled, "customerRewardTmt", "sellerRewardTmt", "updatedAt" FROM "ReferralSettings";
+          SQL
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'cd /opt/gul && docker compose exec -T postgres sh -c "psql -X -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\""' \
+            < /tmp/apply.sql

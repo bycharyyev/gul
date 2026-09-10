@@ -1,0 +1,57 @@
+name: Set ALERT_EMAIL on both hosts
+
+# Where operational mail alerts go (quota thresholds, SMTP unreachable, queue backlog).
+# Not a secret -- a published contact address. Change the value below and re-run to point
+# alerts somewhere else; unlike the mail cutover workflow this one is safe to re-run, since it
+# writes a fixed value rather than deriving it from current state.
+
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: Address to send operational alerts to
+        type: string
+        default: support@gulyaly.pro
+        required: true
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write the value and restart api on both hosts
+        env:
+          ALERT_ADDRESS: ${{ inputs.address }}
+        run: |
+          cat > /tmp/set-alert.sh <<'SCRIPT'
+          set -e
+          cd "$1"
+          value="$2"
+          if grep -q "^ALERT_EMAIL=" .env; then
+            sed -i "s#^ALERT_EMAIL=.*#ALERT_EMAIL=\"${value}\"#" .env
+          else
+            echo "ALERT_EMAIL=\"${value}\"" >> .env
+          fi
+          docker compose up -d --force-recreate --no-deps api
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4000/api/health > /dev/null && echo "healthy: $1" && exit 0
+            sleep 2
+          done
+          echo "did NOT come back healthy: $1" >&2
+          exit 1
+          SCRIPT
+
+          scp -i ~/.ssh/id_ed25519 /tmp/set-alert.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/set-alert.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /tmp/set-alert.sh /opt/gul '$ALERT_ADDRESS' && rm -f /tmp/set-alert.sh" < /dev/null
+
+          scp -i ~/.ssh/id_ed25519 /tmp/set-alert.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/set-alert.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "bash /tmp/set-alert.sh /opt/gul-secondary '$ALERT_ADDRESS' && rm -f /tmp/set-alert.sh" < /dev/null

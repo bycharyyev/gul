@@ -1,0 +1,46 @@
+name: SMTP integration test (real send)
+
+# Runs the integration spec against the real REG.RU server, using the production mailbox
+# password from secrets. Manual only -- it authenticates for real and, when given a recipient,
+# actually delivers a message.
+#
+# Use it after changing anything on the sending path (credentials, host, port, TLS), where the
+# ordinary suite can only prove the logic and not that the provider still accepts us.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: >-
+          Optional address to deliver a test message to. Leave empty to only verify the
+          handshake and auth. Use an inbox you can open -- the point is to read the received
+          message's Authentication-Results header (spf/dkim/dmarc).
+        type: string
+        required: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @topup-hub/api prisma:generate
+
+      - name: Run the integration spec
+        env:
+          SMTP_INTEGRATION_TEST: "true"
+          MAIL_HOST: mail.hosting.reg.ru
+          MAIL_PORT: "465"
+          MAIL_SECURE: "true"
+          MAIL_USER: noreply@gulyaly.pro
+          MAIL_PASS: ${{ secrets.MAIL_PASS_REGRU }}
+          MAIL_FROM: Gulyaly <noreply@gulyaly.pro>
+          MAIL_REPLY_TO: support@gulyaly.pro
+          SMTP_TEST_RECIPIENT: ${{ inputs.recipient }}
+        working-directory: apps/api
+        run: npx jest email.smtp-integration --verbose

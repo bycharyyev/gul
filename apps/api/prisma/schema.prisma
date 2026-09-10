@@ -1,0 +1,1689 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Actors ----------
+
+enum UserRole {
+  CUSTOMER
+  SELLER
+  SUPPORT
+  MANAGER
+  ADMIN
+}
+
+model User {
+  id              String    @id @default(cuid())
+  phone           String    @unique
+  email           String?   @unique
+  // Set only once the address survives a round-trip through AUTH_EMAIL_VERIFICATION. Order and
+  // other non-security mail is only ever sent to a verified address -- an unverified one is
+  // most likely a typo (mail to a stranger) or someone else's address entered deliberately.
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  passwordHash    String
+  fullName        String?
+  locale          String    @default("ru")
+  role            UserRole  @default(CUSTOMER)
+  isBlocked       Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  orders             Order[]
+  auditLogs          AuditLog[]
+  refreshTokens      RefreshToken[]
+  apiKeysCreated     ApiKey[]
+  supportThreads     SupportThread[]
+  supportMessages    SupportMessage[]
+  chatRoomsCreated   ChatRoom[]        @relation("ChatRoomCreator")
+  chatMemberships    ChatMember[]
+  chatMessages       ChatMessage[]     @relation("ChatMessageAuthor")
+  emailLogs          EmailLog[]
+  emailVerifications EmailVerification[]
+  passwordResets     PasswordReset[]
+  emailPreference    EmailPreference?
+  emailTemplates     EmailTemplate[]     @relation("EmailTemplateAuthor")
+  galleryOrders      GalleryOrder[]
+  sellerProfile      Seller?
+  documents          Document[]
+  avatarPath         String? // opaque on-disk filename incl. extension, e.g. "<uuid>.jpg"; served publicly at /api/avatar/:path
+  marketingOptOut    Boolean             @default(false) // set via the RFC 8058 one-click unsubscribe link/POST in marketing emails
+
+  // ---- Referral program ----
+  username            String     @unique // auto-generated at registration, user-changeable; also this user's own referral code
+  referredByUsername  String? // the code they registered with, if any (denormalized, survives later username changes)
+  referralBalanceTmt  Decimal    @default(0) @db.Decimal(12, 2) // accrued reward, auto-applied at checkout
+  referredById        String?
+  referredBy          User?      @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals           User[]     @relation("UserReferrals")
+  referralsAsReferrer Referral[] @relation("ReferralsAsReferrerUser")
+  referralAsReferee   Referral?  @relation("ReferralsAsReferee")
+
+  // ---- Cargo ----
+  shipments                  Shipment[]
+  marketplacePurchaseOrders  MarketplacePurchaseOrder[]
+  marketplacePurchaseAccount MarketplacePurchaseAccount?
+  cargoTariffsCreated        CargoTariff[]               @relation("CargoTariffCreatedBy")
+  shipmentTrackingEventsMade ShipmentTrackingEvent[]     @relation("ShipmentTrackingEventCreatedBy")
+  cargoExchangeRateUpdates   CargoExchangeRate[]
+  marketplaceSearchHistory   MarketplaceSearchHistory[]
+  socialPosts                SocialPost[]               @relation("SocialPostAuthor")
+  socialInteractions         SocialInteraction[]
+  socialComments             SocialComment[]            @relation("SocialCommentAuthor")
+  socialReports              SocialPostReport[]
+
+  @@index([role])
+}
+
+enum MarketplaceSourceCode {
+  OZON
+  WILDBERRIES
+  ALIEXPRESS
+  TRENDYOL
+  YANDEX_MARKET
+  TAOBAO
+}
+
+enum MarketplacePurchaseStatus {
+  DRAFT
+  MANUAL_REVIEW
+  QUOTED
+  AUTHORIZATION_PENDING
+  AUTHORIZED
+  PURCHASING
+  PURCHASED
+  AT_WAREHOUSE
+  FINAL_PAYMENT_DUE
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum MarketplaceWeightConfidence {
+  ESTIMATED
+  EXACT
+}
+
+model MarketplacePurchaseSource {
+  code                 MarketplaceSourceCode @id
+  name                 String
+  allowedHosts         String[]
+  adapterKey           String
+  isEnabled            Boolean               @default(true)
+  requiresManualReview Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+}
+
+model MarketplacePurchaseSettings {
+  id                String   @id @default("singleton")
+  serviceFeePercent Decimal  @default(10) @db.Decimal(5, 2)
+  shippingPerKgTmt  Decimal  @default(0) @db.Decimal(12, 2)
+  minimumFeeTmt     Decimal  @default(0) @db.Decimal(12, 2)
+  quoteTtlMinutes   Int      @default(1440)
+  updatedAt         DateTime @updatedAt
+  updatedById       String?
+}
+
+model MarketplacePurchaseOrder {
+  id                   String                      @id @default(cuid())
+  userId               String
+  user                 User                        @relation(fields: [userId], references: [id])
+  status               MarketplacePurchaseStatus   @default(DRAFT)
+  currency             CurrencyCode
+  acceptedQuoteVersion Int?
+  maxAuthorizedTmt     Decimal?                    @db.Decimal(12, 2)
+  authorizedTmt        Decimal                     @default(0) @db.Decimal(12, 2)
+  settledTmt           Decimal                     @default(0) @db.Decimal(12, 2)
+  refundedTmt          Decimal                     @default(0) @db.Decimal(12, 2)
+  fundingProvider      String?
+  fundingReference     String?
+  consentAcceptedAt    DateTime?
+  consentVersion       String?
+  deliveryAddress      String
+  reviewReason         String?
+  idempotencyKey       String                      @unique
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  items                MarketplacePurchaseItem[]
+  quotes               MarketplacePurchaseQuote[]
+  ledgerEntries        MarketplacePurchaseLedger[]
+
+  @@unique([fundingProvider, fundingReference])
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+}
+
+enum MarketplacePurchaseLedgerType {
+  BALANCE_DEBIT
+  AUTHORIZATION
+  SETTLEMENT
+  REFUND_CREDIT
+}
+
+model MarketplacePurchaseLedger {
+  id             String                        @id @default(cuid())
+  orderId        String
+  order          MarketplacePurchaseOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  type           MarketplacePurchaseLedgerType
+  amountTmt      Decimal                       @db.Decimal(12, 2)
+  idempotencyKey String                        @unique
+  externalRef    String?
+  createdAt      DateTime                      @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model MarketplacePurchaseItem {
+  id                     String                   @id @default(cuid())
+  orderId                String
+  order                  MarketplacePurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sourceCode             MarketplaceSourceCode
+  canonicalUrl           String
+  quantity               Int
+  variant                String?
+  titleSnapshot          String?
+  imageUrlSnapshot       String?
+  externalIdSnapshot     String?
+  unitPriceSnapshot      Decimal?                 @db.Decimal(12, 2)
+  sourceCurrencySnapshot CurrencyCode?
+  estimatedWeightKg      Decimal?                 @db.Decimal(8, 3)
+  actualWeightKg         Decimal?                 @db.Decimal(8, 3)
+  snapshotPayload        Json?
+  snapshotAt             DateTime                 @default(now())
+
+  /// What the customer's own browser read off the product page, kept separately from the
+  /// `*Snapshot` fields above so the two can never be confused. Those are what a server-side
+  /// adapter verified; these are what an app on a phone reported, and nothing we cannot verify
+  /// may set an amount to charge. They exist so a reviewer opens the order already knowing which
+  /// product and roughly what it costs, instead of re-opening the marketplace by hand -- the
+  /// quote is still theirs to enter.
+  reportedTitle          String?
+  reportedPrice          Decimal?                 @db.Decimal(12, 2)
+  reportedCurrency       CurrencyCode?
+  /// Which reader produced it: `json-ld`, `meta`, `dom`, or a combination. A reviewer seeing
+  /// `dom` knows the figure came from a selector that can silently start reading the wrong
+  /// element, and can weigh it accordingly.
+  reportedSource         String?
+
+  @@index([orderId])
+}
+
+model MarketplacePurchaseQuote {
+  id                 String                      @id @default(cuid())
+  orderId            String
+  order              MarketplacePurchaseOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  version            Int
+  productSubtotalTmt Decimal                     @db.Decimal(12, 2)
+  serviceFeeTmt      Decimal                     @db.Decimal(12, 2)
+  shippingTmt        Decimal                     @db.Decimal(12, 2)
+  totalTmt           Decimal                     @db.Decimal(12, 2)
+  fxSnapshot         Json
+  weightKg           Decimal                     @db.Decimal(8, 3)
+  weightConfidence   MarketplaceWeightConfidence
+  expiresAt          DateTime
+  createdAt          DateTime                    @default(now())
+
+  @@unique([orderId, version])
+}
+
+model MarketplacePurchaseAccount {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id])
+  balanceTmt Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt  DateTime @updatedAt
+}
+
+// The last few links a customer looked up, so pasting the same product twice does not mean
+// finding the link again. Capped at MARKETPLACE_HISTORY_LIMIT rows per user by the service --
+// this is a convenience list, not an archive, and an unbounded one would quietly become a record
+// of everything a person ever shopped for.
+//
+// `canonicalUrl` is the already-normalised form (tracking parameters stripped), so the same
+// product pasted from two different shares is one row rather than two.
+model MarketplaceSearchHistory {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceCode   MarketplaceSourceCode
+  canonicalUrl String
+  externalId   String?
+  createdAt    DateTime              @default(now())
+
+  @@unique([userId, canonicalUrl])
+  @@index([userId, createdAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  /// When this already-consumed token was allowed one more exchange.
+  ///
+  /// Rotation is single-use, and the client can only store the replacement *after* the response
+  /// carrying it arrives. A process death in that window -- Android reclaiming memory, a crash,
+  /// an app update -- leaves the server rotated and the device holding a token the server has
+  /// already retired, which signs a perfectly good session out for good. A consumed token is
+  /// therefore honoured once more for a few seconds, and this column is what makes "once" true:
+  /// the second attempt finds it set and is refused.
+  graceUsedAt DateTime?
+
+  @@index([userId])
+}
+
+// Uploaded user documents. `storedName` is a server-generated opaque key used as the
+// on-disk filename — never build a filesystem path from `originalName` (path traversal).
+model Document {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalName   String
+  storedName     String   @unique
+  mimeType       String
+  sizeBytes      Int
+  storageBackend String   @default("local") // "local" or "s3" -- which storedName resolves against, set once at upload time
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------- Catalog ----------
+
+enum RecipientInputType {
+  PHONE
+  ACCOUNT_ID
+}
+
+model Service {
+  id              String             @id @default(cuid())
+  code            String             @unique // TMCELL, TTELECOM, ASTUINT, GB_PACKET, BELET
+  name            String
+  description     String?
+  logoUrl         String?
+  inputType       RecipientInputType @default(PHONE)
+  validationRegex String?
+  minAmountTmt    Decimal            @db.Decimal(12, 2)
+  maxAmountTmt    Decimal            @db.Decimal(12, 2)
+  isEnabled       Boolean            @default(true)
+  sortOrder       Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  rates      Rate[]
+  orders     Order[]
+  stories    Story[]
+  homeSlides HomeSlide[]
+
+  @@index([isEnabled, sortOrder])
+}
+
+enum CurrencyCode {
+  USD
+  RUB
+  EUR
+  TRY
+  CNY
+  KZT
+}
+
+model Rate {
+  id          String       @id @default(cuid())
+  serviceId   String
+  service     Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  currency    CurrencyCode
+  // price of 1 TMT expressed in `currency`
+  rate        Decimal      @db.Decimal(12, 6)
+  manualMode  Boolean      @default(false)
+  enabled     Boolean      @default(true)
+  updatedAt   DateTime     @updatedAt
+  updatedById String?
+
+  @@unique([serviceId, currency])
+}
+
+// ---------- Payments ----------
+
+enum PaymentMethodCode {
+  CARD
+  SBP
+  MIR
+  CRYPTO
+  MANUAL
+}
+
+model PaymentMethod {
+  id         String            @id @default(cuid())
+  code       PaymentMethodCode @unique
+  name       String
+  provider   String // adapter key resolved in PaymentProviderRegistry
+  feePercent Decimal           @default(0) @db.Decimal(5, 2)
+  isEnabled  Boolean           @default(true)
+  sortOrder  Int               @default(0)
+
+  orders    Order[]
+  shipments Shipment[]
+}
+
+// ---------- Orders ----------
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id])
+  apiKeyId        String?
+  apiKey          ApiKey?       @relation(fields: [apiKeyId], references: [id])
+  serviceId       String
+  service         Service       @relation(fields: [serviceId], references: [id])
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  recipientIdentifier String // phone number or account id being topped up
+  amountTmt           Decimal      @db.Decimal(12, 2)
+  currency            CurrencyCode
+  rateApplied         Decimal      @db.Decimal(12, 6)
+  amountCharged       Decimal      @db.Decimal(12, 2) // amountTmt * rateApplied (+fees)
+  feeAmount           Decimal      @default(0) @db.Decimal(12, 2)
+
+  status              OrderStatus @default(PENDING_PAYMENT)
+  providerRef         String? // external payment provider reference
+  failureReason       String?
+  deliveryNote        String? // e.g. activation key / promo code, included in the completion email
+  referralDiscountTmt Decimal?    @db.Decimal(12, 2) // amount auto-deducted from referral balance, for audit
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  paidAt      DateTime?
+  completedAt DateTime?
+
+  payments Payment[]
+  topupJob TopupJob?
+
+  @@index([status])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum PaymentStatus {
+  INITIATING
+  PENDING
+  SUCCEEDED
+  DECLINED
+  UNKNOWN
+  CANCELLED
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  orderId               String
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider              String
+  providerTransactionId String?
+  // Generated and written *before* we call the provider, so a crash between "provider accepted
+  // the charge" and "we recorded that" leaves a row a human can reconcile instead of no row at
+  // all. Passed to the provider too, so a safe retry with the same key can't double-charge.
+  idempotencyKey        String?       @unique
+  amount                Decimal       @db.Decimal(12, 2)
+  currency              CurrencyCode
+  status                PaymentStatus @default(INITIATING)
+  providerStatus        String?
+  redirectUrl           String?
+  failureCode           String?
+  rawPayload            Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  confirmedAt           DateTime?
+
+  @@index([orderId])
+  @@index([status, updatedAt])
+}
+
+model PaymentEvent {
+  id                    String        @id @default(cuid())
+  provider              String
+  eventId               String
+  paymentId             String?
+  providerTransactionId String?
+  idempotencyKey        String?
+  status                PaymentStatus
+  amount                Decimal?      @db.Decimal(12, 2)
+  currency              CurrencyCode?
+  providerStatus        String?
+  contentHash           String
+  payload               Json?
+  receivedAt            DateTime      @default(now())
+  processingStartedAt   DateTime?
+  processedAt           DateTime?
+  processingError       String?
+
+  @@unique([provider, eventId])
+  @@index([processedAt, processingStartedAt])
+  @@index([paymentId])
+}
+
+// Durable per-order claim held while a payment can still settle, including UNKNOWN outcomes.
+model PaymentInitiationGuard {
+  orderId   String   @id
+  paymentId String?  @unique
+  createdAt DateTime @default(now())
+}
+
+// Async job representing the actual top-up call to the operator/reseller API
+enum TopupJobStatus {
+  QUEUED
+  SENT
+  CONFIRMED
+  FAILED
+}
+
+model TopupJob {
+  id          String         @id @default(cuid())
+  orderId     String         @unique
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      TopupJobStatus @default(QUEUED)
+  attempts    Int            @default(0)
+  lastError   String?
+  operatorRef String? // reference returned by the operator gateway on success, for reconciliation
+  sentAt      DateTime?
+  confirmedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// ---------- Partner API ----------
+
+model ApiKey {
+  id                   String    @id @default(cuid())
+  name                 String
+  ownerLabel           String // partner/company name shown in admin
+  keyPrefix            String // first chars of the raw key, shown in UI for identification
+  keyHash              String    @unique
+  isEnabled            Boolean   @default(true)
+  /// Requests per minute allowed for this key. NULL means the partner tier default -- never
+  /// "unlimited", so a key can only be given more room deliberately.
+  rateLimitPerMin      Int?
+  /// What this key may do: catalog:read, orders:read, orders:write. An empty list means the key
+  /// can authenticate but reach nothing -- scopes restrict, they never widen.
+  scopes               String[]  @default([])
+  /// NULL means it never expires. A date in the past rejects the key with a distinct message, so
+  /// a partner is told their key expired rather than that it is invalid.
+  expiresAt            DateTime?
+  /// The previous secret, still accepted until `previousKeyExpiresAt`, so a rotation has no
+  /// window where neither key works.
+  previousKeyHash      String?   @unique
+  previousKeyExpiresAt DateTime?
+  lastUsedAt           DateTime?
+  /// The shop this key acts for. Null for a partner/reseller key, which reaches the wholesale
+  /// catalogue instead and belongs to no shop.
+  ///
+  /// This is what makes a key a *shop* key: every seller-API route reads the shop off the key
+  /// rather than off a parameter, so a key cannot be pointed at somebody else's products by
+  /// changing a request. Cascades, because a key that outlived its shop could authenticate and
+  /// reach nothing.
+  sellerId             String?
+  seller               Seller?   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  createdById          String
+  createdBy            User      @relation(fields: [createdById], references: [id])
+  createdAt            DateTime  @default(now())
+
+  orders Order[]
+
+  @@index([isEnabled])
+  @@index([sellerId])
+}
+
+// ---------- Marketing ----------
+
+enum StoryLinkType {
+  INTERNAL_SERVICE // opens the top-up wizard preset to a Service
+  EXTERNAL_URL // opens an arbitrary external link
+  PARTNER_AD // external link, flagged as sponsored/partner content in the UI
+  GALLERY_PRODUCT // opens a seller's product in the Gallery
+  SELLER_SHOP // opens a seller's public storefront
+}
+
+model Story {
+  id           String        @id @default(cuid())
+  title        String
+  subtitle     String?
+  imageUrl     String
+  badgeLabel   String? // e.g. "-20%", "Бонус", "Hot"
+  ctaLabel     String?
+  linkType     StoryLinkType @default(INTERNAL_SERVICE)
+  serviceId    String?
+  service      Service?      @relation(fields: [serviceId], references: [id])
+  externalUrl  String?
+  sponsorLabel String? // partner/advertiser name, shown for PARTNER_AD
+  isActive     Boolean       @default(true)
+  sortOrder    Int           @default(0)
+  startsAt     DateTime?
+  endsAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Seller-purchased ad story (paid placement) — null for platform-created stories.
+  sellerId         String?
+  seller           Seller?         @relation(fields: [sellerId], references: [id])
+  galleryProductId String?
+  galleryProduct   GalleryProduct? @relation(fields: [galleryProductId], references: [id])
+  priceTmt         Decimal?        @db.Decimal(12, 2)
+
+  @@index([isActive, sortOrder])
+}
+
+enum HomeSlideLinkType {
+  INTERNAL_SERVICE
+  EXTERNAL_URL
+  GALLERY_PRODUCT
+  SELLER_SHOP
+  NONE
+}
+
+// Full-width hero banner shown above the Stories row. Same shape/lifecycle as Story
+// (platform-created OR seller-purchased ad), just rendered as a large slide, not a bubble.
+model HomeSlide {
+  id               String            @id @default(cuid())
+  title            String
+  subtitle         String?
+  imageUrl         String
+  ctaLabel         String?
+  linkType         HomeSlideLinkType @default(NONE)
+  serviceId        String?
+  service          Service?          @relation(fields: [serviceId], references: [id])
+  externalUrl      String?
+  galleryProductId String?
+  galleryProduct   GalleryProduct?   @relation(fields: [galleryProductId], references: [id])
+  sponsorLabel     String?
+  isActive         Boolean           @default(true)
+  sortOrder        Int               @default(0)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  sellerId String?
+  seller   Seller?  @relation(fields: [sellerId], references: [id])
+  priceTmt Decimal? @db.Decimal(12, 2)
+
+  @@index([isActive, sortOrder])
+}
+
+enum SocialPlatform {
+  INSTAGRAM
+  TELEGRAM
+  FACEBOOK
+  TIKTOK
+  YOUTUBE
+  WHATSAPP
+  X
+  VK
+  OTHER
+}
+
+model SocialLink {
+  id        String         @id @default(cuid())
+  platform  SocialPlatform
+  url       String
+  label     String? // custom label, mainly for OTHER
+  isEnabled Boolean        @default(true)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([isEnabled, sortOrder])
+}
+
+// ---------- Content ----------
+
+model ContentPage {
+  id        String   @id @default(cuid())
+  slug      String   @unique // faq, privacy, offer, ...
+  title     String
+  body      String // markdown/plain text rendered on the storefront
+  // Optional per-locale overrides -- null/empty means "not translated yet", storefront
+  // falls back to the base (Russian) title/body above.
+  titleEn   String?
+  bodyEn    String?
+  titleTkm  String?
+  bodyTkm   String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// ---------- Support ----------
+
+enum SupportThreadStatus {
+  OPEN
+  CLOSED
+}
+
+enum SupportSenderRole {
+  CUSTOMER
+  STAFF
+  SELLER
+}
+
+model SupportThread {
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id])
+  sellerId      String? // null = platform support thread; set = buyer<->seller thread
+  seller        Seller?             @relation(fields: [sellerId], references: [id])
+  status        SupportThreadStatus @default(OPEN)
+  lastMessageAt DateTime            @default(now())
+  createdAt     DateTime            @default(now())
+
+  messages SupportMessage[]
+
+  @@index([status, lastMessageAt])
+  @@index([userId])
+  @@index([sellerId])
+}
+
+model SupportMessage {
+  id             String            @id @default(cuid())
+  threadId       String
+  thread         SupportThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderRole     SupportSenderRole
+  authorId       String?
+  author         User?             @relation(fields: [authorId], references: [id])
+  body           String
+  readByStaff    Boolean           @default(false)
+  readByCustomer Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+// ---------- Group chat ----------
+//
+// Deliberately separate from SupportThread rather than replacing it.
+//
+// SupportThread already models a two-party conversation and carries the platform support inbox,
+// the seller inbox and the customer's support screen -- all working, all with their own admin UI.
+// Folding them into a general room model would mean a data migration plus rewriting three
+// surfaces to gain nothing a customer can see. So rooms cover the genuinely new thing, group
+// conversations, and the customer's inbox endpoint merges both into one list.
+//
+// The cost is real and worth stating: "a conversation" has two shapes behind it, and anything
+// added later -- search, muting, attachments -- has to be written for both. When that bill comes
+// due, the migration is SupportThread -> ChatRoom with two members, and this comment is the
+// reason it was not paid earlier.
+
+enum ChatRoomKind {
+  /// Everyone in it writes. Members are added, not self-joined.
+  GROUP
+  /// One voice, many readers: the owner writes, anybody may subscribe. Chosen over an open group
+  /// for a creator's audience because a room anyone can post in needs moderators, bans, reports
+  /// and anti-spam before it is safe to open, and none of that exists.
+  CHANNEL
+}
+
+model ChatRoom {
+  id            String       @id @default(cuid())
+  kind          ChatRoomKind @default(GROUP)
+  /// Server-assigned identity: names alone never confer official status.
+  officialCategory String?   @unique @db.VarChar(24)
+  title         String       @db.VarChar(120)
+  /// Shown to somebody deciding whether to subscribe. Channels only; a group's members were
+  /// added by a person who already told them what it is.
+  description   String?      @db.VarChar(500)
+  createdById   String
+  createdBy     User         @relation("ChatRoomCreator", fields: [createdById], references: [id])
+  /// The shop a channel speaks for, when a creator made it. Null for a platform group.
+  sellerId      String?
+  seller        Seller?      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// What a share link carries. Groups only, and separate from the id on purpose: the id appears
+  /// in every request the members make, so a leaked one could never be revoked without deleting
+  /// the group. Replacing this column closes the door and leaves the conversation standing.
+  inviteCode    String?      @unique @db.VarChar(24)
+  /// Denormalised so the inbox can order rooms without reading every room's messages.
+  lastMessageAt DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+
+  members  ChatMember[]
+  messages ChatMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model ChatMember {
+  roomId String
+  userId String
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// What "unread" is measured against. A timestamp rather than per-message read receipts: the
+  /// inbox needs a count, and a receipt row per member per message would be the largest table in
+  /// the database within a month.
+  lastReadAt DateTime @default(now())
+  joinedAt   DateTime @default(now())
+
+  @@id([roomId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("ChatMessageAuthor", fields: [authorId], references: [id])
+  body      String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+
+  @@index([roomId, createdAt])
+}
+
+// ---------- Mail ----------
+
+model EmailSettings {
+  id                   String   @id @default("singleton")
+  transactionalEnabled Boolean  @default(true)
+  marketingEnabled     Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+}
+
+// The typed set of every email the application can send. Business code names one of these
+// instead of assembling raw HTML, so a template, locale, category and priority can be resolved
+// for it. Values are additive-only -- an EmailLog row keeps its kind forever.
+enum EmailKind {
+  // -- Authentication
+  AUTH_OTP
+  AUTH_EMAIL_VERIFICATION
+  AUTH_PASSWORD_RESET
+  AUTH_LOGIN_ALERT
+  AUTH_NEW_DEVICE
+  AUTH_EMAIL_CHANGED
+  // -- Account
+  ACCOUNT_CREATED
+  ACCOUNT_PASSWORD_CHANGED
+  ACCOUNT_DELETED
+  // -- Orders (ORDER_CREATED/COMPLETED/FAILED predate this taxonomy and stay as-is)
+  ORDER_CREATED
+  ORDER_COMPLETED
+  ORDER_FAILED
+  ORDER_PAID
+  ORDER_CANCELLED
+  ORDER_REFUNDED
+  // -- Cargo
+  CARGO_SHIPMENT_CREATED
+  CARGO_SHIPMENT_DELIVERED
+  // -- Seller
+  SELLER_APPLICATION_RECEIVED
+  SELLER_APPROVED
+  SELLER_REJECTED
+  SELLER_NEW_ORDER
+  SELLER_ORDER_CANCELLED
+  SELLER_PAYOUT
+  // -- System
+  SYSTEM_MAINTENANCE
+  SYSTEM_SECURITY_ALERT
+  SYSTEM_IMPORTANT_NOTICE
+  // -- Marketing (MARKETING predates the taxonomy -- it is the ad-hoc admin broadcast)
+  MARKETING
+  MARKETING_NEWSLETTER
+  MARKETING_PROMOTION
+  MARKETING_NEW_FEATURE
+  MARKETING_PARTNER_OFFER
+  // -- Meta
+  TEST
+}
+
+// Drives sender identity, queue priority and consent rules for a kind -- see EMAIL_KINDS in
+// apps/api/src/email/email-kinds.ts, which is the single place mapping kind -> category.
+enum EmailCategory {
+  AUTHENTICATION
+  SECURITY
+  ACCOUNT
+  ORDER
+  SELLER
+  SYSTEM
+  INFORMATIONAL
+  MARKETING
+}
+
+enum EmailTemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// One rendered-content version of one email, for one locale. Editing an ACTIVE template creates
+// a new version rather than mutating it, so a live send always references immutable content and
+// an EmailLog can point at exactly what was sent. Only one version per (kind, locale) may be
+// ACTIVE -- enforced in EmailTemplateService inside a transaction, since Postgres partial
+// unique indexes aren't expressible in the Prisma schema.
+model EmailTemplate {
+  id          String              @id @default(cuid())
+  kind        EmailKind
+  locale      String
+  version     Int
+  status      EmailTemplateStatus @default(DRAFT)
+  subject     String
+  preheader   String? // inbox preview line shown after the subject
+  html        String
+  text        String
+  createdById String?
+  createdBy   User?               @relation("EmailTemplateAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([kind, locale, version])
+  @@index([kind, locale, status])
+}
+
+enum EmailSuppressionReason {
+  HARD_BOUNCE
+  COMPLAINT
+  UNSUBSCRIBED
+  INVALID
+  MANUAL
+}
+
+// Addresses we must not send to. Checked for marketing/informational mail; deliberately NOT
+// checked for AUTHENTICATION/SECURITY, so unsubscribing from a newsletter can never block a
+// password reset the user asked for.
+model EmailSuppression {
+  id        String                 @id @default(cuid())
+  email     String                 @unique
+  reason    EmailSuppressionReason
+  note      String?
+  createdAt DateTime               @default(now())
+
+  @@index([reason])
+}
+
+// Per-user consent for the optional categories. Transactional/security mail has no switch here
+// on purpose -- it is not something a user can opt out of while holding an account.
+model EmailPreference {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketing          Boolean   @default(false) // explicit opt-in, never default-on
+  productUpdates     Boolean   @default(true)
+  partnerOffers      Boolean   @default(false)
+  subscriptionSource String? // where the opt-in came from, e.g. "registration", "admin-import"
+  unsubscribedAt     DateTime?
+  unsubscribeReason  String?
+  updatedAt          DateTime  @updatedAt
+}
+
+enum EmailOutboxStatus {
+  PENDING
+  DISPATCHING
+  DISPATCHED
+  FAILED
+}
+
+// Transactional outbox: written in the same database transaction as the business change that
+// owes an email, so the two commit together or not at all.
+//
+// Without it, "update the order, then queue the email" has a window where the process can die
+// between the commit and the enqueue, silently losing the notification. The row records only
+// that an email is owed -- the dispatcher re-reads the order and calls the same EmailService
+// method the caller used to call directly, so recipient/locale/template resolution stays in one
+// place and always reflects current state.
+model EmailOutbox {
+  id             String            @id @default(cuid())
+  kind           EmailKind
+  orderId        String?
+  // Also the queue job id, so an outbox row dispatched twice (two hosts racing, a retry after a
+  // crash mid-dispatch) still results in exactly one email.
+  idempotencyKey String            @unique
+  status         EmailOutboxStatus @default(PENDING)
+  attempts       Int               @default(0)
+  lastError      String?
+  createdAt      DateTime          @default(now())
+  dispatchedAt   DateTime?
+
+  @@index([status, createdAt])
+}
+
+// A pending password-reset code. Same shape and same rules as EmailVerification -- hashed at
+// rest, never logged, short-lived, attempt-capped, consumed on first success. Kept as its own
+// model rather than reusing EmailVerification: the two have different lifetimes and different
+// blast radius, and sharing a table would let a verification code be spent as a reset code.
+model PasswordReset {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// A pending email-verification code. The code itself is only ever stored hashed and is never
+// logged; `attempts` caps guessing and the row is consumed on first success.
+model EmailVerification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email      String // address under verification -- User.email is only updated once confirmed
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+enum EmailStatus {
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model EmailLog {
+  id              String      @id @default(cuid())
+  kind            EmailKind
+  toEmail         String
+  subject         String
+  status          EmailStatus
+  error           String?
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id])
+  // Which rendered content this send used, so a delivery complaint can be traced back to the
+  // exact template version. Null for sends that don't come from a stored template (the ad-hoc
+  // admin broadcast, and the settings test mail).
+  locale          String?
+  templateId      String?
+  templateVersion Int?
+  createdAt       DateTime    @default(now())
+
+  @@index([kind, createdAt])
+}
+
+// ---------- Gallery (flowers & gifts delivery) ----------
+
+model Seller {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  handle      String   @unique // public @username, e.g. "bucettm" (without the @)
+  shopName    String
+  description String?
+  logoUrl     String?
+  balanceTmt  Decimal  @default(0) @db.Decimal(12, 2)
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  telegramChatId   String? @unique // set once the seller links their Telegram account via /start <linkCode>
+  telegramLinkCode String? @unique // one-time code shown in the seller panel, consumed on link
+
+  defaultPayoutDetails String? // saved card/phone requisites, prefilled into new withdrawal requests
+
+  products            GalleryProduct[]
+  storefronts         Storefront[]
+  apiKeys             ApiKey[]
+  supportThreads      SupportThread[]
+  chatChannels        ChatRoom[]
+  withdrawalRequests  WithdrawalRequest[]
+  ledgerEntries       SellerLedgerEntry[]
+  stories             Story[]
+  homeSlides          HomeSlide[]
+  referralsAsReferrer Referral[]
+
+  @@index([isEnabled])
+}
+
+enum SellerLedgerEntryType {
+  OPENING_BALANCE
+  GALLERY_SALE_CREDIT
+  WITHDRAWAL_RESERVE
+  WITHDRAWAL_REFUND
+  STORY_AD_DEBIT
+  SLIDE_AD_DEBIT
+  REFERRAL_CREDIT
+  ADJUSTMENT
+}
+
+// Append-only financial evidence. amountTmt is signed: credits positive, debits negative.
+// Seller.balanceTmt remains a transactionally maintained read cache and is reconciled to SUM here.
+model SellerLedgerEntry {
+  id             String                @id @default(cuid())
+  sellerId       String
+  seller         Seller                @relation(fields: [sellerId], references: [id])
+  type           SellerLedgerEntryType
+  amountTmt      Decimal               @db.Decimal(12, 2)
+  referenceType  String
+  referenceId    String
+  idempotencyKey String                @unique
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([sellerId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+enum SellerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Public self-signup — collected here, NOT turned into a User/Seller until an admin approves it.
+model SellerApplication {
+  id           String                  @id @default(cuid())
+  phone        String
+  // Required by the DTO going forward, nullable in the column so applications filed before this
+  // existed still read. It is the only channel that reaches an applicant: Telegram linking needs
+  // an approved Seller to generate a code, so before approval there is nothing else.
+  email        String?
+  passwordHash String
+  fullName     String?
+  handle       String
+  shopName     String
+  description  String?
+  status       SellerApplicationStatus @default(PENDING)
+  reviewNote   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime                @default(now())
+
+  @@index([status, createdAt])
+}
+
+enum WithdrawalStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+// Seller-initiated payout request. balanceTmt is decremented on creation (reserved) and
+// credited back on rejection — approval means an admin paid out manually, outside the system.
+model WithdrawalRequest {
+  id            String           @id @default(cuid())
+  sellerId      String
+  seller        Seller           @relation(fields: [sellerId], references: [id])
+  amountTmt     Decimal          @db.Decimal(12, 2)
+  payoutDetails String // free-text: card number / phone for transfer — no payment gateway integration
+  status        WithdrawalStatus @default(PENDING)
+  reviewNote    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+
+  @@index([sellerId, status])
+  @@index([status, createdAt])
+}
+
+model GalleryCategory {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  products GalleryProduct[]
+
+  @@index([isEnabled, sortOrder])
+}
+
+model GalleryProduct {
+  id          String          @id @default(cuid())
+  categoryId  String
+  category    GalleryCategory @relation(fields: [categoryId], references: [id])
+  sellerId    String?
+  seller      Seller?         @relation(fields: [sellerId], references: [id])
+  /// The seller's own section this product sits in. Null means the shop's general list.
+  ///
+  /// One at most, and deliberately so: a storefront stands in for "another shop" -- what a
+  /// creator asked for when they asked to run several -- and a thing is not stocked in two shops
+  /// at once. A product that needs to appear in two places needs two products.
+  storefrontId String?
+  storefront   Storefront?    @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+  sku         String          @unique // article number shown to customers for search/lookup
+  name        String
+  description String?
+  imageUrl    String
+  priceTmt    Decimal         @db.Decimal(12, 2)
+  isEnabled   Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  orders     GalleryOrder[]
+  stories    Story[]
+  homeSlides HomeSlide[]
+  socialPostTags SocialPostProduct[]
+
+  @@index([categoryId, isEnabled, sortOrder])
+  @@index([sellerId])
+  @@index([storefrontId, isEnabled, sortOrder])
+}
+
+/// A section of one shop, made and ordered by the person who runs it.
+///
+/// Not a GalleryCategory: that is the platform's own taxonomy, the same words for everybody, and
+/// staff decide what it contains. This is the seller's shelf -- "Свадебные", "Новинки" -- and it
+/// exists because a creator asked to run several shops. Sections inside one shop were chosen over
+/// several Seller rows: a second Seller would mean a second balance, a second payout account and
+/// a second application to approve, none of which anybody asked for.
+model Storefront {
+  id          String   @id @default(cuid())
+  sellerId    String
+  seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(80)
+  /// What the public URL carries. Unique per shop rather than globally: two shops may both have
+  /// a section called "novinki", and making the first one to claim it the owner of the word
+  /// would be a race nobody can see they lost.
+  slug        String   @db.VarChar(60)
+  description String?  @db.VarChar(300)
+  coverUrl    String?
+  isEnabled   Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products GalleryProduct[]
+
+  @@unique([sellerId, slug])
+  @@index([sellerId, isEnabled, sortOrder])
+}
+
+// ---------- Social commerce feed ----------
+
+enum SocialPostMediaType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum SocialPostStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  HIDDEN
+}
+
+enum SocialInteractionType {
+  VIEW
+  LIKE
+  SAVE
+  PRODUCT_CLICK
+}
+
+enum SocialCommentStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
+model SocialPost {
+  id                String              @id @default(cuid())
+  authorId          String
+  author            User                @relation("SocialPostAuthor", fields: [authorId], references: [id])
+  body              String?             @db.VarChar(1500)
+  mediaType         SocialPostMediaType @default(TEXT)
+  mediaUrl          String?
+  thumbnailUrl      String?
+  status            SocialPostStatus    @default(PENDING)
+  moderationNote    String?
+  publishedAt       DateTime?
+  likeCount         Int                 @default(0)
+  saveCount         Int                 @default(0)
+  viewCount         Int                 @default(0)
+  productClickCount Int                 @default(0)
+  commentCount      Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  products          SocialPostProduct[]
+  interactions      SocialInteraction[]
+  comments          SocialComment[]
+  reports           SocialPostReport[]
+
+  @@index([status, publishedAt, id])
+  @@index([authorId, createdAt])
+}
+
+model SocialPostProduct {
+  postId       String
+  productId    String
+  sortOrder    Int           @default(0)
+  post         SocialPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product      GalleryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([postId, productId])
+  @@index([productId])
+}
+
+model SocialInteraction {
+  postId    String
+  userId    String
+  type      SocialInteractionType
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@id([postId, userId, type])
+  @@index([userId, type, createdAt])
+}
+
+model SocialComment {
+  id        String              @id @default(cuid())
+  postId    String
+  userId    String
+  body      String              @db.VarChar(600)
+  status    SocialCommentStatus @default(PENDING)
+  post      SocialPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User                @relation("SocialCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([postId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model SocialPostReport {
+  id        String     @id @default(cuid())
+  postId    String
+  userId    String
+  reason    String     @db.VarChar(500)
+  createdAt DateTime   @default(now())
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, createdAt])
+}
+
+enum GalleryOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  DELIVERED
+  CANCELLED
+}
+
+model GalleryOrder {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id])
+  productId       String
+  product         GalleryProduct     @relation(fields: [productId], references: [id])
+  recipientName   String
+  recipientPhone  String
+  deliveryCity    String
+  deliveryAddress String
+  cardMessage     String?
+  amountTmt       Decimal            @db.Decimal(12, 2)
+  status          GalleryOrderStatus @default(PENDING_PAYMENT)
+  createdAt       DateTime           @default(now())
+  deliveredAt     DateTime?
+
+  @@index([status])
+  @@index([userId])
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+// ---------- Referral program ----------
+
+enum ReferralStatus {
+  PENDING // referee registered, hasn't completed a qualifying order yet
+  REWARDED // qualifying order completed, reward credited
+  VOID // referee blocked/removed before qualifying, or admin voided it
+}
+
+enum ReferrerType {
+  CUSTOMER
+  SELLER
+}
+
+// One row per referred user (first username they registered with wins). Tracks the reward
+// lifecycle from signup through the referee's first qualifying (paid) order.
+model Referral {
+  id                String         @id @default(cuid())
+  referrerType      ReferrerType
+  referrerUserId    String? // set when referrerType = CUSTOMER
+  referrerUser      User?          @relation("ReferralsAsReferrerUser", fields: [referrerUserId], references: [id])
+  referrerSellerId  String? // set when referrerType = SELLER
+  referrerSeller    Seller?        @relation(fields: [referrerSellerId], references: [id])
+  refereeUserId     String         @unique
+  refereeUser       User           @relation("ReferralsAsReferee", fields: [refereeUserId], references: [id])
+  username          String // the username/handle that was used, denormalized (survives later changes)
+  status            ReferralStatus @default(PENDING)
+  rewardAmountTmt   Decimal?       @db.Decimal(12, 2)
+  qualifyingOrderId String? // Order.id that triggered the reward
+  createdAt         DateTime       @default(now())
+  rewardedAt        DateTime?
+
+  // ---- Attribution, captured client-side when the /r/<code> link was opened ----
+  // All optional and best-effort: a direct signup with a typed-in code has none of these, and
+  // that's a legitimate, common case, not a data-quality problem.
+  utmSource   String? // e.g. "instagram", "telegram" -- from ?utm_source= on the /r/ link
+  utmMedium   String? // e.g. "social", "cpc"
+  utmCampaign String? // e.g. "launch2026"
+  referrerUrl String? // document.referrer at the moment /r/<code> was opened, e.g. an Instagram bio link host
+
+  @@index([referrerType, referrerUserId])
+  @@index([referrerType, referrerSellerId])
+  @@index([status])
+}
+
+model ReferralSettings {
+  id                String   @id @default("singleton")
+  enabled           Boolean  @default(false)
+  customerRewardTmt Decimal  @default(0) @db.Decimal(12, 2)
+  sellerRewardTmt   Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt         DateTime @updatedAt
+}
+
+// ---------- Cargo (logistics vertical) ----------
+// See docs/CARGO/ARCHITECTURE.md. v1 scope: one route, one partner-owned warehouse (no scan/accept
+// workflow on our side), flat per-kg tariff, pickup required from day one. Deliberately does not
+// use PaymentProviderRegistry/Payment (that's hard-FK'd to Order, and GalleryOrder -- the one real
+// precedent for a second vertical -- never wired into it either); follows the same flat-status,
+// admin-confirms pattern GalleryOrder already uses instead.
+
+enum ShipmentStatus {
+  DRAFT
+  QUOTE_CREATED
+  PENDING_PAYMENT
+  PAID
+  PICKUP_REQUESTED
+  PICKUP_CONFIRMED
+  PICKED_UP
+  IN_TRANSIT
+  ARRIVED_DESTINATION
+  READY_FOR_PICKUP // recipient collects at the destination point
+  OUT_FOR_DELIVERY // only reachable if DOOR_DELIVERY was chosen
+  DELIVERED
+  CANCELLED
+  ON_HOLD
+  EXCEPTION
+}
+
+enum ShipmentDeliveryMode {
+  WAREHOUSE_PICKUP
+  DOOR_DELIVERY
+}
+
+enum CargoPickupStatus {
+  REQUESTED
+  CONFIRMED
+  PICKED_UP
+  CANCELLED
+  FAILED
+}
+
+// Origin and destination are two independent admin-managed lists, not a fixed pair. Every enabled
+// destination can receive from every enabled origin -- 6 Turkmen provinces x N Russian cities is
+// 30+ combinations, and enumerating them as rows meant an admin maintaining a tariff per pair.
+// Price does not depend on the pair (confirmed 2026-09-07), so the pair is address information
+// only; what a shipment costs comes from its item type and, for weight-priced goods, the global
+// weight brackets below.
+enum CargoCityRole {
+  ORIGIN
+  DESTINATION
+}
+
+model CargoCity {
+  id        String        @id @default(cuid())
+  role      CargoCityRole
+  country   String // ISO-ish label shown to staff: "RU", "TM"
+  name      String
+  isEnabled Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  originShipments      Shipment[] @relation("ShipmentOriginCity")
+  destinationShipments Shipment[] @relation("ShipmentDestinationCity")
+
+  @@unique([role, name])
+  @@index([role, isEnabled, sortOrder])
+}
+
+// What is being shipped decides HOW it is priced, not just what it is called. Phones travel a
+// separate, more careful route and are quoted per handset regardless of weight; medicines are
+// likewise counted, not weighed; ordinary personal effects are weighed. So the item type carries
+// its own pricing unit rather than the form guessing from a free-text description -- which is what
+// the old `cargoDescription` string was, and it could not be priced from at all.
+enum CargoPricingUnit {
+  PER_KG // priced from the CargoTariff weight brackets
+  PER_ITEM // priced as quantity x pricePerItemRub, weight irrelevant
+}
+
+model CargoItemType {
+  id          String           @id @default(cuid())
+  code        String           @unique // PERSONAL_ITEMS, PHONE, MEDICINE
+  name        String
+  description String? // shown under the dropdown so a customer picks the right one
+  pricingUnit CargoPricingUnit
+
+  // PER_ITEM only. Null for PER_KG types, where the brackets decide.
+  pricePerItemRub Decimal? @db.Decimal(10, 2)
+  // PER_KG only. The partner will not move less than this, so the form has to say so up front
+  // rather than let someone build a quote that gets rejected at the warehouse.
+  minWeightKg     Decimal? @db.Decimal(6, 2)
+
+  isEnabled Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  shipments Shipment[]
+
+  @@index([isEnabled, sortOrder])
+}
+
+// Weight-break pricing: the partner quotes in RUB and charges less per kg the heavier a shipment
+// is (confirmed real figures: 140 RUB/kg under 50kg, 130 from 50kg, 120 from 100kg) -- the whole
+// shipment is priced at whichever bracket its total declared weight falls into, not a progressive
+// per-kg blend. Several rows are active at once, one per bracket; `CargoService` picks the row
+// with the highest `minWeightKg` that's still <= the shipment's weight. A Shipment snapshots the
+// bracket it actually priced at, so editing a bracket never rewrites an order already placed.
+//
+// Global rather than per-route since 2026-09-07: the price is the same to every destination, and
+// keeping brackets per city pair meant 30 routes x 3 brackets of duplicated numbers to maintain.
+model CargoTariff {
+  id            String   @id @default(cuid())
+  minWeightKg   Decimal  @db.Decimal(6, 2) // inclusive lower bound of this bracket
+  pricePerKgRub Decimal  @db.Decimal(10, 2)
+  pickupFeeRub  Decimal  @default(0) @db.Decimal(10, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  createdById   String
+  createdBy     User     @relation("CargoTariffCreatedBy", fields: [createdById], references: [id])
+
+  shipments Shipment[]
+
+  @@index([isActive, minWeightKg])
+}
+
+// Ad slot at the top of the Cargo pages, managed from the admin console so campaigns change
+// without a deploy -- same reasoning as HomeSlide/Story. `startsAt`/`endsAt` are both optional; a
+// banner with neither runs until it is disabled.
+model CargoBanner {
+  id        String    @id @default(cuid())
+  title     String
+  subtitle  String?
+  imageUrl  String
+  linkUrl   String?
+  isEnabled Boolean   @default(true)
+  sortOrder Int       @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([isEnabled, sortOrder])
+}
+
+// Singleton, same shape as ReferralSettings. RUB and TMT both float against USD independently --
+// a single stored RUB->TMT number silently goes stale the moment either currency moves on its own,
+// which is exactly the mistake flagged when this was built. Storing both USD cross-rates instead
+// means the effective RUB->TMT rate (tmtPerUsd / rubPerUsd) is always derived fresh, and an admin
+// only ever has to update the one number that actually changed.
+model CargoExchangeRate {
+  id          String   @id @default("singleton")
+  rubPerUsd   Decimal  @db.Decimal(10, 4)
+  tmtPerUsd   Decimal  @db.Decimal(10, 4)
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id])
+}
+
+model Shipment {
+  id                   String    @id @default(cuid())
+  publicTrackingNumber String    @unique // ASH-2026-000123 -- sequence-issued, see CargoService
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id])
+  // Address information only -- price does not depend on the pair, see CargoCity's comment.
+  originCityId         String
+  originCity           CargoCity @relation("ShipmentOriginCity", fields: [originCityId], references: [id])
+  destinationCityId    String
+  destinationCity      CargoCity @relation("ShipmentDestinationCity", fields: [destinationCityId], references: [id])
+
+  itemTypeId String
+  itemType   CargoItemType @relation(fields: [itemTypeId], references: [id])
+  // Null for PER_ITEM shipments: nothing was weighed, so no bracket applied.
+  tariffId   String?
+  tariff     CargoTariff?  @relation(fields: [tariffId], references: [id])
+
+  // Which channel the customer said they'd pay through -- purely informational for Cargo (unlike
+  // Order, price never depends on this: no PaymentProviderRegistry wiring here, see
+  // ARCHITECTURE.md §1). Lets admin know what to look for when confirming payment by hand.
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  senderName    String
+  senderPhone   String
+  pickupAddress String
+
+  recipientName   String
+  recipientPhone  String
+  deliveryAddress String? // null when recipient collects from the partner's point
+  deliveryMode    ShipmentDeliveryMode @default(WAREHOUSE_PICKUP)
+
+  // Exactly one of these carries the billable amount, decided by itemType.pricingUnit:
+  // PER_KG weighs (declaredWeightKg), PER_ITEM counts (quantity).
+  declaredWeightKg Decimal? @db.Decimal(6, 2)
+  quantity         Int      @default(1)
+  fragile          Boolean  @default(false)
+  notes            String?
+
+  // Frozen at confirmation -- see CargoTariff's comment. Both the RUB bracket actually used and
+  // the USD cross-rates it was converted through are snapshotted, so a later tariff edit *or* a
+  // later exchange-rate update never rewrites the price of an order already placed.
+  // Whichever of the two applied; the other stays null, so a row always says how it was priced.
+  pricePerKgRubSnapshot   Decimal? @db.Decimal(10, 2)
+  pricePerItemRubSnapshot Decimal? @db.Decimal(10, 2)
+  pickupFeeRubSnapshot    Decimal  @db.Decimal(10, 2)
+  totalPriceRub           Decimal  @db.Decimal(10, 2)
+  rubPerUsdSnapshot       Decimal  @db.Decimal(10, 4)
+  tmtPerUsdSnapshot       Decimal  @db.Decimal(10, 4)
+  totalPriceTmt           Decimal  @db.Decimal(12, 2) // what the customer actually sees and pays
+
+  status      ShipmentStatus @default(DRAFT)
+  paidAt      DateTime?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pickup         CargoPickupRequest?
+  trackingEvents ShipmentTrackingEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([originCityId])
+  @@index([destinationCityId])
+  @@index([itemTypeId])
+}
+
+model CargoPickupRequest {
+  id            String            @id @default(cuid())
+  shipmentId    String            @unique
+  shipment      Shipment          @relation(fields: [shipmentId], references: [id])
+  address       String
+  requestedDate DateTime
+  // Free text for v1 ("10:00-14:00") -- there's no slot-booking system to validate a structured
+  // window against yet. See docs/CARGO/ASSUMPTIONS.md.
+  timeWindow    String
+  phone         String
+  status        CargoPickupStatus @default(REQUESTED)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+// Event-sourced customer-visible timeline. Appended by an authenticated admin action -- there is
+// no partner API integration, so a status update from the partner (today: phone/Telegram) becomes
+// one audited admin action, same shape as every other AuditLogService caller in this codebase.
+model ShipmentTrackingEvent {
+  id          String         @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id])
+  status      ShipmentStatus
+  note        String?
+  createdAt   DateTime       @default(now())
+  createdById String
+  createdBy   User           @relation("ShipmentTrackingEventCreatedBy", fields: [createdById], references: [id])
+
+  @@index([shipmentId, createdAt])
+}
+
+// ---------- Managed subdomains ----------
+// The DNS zone already has a wildcard (*.gulyaly.pro) pointing at the VPS, so provisioning a new
+// subdomain never touches DNS -- it only needs an nginx vhost (+ its own Let's Encrypt cert via
+// HTTP-01/webroot, which already works for any name that resolves here). Rows here just track
+// what CreateSubdomain/RemoveSubdomain workflow runs are in flight or done; the actual vhost
+// file lives on the server, written by .github/workflows/provision-subdomain.yml.
+
+enum SubdomainStatus {
+  PENDING // create/remove dispatched to GitHub Actions, not confirmed yet
+  ACTIVE
+  FAILED
+  REMOVED
+}
+
+model ManagedSubdomain {
+  id         String          @id @default(cuid())
+  name       String          @unique // full hostname, e.g. "shop2.gulyaly.pro"
+  targetPort Int // local port on the VPS this subdomain proxies to
+  status     SubdomainStatus @default(PENDING)
+  lastError  String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}

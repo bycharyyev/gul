@@ -1,0 +1,21 @@
+[Unit]
+Description=Hourly Postgres backup for gul
+
+[Timer]
+# Hourly, not daily. A once-a-day dump means the worst case is losing a day of orders and
+# payments -- which for a shop is not a backup policy, it is a bet. The dump is 60K and the
+# upload takes under a second, so the cost of doing this twenty-four times more often is
+# indistinguishable from zero.
+#
+# This is still the coarse safety net, not the fine one: the streaming replica on the secondary
+# is seconds behind and is what a real failure would be restored from. These hourly copies exist
+# for the failures replication cannot help with -- a bad migration, a mistaken delete, a table
+# dropped by hand -- where the replica has faithfully reproduced the damage.
+OnCalendar=hourly
+# Spread across the hour so the dump never lands on the same second as anything else scheduled,
+# and so a restart does not synchronise every timer on the box.
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

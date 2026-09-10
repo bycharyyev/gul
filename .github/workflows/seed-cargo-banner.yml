@@ -1,0 +1,75 @@
+name: Seed a demo Cargo ad banner
+
+# One-off. The Cargo ad slot ships empty by design -- it renders nothing until a banner exists --
+# which makes "is the feature actually there?" impossible to answer by looking. This inserts one
+# visible placeholder so the slot can be seen end to end on web and in the app; staff then edit or
+# delete it from Admin -> Карго -> Рекламные баннеры like any other.
+#
+# Deliberately not part of the seed script: a seeded ad would reappear on every environment reset
+# and eventually get mistaken for a real campaign.
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: Banner headline
+        type: string
+        default: Карго Gulyaly
+        required: true
+      subtitle:
+        description: Banner subtitle
+        type: string
+        default: Россия → Туркменистан, от 5 кг
+        required: true
+      image_url:
+        description: Image URL (must be https)
+        type: string
+        default: https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=1200&q=70
+        required: true
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Insert the banner
+        env:
+          TITLE: ${{ inputs.title }}
+          SUBTITLE: ${{ inputs.subtitle }}
+          IMAGE_URL: ${{ inputs.image_url }}
+        run: |
+          # Fixed id so re-running edits the same row instead of stacking duplicates.
+          cat > /tmp/seed-banner.sql <<'SQL'
+          INSERT INTO "CargoBanner" ("id", "title", "subtitle", "imageUrl", "isEnabled", "sortOrder", "updatedAt")
+          VALUES ('cargo_banner_demo', :'title', :'subtitle', :'image', true, 0, NOW())
+          ON CONFLICT ("id") DO UPDATE
+            SET "title" = EXCLUDED."title",
+                "subtitle" = EXCLUDED."subtitle",
+                "imageUrl" = EXCLUDED."imageUrl",
+                "isEnabled" = true,
+                "updatedAt" = NOW();
+
+          SELECT "id", "title", "isEnabled" FROM "CargoBanner" ORDER BY "sortOrder";
+          SQL
+
+          scp -i ~/.ssh/id_ed25519 /tmp/seed-banner.sql "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/seed-banner.sql"
+          # -v assignments keep the text out of the SQL itself, so an apostrophe in a headline
+          # cannot terminate a string literal.
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "TITLE='$TITLE' SUBTITLE='$SUBTITLE' IMAGE_URL='$IMAGE_URL' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul
+            docker compose cp /tmp/seed-banner.sql postgres:/tmp/seed-banner.sql
+            docker compose exec -T postgres psql -U "$(grep -m1 '^POSTGRES_USER=' .env | cut -d= -f2)" \
+              -d "$(grep -m1 '^POSTGRES_DB=' .env | cut -d= -f2)" \
+              -v title="$TITLE" -v subtitle="$SUBTITLE" -v image="$IMAGE_URL" \
+              -f /tmp/seed-banner.sql < /dev/null
+            rm -f /tmp/seed-banner.sql
+          REMOTE
+          rm -f /tmp/seed-banner.sql

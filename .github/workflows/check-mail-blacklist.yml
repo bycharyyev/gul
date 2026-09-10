@@ -1,0 +1,34 @@
+name: Check mail relay IP against major DNSBLs
+
+# Standalone check for now (workflow_dispatch) -- meant to be folded into the disk-alert email
+# script once that's actually installed (paused earlier: still waiting on a destination email
+# address). Queries the secondary's IP against the DNSBLs that most affect deliverability at
+# Gmail/Outlook: Spamhaus ZEN, Barracuda, SpamCop. A DNSBL lookup works by querying the reversed
+# IP octets as a subdomain of the list's zone -- an A record answer means listed, NXDOMAIN means
+# clean.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query DNSBLs for the relay IP
+        run: |
+          IP="${{ secrets.SECONDARY_HOST }}"
+          REV=$(echo "$IP" | awk -F. '{print $4"."$3"."$2"."$1}')
+          echo "Checking $IP (reversed: $REV) against DNSBLs..."
+          any_listed=0
+          for zone in zen.spamhaus.org b.barracudacentral.org bl.spamcop.net; do
+            result=$(dig +short A "$REV.$zone")
+            if [ -n "$result" ]; then
+              echo "LISTED on $zone -> $result"
+              any_listed=1
+            else
+              echo "clean on $zone"
+            fi
+          done
+          if [ "$any_listed" = "1" ]; then
+            echo "::warning::Mail relay IP $IP is listed on at least one DNSBL -- deliverability at risk"
+          fi

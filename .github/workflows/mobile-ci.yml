@@ -1,0 +1,44 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          # Pinned, not `channel: stable`. An unpinned channel silently follows whatever stable is
+          # on the day the job runs, so a repository that was green turns red with no commit to
+          # blame -- which is exactly what happened on 2026-09-08: CI moved to 3.47.2, where
+          # CupertinoPageTransitionsBuilder no longer resolves the way it does in the version this
+          # app is developed and built against, and `flutter analyze` failed on a file nobody had
+          # touched. Upgrading the SDK is its own task with a real breaking change to resolve;
+          # it should not arrive as a surprise inside an unrelated push.
+          flutter-version: 3.38.5
+          channel: stable
+          cache: true
+      - working-directory: apps/mobile
+        run: flutter pub get
+      - working-directory: apps/mobile
+        run: dart format --output=none --set-exit-if-changed lib test
+      - working-directory: apps/mobile
+        run: flutter analyze
+      - working-directory: apps/mobile
+        run: flutter test
+      - working-directory: apps/mobile
+        run: flutter build apk --debug

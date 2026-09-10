@@ -1,0 +1,40 @@
+name: Email DNS monitor
+
+# Mail DNS breaks silently. Nothing throws, nothing 500s -- messages just start landing in spam,
+# and you find out from a customer days later.
+#
+# This project has already hit one such case: registering a subdomain through the Timeweb panel
+# auto-attached a duplicate default SPF record, and two SPF records is a permerror under RFC 7208
+# that fails the check entirely. A daily run turns that class of problem into a failed workflow
+# instead of a slow deliverability decline.
+
+on:
+  schedule:
+    # 06:00 UTC daily -- early enough that a break is caught before the day's sending.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain to check
+        type: string
+        default: gulyaly.pro
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Runner DNS works, so this uses the ordinary resolver -- the same path a receiving mail
+      # server takes, rather than the DoH fallback the script keeps for restricted networks.
+      - name: Check mail DNS
+        run: pnpm --filter @topup-hub/api email:dns-check "${{ inputs.domain || 'gulyaly.pro' }}"

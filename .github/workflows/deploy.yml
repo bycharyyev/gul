@@ -1,0 +1,506 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+    # Without this, every push -- including a new one-off ops workflow or an infra/nginx tweak
+    # that has its own dedicated workflow -- triggers a full rebuild+redeploy of all 3 apps. That
+    # was quietly queuing behind (and blocking) unrelated workflow_dispatch runs on the shared
+    # runner concurrency limit.
+    paths:
+      - "apps/**"
+      # The Flutter client ships through the stores, not this pipeline. Without this exclusion
+      # every mobile commit would rebuild and redeploy all three server images -- which is both
+      # pointless and, as the 100%-disk outage showed, actively harmful.
+      - "!apps/mobile/**"
+      - "packages/**"
+      - "docker-compose.prod.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/deploy.yml"
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+env:
+  API_PUBLIC_URL: ${{ vars.API_PUBLIC_URL }}
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    outputs:
+      # Consumed by the deploy job to decide whether an automatic image rollback is even
+      # meaningful for this release. See the "Reject destructive migrations" step below.
+      schema_breaking: ${{ steps.migration-policy.outputs.schema_breaking }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: topup
+          POSTGRES_PASSWORD: topup
+          POSTGRES_DB: topup_hub_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U topup -d topup_hub_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://topup:topup@localhost:5432/topup_hub_ci?schema=public
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-outside-tests
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-outside-tests
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Reject destructive migrations in this release
+        id: migration-policy
+        shell: bash
+        run: |
+          BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-parse HEAD^)"
+          fi
+          mapfile -t MIGRATIONS < <(git diff --name-only "$BASE" "${{ github.sha }}" -- 'apps/api/prisma/migrations/*/migration.sql')
+          node scripts/check-migrations.mjs "${MIGRATIONS[@]}"
+
+          # A migration that only passed the check because it carries an explicit
+          # `migration-policy: allow-destructive` override is, by definition, one the previous
+          # image cannot run against. The deploy job's automatic image rollback would then
+          # "succeed" -- /api/health is SELECT 1 plus a Redis ping and never reads a converted
+          # column -- and print a reassuring line over a broken release. Flag it instead.
+          BREAKING=false
+          for file in "${MIGRATIONS[@]}"; do
+            [ -n "$file" ] || continue
+            if grep -Eqi 'migration-policy:[[:space:]]*allow-destructive' "$file"; then
+              echo "schema-breaking migration in this release: $file"
+              BREAKING=true
+            fi
+          done
+          echo "schema_breaking=$BREAKING" >> "$GITHUB_OUTPUT"
+      - name: Validate schema and replay every migration on an empty database
+        run: |
+          pnpm --filter @topup-hub/api exec prisma validate
+          pnpm --filter @topup-hub/api prisma:deploy
+      # No lint gate here on purpose. Both apps declare a `lint` script, but eslint is not a
+      # dependency of any workspace package and no eslint config exists -- the script has never
+      # been runnable, so gating the deploy on it just blocks every release with
+      # "eslint: not found". Setting eslint up properly (config, plugins, fixing whatever it
+      # finds across the existing codebase) is its own task, not a rider on a payment release.
+      # `pnpm typecheck` below is the real static gate and it does run.
+      - name: Check architecture boundaries
+        run: pnpm check:architecture
+      - run: pnpm typecheck
+      - name: Run workspace tests
+        run: pnpm test
+      - run: pnpm build
+  # Three images built in parallel matrix legs instead of three sequential steps in one job --
+  # each build waits on nothing but its own layer cache, so wall-clock time is roughly the
+  # slowest single image instead of the sum of all three. Each leg gets its own GHA cache scope
+  # (cache-from/cache-to: type=gha,scope=<app>) so their layer caches don't clobber each other --
+  # without a distinct scope per app, buildx would cache under one shared key and each build
+  # would evict the previous app's cache instead of reusing it. That cache lives in the separate
+  # 10GB-per-repo Actions *cache* bucket (auto-evicted, not billed), not the small Actions
+  # *storage* quota that artifacts/logs count against.
+  #
+  # Images are pushed to GHCR tagged by commit SHA (immutable) instead of being docker-save'd and
+  # scp'd to the server -- a previous, known-good image is always addressable by tag for
+  # rollback, and nothing crosses the build-images -> deploy job boundary except that shared tag
+  # (no upload-artifact/download-artifact round trip -- that ~470MB-per-run artifact was almost
+  # entirely responsible for blowing through the account's 0.5GB Actions storage quota days into
+  # every billing cycle). The deploy job keeps the previous IMAGE_TAG around and automatically
+  # reverts to it if the new one fails its health check, instead of leaving prod stuck on a
+  # broken deploy.
+  build-images:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: web
+            dockerfile: apps/web/Dockerfile
+          - app: admin
+            dockerfile: apps/admin/Dockerfile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build + push ${{ matrix.app }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # The `env` context isn't available inside `strategy.matrix` (that's why the previous
+          # attempt at this failed the whole workflow's schema validation before any job even
+          # started) so both possible build args are passed unconditionally here instead --
+          # whichever Dockerfile doesn't declare a given ARG just ignores it.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.API_PUBLIC_URL }}
+            VITE_API_URL=${{ env.API_PUBLIC_URL }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/gul-${{ matrix.app }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/gul-${{ matrix.app }}:latest
+
+  deploy:
+    # build-images already implies build-and-test, but an output is only readable from a job that
+    # is listed here by name -- hence both.
+    needs: [build-images, build-and-test]
+    runs-on: ubuntu-latest
+    # Only reads the images build-images already pushed -- the deploy job's own GITHUB_TOKEN
+    # still needs packages:read for the VPS-side `docker login ghcr.io` below, since job
+    # permissions aren't inherited from other jobs. Explicit rather than relying on whatever the
+    # repo's default token permissions happen to be.
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      # Full history: the rollback decision below diffs against the SHA currently deployed, which
+      # can be many commits back and is absent from a depth-1 clone.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "${{ secrets.DEPLOY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain DEPLOY_HOST" >&2; exit 1;
+          }
+          ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
+          }
+
+      # Both nodes run the app tier against the SAME primary database, and DNS round-robins live
+      # traffic across them. So between "primary migrated" and "secondary restarted" the secondary
+      # is serving old code against the new schema -- with half the traffic. That window used to
+      # be the secondary's whole deploy job: prune, login, pull three images, then start them.
+      # Pulling here, before the migration runs, leaves deploy-secondary with only `up -d` to do,
+      # which turns minutes into seconds. Deliberately best-effort: a registry blip must not fail
+      # the primary deploy, deploy-secondary retries its own pull anyway.
+      - name: Pre-pull the new images on the secondary (shrinks the mixed-version window)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            set -e
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            for app in api web admin; do
+              docker pull "ghcr.io/${{ github.repository_owner }}/gul-$app:${{ github.sha }}" || true
+            done
+          ' < /dev/null
+      # The schema-breaking decision has to be made against what is ACTUALLY running, not against
+      # the previous push. `prisma migrate deploy` applies every PENDING migration, so a release
+      # whose own diff touches no migration can still apply one that a failed earlier deploy left
+      # unapplied -- which is exactly what happened on 2026-09-07: the flag said false, the
+      # destructive migration ran anyway, and the rollback proceeded onto a converted schema.
+      - name: Read the tag currently deployed on primary
+        id: deployed
+        run: |
+          TAG=$(ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}             'grep "^IMAGE_TAG=" /opt/gul/.env 2>/dev/null | cut -d= -f2' < /dev/null || true)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "currently deployed: ${TAG:-<unknown>}"
+
+      - name: Decide whether an image rollback would be meaningful for this release
+        id: rollback-policy
+        run: |
+          PREV="${{ steps.deployed.outputs.tag }}"
+          BREAKING=false
+          if [ -z "$PREV" ] || ! git cat-file -e "$PREV^{commit}" 2>/dev/null; then
+            # Cannot tell what the running image contains, so cannot promise a rollback works.
+            echo "previous tag unknown or not in history -- treating as schema-breaking"
+            BREAKING=true
+          else
+            for file in $(git diff --name-only "$PREV" "${{ github.sha }}" -- 'apps/api/prisma/migrations/*/migration.sql'); do
+              if grep -Eqi 'migration-policy:[[:space:]]*allow-destructive' "$file"; then
+                echo "schema-breaking migration not present in the running image: $file"
+                BREAKING=true
+              fi
+            done
+          fi
+          echo "schema_breaking=$BREAKING" >> "$GITHUB_OUTPUT"
+          echo "schema_breaking=$BREAKING"
+
+      - name: Ship docker-compose.yml
+        run: scp -i ~/.ssh/deploy_key docker-compose.prod.yml ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/gul/docker-compose.yml
+      - name: Pull, migrate, restart (auto-rollback on failed health check)
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            # The login is a network call to the same registry the pull retries guard, and it
+            # fails the same way -- so it needs the same patience, or the retry below never
+            # gets reached.
+            for attempt in 1 2 3; do
+              echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin && break
+              echo "login attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+              sleep $((attempt * 15))
+            done
+            cd /opt/gul
+
+            NEW_TAG="${{ github.sha }}"
+            PREV_TAG="$(grep "^IMAGE_TAG=" .env 2>/dev/null | cut -d= -f2)"
+            [ -z "$PREV_TAG" ] && PREV_TAG="latest"
+
+            grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
+
+            set_tag() {
+              sed -i "/^IMAGE_TAG=/d" .env
+              echo "IMAGE_TAG=$1" >> .env
+            }
+
+            # GHCR answers from these hosts intermittently -- three deploys in a row died on
+            # "TLS handshake timeout" fetching an oauth token, while Docker Hub images in the
+            # same compose file pulled fine. A registry blip is not a bad release, and failing
+            # the deploy over one leaves the boxes on different versions until somebody notices.
+            pull_with_retry() {
+              for attempt in 1 2 3; do
+                if docker compose pull; then
+                  return 0
+                fi
+                echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+                sleep $((attempt * 15))
+              done
+              return 1
+            }
+
+            # `docker compose up -d` races with its own teardown: the API stops gracefully (it
+            # has shutdown hooks, so SIGTERM is not instant), and compose can ask to create the
+            # replacement while the daemon is still removing the old one -- "removal of container
+            # ... is already in progress". That has failed two deploys today, and it clears itself
+            # within seconds, so it is a wait, not an error.
+            up_with_retry() {
+              for attempt in 1 2 3; do
+                if docker compose up -d; then
+                  return 0
+                fi
+                echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
+                sleep $((attempt * 10))
+              done
+              return 1
+            }
+
+            wait_healthy() {
+              for i in $(seq 1 15); do
+                if curl -fsS http://127.0.0.1:4000/api/health > /dev/null; then
+                  return 0
+                fi
+                sleep 2
+              done
+              return 1
+            }
+
+            # Reclaim BEFORE pulling, not only after a successful deploy.
+            #
+            # The post-success prune below was the only one, and it carries an `until=48h` grace
+            # window. A day of heavy deploying produces far more images than that window ever
+            # releases, and any failed deploy skips the prune entirely -- so images accumulated
+            # until the disk hit 100%, Postgres could not start, and the whole site went 502.
+            # A short window here still keeps the running and previous images (both younger than
+            # 2h in a normal deploy), and anything dropped is re-pullable from GHCR.
+            free_mb() { df -Pm / | tail -1 | sed "s/  */ /g" | cut -d" " -f4; }
+            FREE_MB="$(free_mb)"
+            echo "free before pull: ${FREE_MB} MB"
+            if [ "$FREE_MB" -lt 8000 ]; then
+              echo "under 8 GB free -- reclaiming before pull"
+              docker builder prune -a -f || true
+              docker image prune -a -f --filter "until=2h" || true
+              echo "free after reclaim: $(free_mb) MB"
+            fi
+
+            set_tag "$NEW_TAG"
+            pull_with_retry
+            # Apply additive/expand migrations before the new application starts receiving
+            # traffic. This prevents the new code from observing a partially upgraded schema.
+            # Deploy migrations must remain backward-compatible with the currently running
+            # image so rollback stays possible.
+            docker compose run --rm api npx prisma migrate deploy
+            up_with_retry
+
+            if wait_healthy; then
+              echo "api healthy on $NEW_TAG"
+              # -a (not just dangling) with a 48h grace window -- every deploy leaves the
+              # previous SHA-tagged images fully tagged with 0 containers using them, so plain
+              # `-f` (dangling-only) never touched them. That silently grew to ~30GB of unused
+              # images over ~16 deploys and took primary from 98% disk to nearly full. GHCR keeps
+              # every image regardless, and the rollback path below already does its own
+              # `docker compose pull`, so nothing here depends on a stale local image surviving.
+              docker image prune -a -f --filter "until=48h"
+            else
+              echo "api health check failed on $NEW_TAG after 30s" >&2
+
+              # An image rollback restores CODE. It cannot restore SCHEMA -- prisma has no
+              # "migrate down", and the release we just applied carries a migration explicitly
+              # marked allow-destructive, i.e. one the previous image was never able to read.
+              # Rolling back anyway would put old code on a converted schema and then declare
+              # victory, because wait_healthy asks /api/health, which is SELECT 1 plus a Redis
+              # ping and never touches a converted column. A green line over a broken release is
+              # worse than a red one, so refuse and say exactly what to do instead.
+              if [ "${{ steps.rollback-policy.outputs.schema_breaking }}" = "true" ]; then
+                echo "REFUSING AUTOMATIC ROLLBACK: this release contains a schema-breaking migration." >&2
+                echo "  Rolling the image back to $PREV_TAG would run old code against the new schema" >&2
+                echo "  and the health check would not notice. The new code is live and unhealthy." >&2
+                echo "  Recover forward: cd /opt/gul && docker compose logs api --tail=200" >&2
+                echo "  If the schema must be undone, restore from backup -- see infra/backups/README.md." >&2
+                exit 1
+              fi
+
+              echo "rolling back to $PREV_TAG" >&2
+              set_tag "$PREV_TAG"
+              pull_with_retry
+              up_with_retry
+              if wait_healthy; then
+                echo "rolled back to $PREV_TAG successfully"
+              else
+                echo "ROLLBACK TO $PREV_TAG ALSO FAILED -- manual intervention required, see: docker compose logs api" >&2
+              fi
+              exit 1
+            fi
+          '
+
+  # Keeps the secondary's app tier in lockstep with primary on every push -- without this, the
+  # secondary only ever gets updated by manually re-running enable-active-active.yml, which means
+  # it could silently sit on old (potentially vulnerable) code indefinitely once DNS starts
+  # sending it real traffic. Deploys the exact same SHA tag primary just confirmed healthy on
+  # (needs: deploy already guarantees that), not just ":latest" -- keeps both nodes on an
+  # identical, verified-good image rather than two independently-moving tags.
+  deploy-secondary:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
+          }
+      - uses: actions/checkout@v5
+      - name: Ship docker-compose.secondary.yml
+        # This step did not exist until 2026-09-03, and its absence was silent: the job updated
+        # IMAGE_TAG and restarted whatever compose file already sat on the box, so every change
+        # made to docker-compose.secondary.yml since it was first placed there had never actually
+        # been applied. Found when the shared-queue change deployed green and the secondary went
+        # on using its own Redis -- a file in the repo that looks authoritative and is not.
+        run: scp -i ~/.ssh/deploy_key docker-compose.secondary.yml ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/opt/gul-secondary/docker-compose.yml
+      - name: Pull and restart the same SHA tag on the secondary
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            # Reclaim first, before anything that writes. Pruning after a successful health
+            # check is a trap that arms itself: every deploy adds three images, a full disk then
+            # fails the pull, the health check never passes, the prune never runs, and the next
+            # deploy starts with even less room. The secondary reached 74 images and 0 bytes
+            # free that way -- at which point even `docker login` failed, because it could not
+            # write its own credentials file. So this runs before the login, not just before the
+            # pull, and without `set -e` guarding it: on a full disk the prune is the one command
+            # that must be allowed to try.
+            echo ---- disk before prune ----; df -h /
+            # `until=2h`, matching the primary. Without the filter this removed every image on the
+            # box before pulling, so each deploy re-downloaded all three from scratch instead of
+            # reusing layers -- which is why this job took five minutes while the primary took one.
+            # Two hours is enough to keep the release being replaced (so a rollback has something
+            # to go back to) and short enough that nothing accumulates.
+            docker image prune -a -f --filter "until=2h" || true
+            echo ---- disk after prune ----; df -h /
+
+            set -e
+            # The login is a network call to the same registry the pull retries guard, and it
+            # fails the same way -- so it needs the same patience, or the retry below never
+            # gets reached.
+            for attempt in 1 2 3; do
+              echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin && break
+              echo "login attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+              sleep $((attempt * 15))
+            done
+            cd /opt/gul-secondary
+            PREV_TAG="$(grep "^IMAGE_TAG=" .env 2>/dev/null | cut -d= -f2)"
+            set_image_tag() {
+              sed -i "/^IMAGE_TAG=/d" .env
+              echo "IMAGE_TAG=$1" >> .env
+            }
+            set_image_tag "${{ github.sha }}"
+            grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
+            for attempt in 1 2 3; do
+              docker compose pull && break
+              echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+              sleep $((attempt * 15))
+            done
+            for attempt in 1 2 3; do
+              # --remove-orphans: without it a service deleted from the compose file keeps running,
+              # which is exactly how this node went on serving from its own Redis after that
+              # service was removed from the file. pg-standby is unaffected -- it was started with
+              # a plain docker run and carries no compose project label, so compose does not
+              # consider it an orphan of this project.
+              docker compose up -d --remove-orphans && break
+              echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
+              sleep $((attempt * 10))
+            done
+            for i in $(seq 1 15); do
+              if curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null; then
+                echo "secondary healthy on ${{ github.sha }}"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "secondary did not become healthy; rolling back to $PREV_TAG" >&2
+            [ -n "$PREV_TAG" ] || { echo "no previous IMAGE_TAG is available for rollback" >&2; exit 1; }
+            set_image_tag "$PREV_TAG"
+            docker compose pull
+            docker compose up -d --remove-orphans
+            for i in $(seq 1 30); do
+              curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && { echo "rollback to $PREV_TAG is healthy"; exit 1; }
+              sleep 2
+            done
+            echo "ROLLBACK FAILED on secondary -- immediate operator action required" >&2
+            exit 1
+          ' < /dev/null
+  # Runs after both nodes are on the new release. The health check each deploy job waits on asks
+  # the API about itself; this asks the questions a customer asks, over HTTPS, against each server
+  # by address -- so a release where the storefront renders and the seller panel 500s cannot go
+  # green, which is the failure this exists to catch.
+  #
+  # `needs` both, and it is allowed to fail the run: a red tick on a release that is already live
+  # is the point. It reports which host and which route, so the answer to "what broke" is in the
+  # summary rather than in somebody's memory.
+  smoke:
+    needs: [deploy, deploy-secondary]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+          - name: secondary
+            host_secret: SECONDARY_HOST
+    name: smoke (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash infra/checks/smoke.sh "${{ secrets[matrix.host_secret] }}"

@@ -1,0 +1,174 @@
+name: Set up observability (netdata streaming to primary + bounded journald retention)
+
+# Extends the netdata install already on primary rather than adding Prometheus/Grafana/Loki:
+# - secondary gets netdata installed as a streaming "child" of primary's "parent" -- one unified
+#   dashboard (existing gate/nginx auth on primary, admin.gulyaly.pro/netdata), no second login,
+#   no Netdata Cloud account, near-zero extra resource cost.
+# - journald retention is capped on both hosts (SystemMaxUse) so switching Docker's logging driver
+#   to journald (docker-compose.*.yml, same commit as this file) can't refill the disk the way
+#   json-file once did before rotation was added.
+# Idempotent -- safe to rerun (e.g. if netdata needs reinstalling on either box).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  configure-primary:
+    runs-on: ubuntu-latest
+    outputs:
+      stream_key: ${{ steps.genkey.outputs.key }}
+    steps:
+      - name: Generate the shared streaming API key
+        id: genkey
+        run: |
+          KEY=$(cat /proc/sys/kernel/random/uuid)
+          echo "::add-mask::$KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Bound journald size, configure netdata as streaming parent, allow secondary on 19999
+        env:
+          STREAM_KEY: ${{ steps.genkey.outputs.key }}
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          cat > /tmp/setup-parent.sh <<'SCRIPT'
+          set -e
+          mkdir -p /etc/systemd/journald.conf.d
+          cat > /etc/systemd/journald.conf.d/retention.conf <<'EOF'
+          [Journal]
+          SystemMaxUse=1G
+          EOF
+          systemctl restart systemd-journald
+
+          mkdir -p /etc/netdata
+          # update_every=5 + ebpf=no: netdata's defaults (1s collection, ebpf.plugin on) sustained
+          # ~1.9 cores continuously on secondary (6 vCPU box, also running the app stack) --
+          # confirmed live 2026-08-29, load average hit 23 and stalled docker/deploy operations for
+          # hours before this was found and fixed. Baking the fix into first install too, not just
+          # the post-hoc patch, so a future reinstall (VPS rebuild) doesn't reintroduce it.
+          cat > /etc/netdata/netdata.conf <<'EOF'
+          [global]
+              update every = 5
+
+          [plugins]
+              ebpf = no
+          EOF
+          cat > /etc/netdata/stream.conf <<'EOF'
+
+          [__STREAM_KEY_PLACEHOLDER__]
+              enabled = yes
+              default history = 3600
+          EOF
+          systemctl restart netdata
+
+          ufw allow from __SECONDARY_IP_PLACEHOLDER__ to any port 19999 proto tcp comment "netdata streaming from secondary"
+          ufw status | grep 19999
+          SCRIPT
+          sed -i "s#__STREAM_KEY_PLACEHOLDER__#$STREAM_KEY#" /tmp/setup-parent.sh
+          sed -i "s#__SECONDARY_IP_PLACEHOLDER__#$SECONDARY_IP#" /tmp/setup-parent.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/setup-parent.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/setup-parent.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            docker run --rm --pid=host --network=host --privileged -v /:/host -v /tmp/setup-parent.sh:/host/tmp/setup-parent.sh alpine chroot /host /bin/bash /tmp/setup-parent.sh
+            status=$?
+            rm -f /tmp/setup-parent.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/setup-parent.sh
+
+  configure-secondary:
+    needs: configure-primary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Bound journald size, install netdata, configure as streaming child of primary
+        env:
+          STREAM_KEY: ${{ needs.configure-primary.outputs.stream_key }}
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          cat > /tmp/setup-child.sh <<'SCRIPT'
+          set -e
+          mkdir -p /etc/systemd/journald.conf.d
+          cat > /etc/systemd/journald.conf.d/retention.conf <<'EOF'
+          [Journal]
+          SystemMaxUse=1G
+          EOF
+          systemctl restart systemd-journald
+
+          if ! systemctl is-active --quiet netdata 2>/dev/null; then
+            curl -fsSL https://raw.githubusercontent.com/netdata/netdata/master/packaging/installer/kickstart.sh \
+              | sh -s -- --non-interactive --stable-channel
+          fi
+
+          mkdir -p /etc/netdata
+          # See the matching comment in configure-primary above -- same fix, same reason.
+          cat > /etc/netdata/netdata.conf <<'EOF'
+          [global]
+              update every = 5
+
+          [plugins]
+              ebpf = no
+          EOF
+          cat > /etc/netdata/stream.conf <<'EOF'
+
+          [stream]
+              enabled = yes
+              destination = __PRIMARY_IP_PLACEHOLDER__:19999
+              api key = __STREAM_KEY_PLACEHOLDER__
+          EOF
+          systemctl restart netdata
+          sleep 3
+          systemctl is-active netdata
+          SCRIPT
+          sed -i "s#__STREAM_KEY_PLACEHOLDER__#$STREAM_KEY#" /tmp/setup-child.sh
+          sed -i "s#__PRIMARY_IP_PLACEHOLDER__#$PRIMARY_IP#" /tmp/setup-child.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/setup-child.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/setup-child.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/setup-child.sh:/host/tmp/setup-child.sh alpine chroot /host /bin/bash /tmp/setup-child.sh
+            status=$?
+            rm -f /tmp/setup-child.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/setup-child.sh
+
+      - name: Ship the updated docker-compose.secondary.yml (journald driver) and recreate containers
+        run: |
+          scp -i ~/.ssh/id_ed25519 docker-compose.secondary.yml "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/opt/gul-secondary/docker-compose.yml"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            cd /opt/gul-secondary && docker compose up -d --force-recreate
+            for i in $(seq 1 20); do
+              curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
+              sleep 2
+            done
+            exit 1
+          ' < /dev/null
+
+  verify:
+    needs: [configure-primary, configure-secondary]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Confirm primary sees the secondary streaming in
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            sleep 5
+            curl -s http://127.0.0.1:19999/api/v1/info | python3 -c "import sys,json; d=json.load(sys.stdin); print(\"mirrored hosts:\", d.get(\"mirrored_hosts\", d.get(\"hosts\", \"unknown\")))" 2>&1 || \
+            curl -s http://127.0.0.1:19999/api/v1/info
+          ' < /dev/null

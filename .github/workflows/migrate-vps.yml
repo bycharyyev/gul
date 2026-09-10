@@ -1,0 +1,89 @@
+name: Migrate DB + uploads (old VPS -> current VPS)
+on:
+  workflow_dispatch:
+# Never run this alongside a real deploy -- it stops api/web/admin on the destination box
+# mid-migration and touches a live database dump from the source.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.OLD_VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Dump DB + uploads on the source server
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }} '
+            set -e
+            cd /opt/gul
+            docker compose exec -T postgres sh -c "pg_dump -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\"" | gzip > /tmp/migrate-db.sql.gz
+            docker run --rm -v gul_uploads-data:/data -v /tmp:/backup alpine tar czf /backup/migrate-uploads.tar.gz -C /data .
+            ls -lh /tmp/migrate-db.sql.gz /tmp/migrate-uploads.tar.gz
+          '
+
+      - name: Pull dump + .env down to the runner (never printed to logs)
+        run: |
+          scp -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }}:/tmp/migrate-db.sql.gz ./migrate-db.sql.gz
+          scp -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }}:/tmp/migrate-uploads.tar.gz ./migrate-uploads.tar.gz
+          scp -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }}:/opt/gul/.env ./migrate.env
+          ssh -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }} '
+            rm -f /tmp/migrate-db.sql.gz
+            docker run --rm -v /tmp:/backup alpine rm -f /backup/migrate-uploads.tar.gz
+          '
+
+      - name: Ship everything to the destination server
+        run: |
+          scp -i ~/.ssh/deploy_key ./migrate-db.sql.gz ./migrate-uploads.tar.gz ./migrate.env docker-compose.prod.yml ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/gul/
+          rm -f ./migrate-db.sql.gz ./migrate-uploads.tar.gz ./migrate.env
+
+      - name: Restore on the destination server
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            cd /opt/gul
+            mv docker-compose.prod.yml docker-compose.yml
+            mv migrate.env .env
+            grep -q "^IMAGE_TAG=" .env || echo "IMAGE_TAG=latest" >> .env
+            grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker compose pull
+
+            # DB + cache up first, restore into a still-empty database before anything else touches it.
+            docker compose up -d postgres redis
+            for i in $(seq 1 15); do
+              docker compose exec -T postgres sh -c "pg_isready -U \"\$POSTGRES_USER\"" && break
+              sleep 2
+            done
+            gunzip -c migrate-db.sql.gz | docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\""
+
+            docker run --rm -v gul_uploads-data:/data -v /opt/gul:/backup alpine sh -c "tar xzf /backup/migrate-uploads.tar.gz -C /data"
+
+            docker compose up -d
+            for i in $(seq 1 15); do
+              if curl -fsS http://127.0.0.1:4000/api/health > /dev/null; then
+                echo "api healthy on destination server"
+                break
+              fi
+              if [ "$i" = "15" ]; then
+                echo "api health check failed after 30s, see: docker compose logs api" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+
+            docker compose run --rm api npx prisma migrate deploy
+            rm -f migrate-db.sql.gz migrate-uploads.tar.gz
+            docker compose ps
+          '

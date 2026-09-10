@@ -1,0 +1,81 @@
+name: Remove stale nginx vhost (WRITES)
+
+# Removes one nginx site file from sites-available and sites-enabled, then reloads.
+#
+# Written for managed-test1.gulyaly.pro specifically: found by drift.sh sitting on the primary
+# with no matching row in "ManagedSubdomain" and no file in infra/nginx/ -- a leftover from manual
+# testing of the managed-subdomain feature that nobody cleaned up. Its cert is also invalid (the
+# shared cert's SANs stop at the four real domains), so it has been serving an untrusted-cert
+# fallback to anyone who happened to hit it.
+#
+# `name` is free text on purpose -- this is meant to be reusable for the next stray file, not
+# single-use -- but is checked against an allowlist pattern before anything touches disk, so a typo
+# here cannot reach one of the four real vhosts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: Vhost filename to remove (e.g. managed-test1.gulyaly.pro-.conf)
+        required: true
+      confirm:
+        description: Type REMOVE to proceed
+        required: true
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the confirmation and the filename
+        env:
+          NAME: ${{ inputs.name }}
+        run: |
+          [ "${{ inputs.confirm }}" = "REMOVE" ] || { echo "not confirmed" >&2; exit 1; }
+          case "$NAME" in
+            gulyaly-web.conf|gulyaly-api.conf|gulyaly-admin.conf|gulyaly-cache.conf|gulyaly-subdomain-fallback.conf)
+              echo "refusing to remove a real vhost: $NAME" >&2; exit 1 ;;
+            *.conf) ;;
+            *) echo "must end in .conf: $NAME" >&2; exit 1 ;;
+          esac
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Remove and reload
+        env:
+          NAME: ${{ inputs.name }}
+        run: |
+          set -e
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "
+            {
+              echo '#!/bin/sh'
+              echo 'set -e'
+              echo 'test -f /etc/nginx/sites-available/$NAME && cat /etc/nginx/sites-available/$NAME || echo NOT_PRESENT'
+              echo 'rm -f /etc/nginx/sites-available/$NAME /etc/nginx/sites-enabled/$NAME'
+              echo 'nginx -t'
+              echo 'systemctl reload nginx'
+            } > /tmp/rm-vhost.sh
+            chmod +x /tmp/rm-vhost.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/rm-vhost.sh
+            rm -f /tmp/rm-vhost.sh
+          "
+
+      - name: The four real domains still answer
+        run: |
+          # api.gulyaly.pro has no handler at the bare "/" -- main.ts sets a global prefix, so a
+          # 404 there is normal and checking it against "200" is a false alarm, which the first
+          # run of this step raised despite nothing being broken. /api/health/ready is the real
+          # signal for that host; the other three are checked at "/" as before.
+          check() { # check <host> <path> <expected>
+            code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" "https://$1$2")
+            echo "  $1$2 -> $code"
+            [ "$code" = "$3" ] || { echo "  $1$2 expected $3, got $code" >&2; exit 1; }
+          }
+          check gulyaly.pro / 200
+          check www.gulyaly.pro / 200
+          check api.gulyaly.pro /api/health/ready 200
+          check admin.gulyaly.pro / 200

@@ -1,0 +1,66 @@
+name: Sync nginx vhosts
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "infra/nginx/**"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Both machines serve customers now: as of 2026-09-03 the apex, www and api each resolve to
+    # both addresses, so a vhost change that reached only the primary would leave half of every
+    # visit on the old configuration -- and the two servers quietly drifting apart.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+    name: sync (${{ matrix.name }})
+    env:
+      HOST: ${{ secrets[matrix.host_secret] }}
+      USER_NAME: ${{ secrets[matrix.user_secret] }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship vhosts to a scratch dir (deploy user has no write access under /etc)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER_NAME@$HOST" 'rm -rf /tmp/nginx-sync && mkdir -p /tmp/nginx-sync'
+          scp -i ~/.ssh/id_ed25519 infra/nginx/*.conf "$USER_NAME@$HOST:/tmp/nginx-sync/"
+
+      # deploy has no sudo, but IS in the docker group -- already root-equivalent on the host
+      # (docker run --privileged + chroot is a well-known escape hatch for that). Same pattern
+      # provision-subdomain.yml uses to write under /etc as a non-root user.
+      - name: Install vhosts under /etc, enable, reload
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/id_ed25519 "$USER_NAME@$HOST" '
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "mkdir -p /var/cache/nginx/gul && chown -R www-data:www-data /var/cache/nginx/gul"
+              echo "cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/"
+              echo "for f in /etc/nginx/sites-available/*.conf; do ln -sf \"\$f\" \"/etc/nginx/sites-enabled/\$(basename \"\$f\")\"; done"
+              echo "rm -f /etc/nginx/sites-enabled/default"
+              echo "nginx -t"
+              echo "systemctl reload nginx"
+            } > /tmp/nginx-sync/apply.sh
+            chmod +x /tmp/nginx-sync/apply.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/nginx-sync/apply.sh
+            rm -rf /tmp/nginx-sync
+            echo "nginx reloaded"
+          '

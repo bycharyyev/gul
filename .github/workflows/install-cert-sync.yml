@@ -1,0 +1,97 @@
+name: Install gul-cert-sync (WRITES)
+
+# infra/ssl/README.md has described this as "installed and running... as of 2026-08-21" the whole
+# time it was neither. certbot.timer renews certs already on the box twice daily but never adds a
+# domain to one; nothing was expanding the cert when a new vhost appeared, which is how a stray
+# managed-test1.gulyaly.pro vhost ended up serving an invalid certificate to anyone who hit it
+# (found and removed via remove-stale-vhost.yml, 2026-09-03). This installs the timer that
+# README always claimed existed.
+#
+# Both hosts: sync-nginx.yml now ships the same vhost files to primary and secondary, so both have
+# the same domain set to keep covered. The secondary's certbot has no nginx plugin yet
+# (confirmed via certbot-preflight.sh) -- installed here before the timer that depends on it.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+    name: install (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship the script and units
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+          USER_NAME: ${{ secrets[matrix.user_secret] }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$USER_NAME@$HOST" 'mkdir -p /tmp/cert-sync-install'
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            infra/ssl/sync-ssl-domains.sh infra/ssl/gul-cert-sync.service infra/ssl/gul-cert-sync.timer \
+            "$USER_NAME@$HOST:/tmp/cert-sync-install/"
+
+      - name: Install the nginx plugin if missing, then install and enable the timer
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+          USER_NAME: ${{ secrets[matrix.user_secret] }}
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$USER_NAME@$HOST" '
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "dpkg -l python3-certbot-nginx 2>/dev/null | grep -q \"^ii\" || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq python3-certbot-nginx; }"
+              echo "mkdir -p /opt/gul/scripts"
+              echo "install -m 0750 /tmp/cert-sync-install/sync-ssl-domains.sh /opt/gul/scripts/sync-ssl-domains.sh"
+              echo "cp /tmp/cert-sync-install/gul-cert-sync.service /etc/systemd/system/"
+              echo "cp /tmp/cert-sync-install/gul-cert-sync.timer /etc/systemd/system/"
+              echo "systemctl daemon-reload"
+              echo "systemctl enable --now gul-cert-sync.timer"
+              echo "systemctl list-timers gul-cert-sync.timer --no-pager"
+            } > /tmp/cert-sync-install/apply.sh
+            chmod +x /tmp/cert-sync-install/apply.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/cert-sync-install/apply.sh
+            rm -rf /tmp/cert-sync-install
+          '
+
+      - name: Run it once now, rather than waiting for the timer
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+          USER_NAME: ${{ secrets[matrix.user_secret] }}
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$USER_NAME@$HOST" '
+            docker run --rm --pid=host --privileged -v /:/host alpine \
+              chroot /host /bin/sh -c "systemctl start gul-cert-sync.service; journalctl -u gul-cert-sync.service -n 20 --no-pager"
+          '
+
+      - name: The four real domains still answer
+        run: |
+          check() {
+            code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" "https://$1$2")
+            echo "  $1$2 -> $code"
+            [ "$code" = "200" ] || { echo "  $1$2 expected 200, got $code" >&2; exit 1; }
+          }
+          check gulyaly.pro /
+          check www.gulyaly.pro /
+          check api.gulyaly.pro /api/health/ready
+          check admin.gulyaly.pro /

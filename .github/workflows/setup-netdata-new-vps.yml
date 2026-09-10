@@ -1,0 +1,75 @@
+name: Set up netdata + gate on new VPS
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.OLD_VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      # Fetched via scp, never cat'd into the log -- this file may hardcode secrets internally.
+      - name: Pull the gate script off the old server
+        run: |
+          scp -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }}:/opt/netdata-gate/netdata_gate.py ./netdata_gate.py
+          scp -i ~/.ssh/deploy_key ./netdata_gate.py ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/netdata_gate.py
+          rm -f ./netdata_gate.py
+
+      - name: Install netdata + gate on the NEW server
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            if ! systemctl is-active --quiet netdata 2>/dev/null; then
+              curl -fsSL https://raw.githubusercontent.com/netdata/netdata/master/packaging/installer/kickstart.sh \
+                | sh -s -- --non-interactive --stable-channel
+            fi
+
+            command -v python3 >/dev/null || (apt-get update -qq && apt-get install -y -qq python3)
+
+            mkdir -p /opt/netdata-gate
+            mv /tmp/netdata_gate.py /opt/netdata-gate/netdata_gate.py
+
+            NEW_PASS=$(openssl rand -base64 18 | tr -d "=+/")
+            NEW_SECRET=$(openssl rand -hex 32)
+
+            {
+              echo "[Unit]"
+              echo "Description=Netdata login gate"
+              echo "After=network.target"
+              echo ""
+              echo "[Service]"
+              echo "Type=simple"
+              echo "User=www-data"
+              echo "Environment=GATE_USER=netdata-admin"
+              echo "Environment=GATE_PASS=${NEW_PASS}"
+              echo "Environment=GATE_SECRET=${NEW_SECRET}"
+              echo "Environment=GATE_PORT=8899"
+              echo "ExecStart=/usr/bin/python3 /opt/netdata-gate/netdata_gate.py"
+              echo "Restart=always"
+              echo "RestartSec=2"
+              echo ""
+              echo "[Install]"
+              echo "WantedBy=multi-user.target"
+            } > /etc/systemd/system/netdata-gate.service
+
+            systemctl daemon-reload
+            systemctl enable --now netdata-gate.service
+            systemctl restart netdata-gate.service
+
+            printf "GATE_USER=netdata-admin\nGATE_PASS=%s\n" "$NEW_PASS" > /root/gate-new-creds.txt
+            echo "netdata + gate installed, creds written to /root/gate-new-creds.txt on this box only"
+          ' 2>&1 | grep -vE "GATE_PASS=|GATE_SECRET="
+
+      - name: Verify netdata + gate are actually serving
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            systemctl is-active netdata
+            systemctl is-active netdata-gate
+            curl -s -o /dev/null -w "netdata direct (should be internal-only, expect connection):  %{http_code}\n" http://127.0.0.1:19999/ || true
+            curl -s -o /dev/null -w "gate check endpoint: %{http_code}\n" http://127.0.0.1:8899/check || true
+          '

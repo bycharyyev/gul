@@ -1,0 +1,122 @@
+name: Set up Postgres streaming replication to secondary
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  primary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship updated docker-compose.yml (adds the postgres port) and restart just postgres
+        run: |
+          scp -i ~/.ssh/id_ed25519 docker-compose.prod.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/gul/docker-compose.yml"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "cd /opt/gul && docker compose up -d postgres"
+
+      # ufw is currently inactive on this box -- allow SSH/HTTP/HTTPS explicitly *before*
+      # enabling it, in that order, so this can't lock us out of the server. Only the
+      # secondary's own IP gets access to 5432; everything else stays denied by default.
+      - name: Configure firewall (allow SSH/HTTP/HTTPS + replication from secondary only)
+        env:
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "SECONDARY_IP='$SECONDARY_IP' bash -s" <<'REMOTE'
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "ufw allow 22/tcp"
+              echo "ufw allow 80/tcp"
+              echo "ufw allow 443/tcp"
+              echo "ufw allow from $SECONDARY_IP to any port 5432 proto tcp"
+              echo "ufw --force enable"
+              echo "ufw status verbose"
+            } > /tmp/fw.sh
+            chmod +x /tmp/fw.sh
+            # ufw/iptables need to act on the HOST's network namespace, not this container's own
+            # isolated one -- --pid=host alone (used elsewhere for nginx/certbot) isn't enough
+            # here, --network=host is required too.
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh
+            rm -f /tmp/fw.sh
+          REMOTE
+
+      - name: Confirm SSH still reachable after enabling ufw (fails loudly if we got locked out)
+        run: ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=10 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "echo still reachable"
+
+      - name: Create/refresh the replicator role and allow it in pg_hba.conf
+        env:
+          REPL_PASS: ${{ secrets.REPLICATOR_PASSWORD }}
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "REPL_PASS='$REPL_PASS' SECONDARY_IP='$SECONDARY_IP' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul
+            # Try CREATE first (fails harmlessly if it already exists from a previous run), then
+            # always ALTER so the password matches this run's secret either way -- simpler and
+            # less escaping-fragile than a DO $$ block through two layers of shell quoting.
+            # `< /dev/null` on every one of these matters: without it, `docker compose exec`
+            # attaches to this script's own stdin (the heredoc pipe) and the first call gobbles
+            # up every line after it, so `bash -s` sees EOF and quietly stops -- exactly what
+            # happened on the previous run (only the first command in this step ever ran).
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$REPL_PASS';\"" < /dev/null || true
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"ALTER ROLE replicator WITH PASSWORD '$REPL_PASS';\"" < /dev/null
+
+            HBA_LINE="host replication replicator $SECONDARY_IP/32 scram-sha-256"
+            docker compose exec -T postgres sh -c "grep -qxF \"$HBA_LINE\" /var/lib/postgresql/data/pg_hba.conf || echo \"$HBA_LINE\" >> /var/lib/postgresql/data/pg_hba.conf" < /dev/null
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"SELECT pg_reload_conf();\"" < /dev/null
+          REMOTE
+
+  secondary:
+    needs: primary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: pg_basebackup from primary into a fresh standby volume, then start as replica
+        env:
+          REPL_PASS: ${{ secrets.REPLICATOR_PASSWORD }}
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "REPL_PASS='$REPL_PASS' PRIMARY_IP='$PRIMARY_IP' bash -s" <<'REMOTE'
+            set -e
+            docker volume create pg-standby-data >/dev/null
+
+            # Idempotent: skip the basebackup if the volume already has data in it (a rerun of
+            # this workflow shouldn't blow away an already-streaming replica).
+            HAS_DATA=$(docker run --rm -v pg-standby-data:/d alpine sh -c "[ -f /d/PG_VERSION ] && echo yes || echo no")
+            if [ "$HAS_DATA" = "no" ]; then
+              docker run --rm -v pg-standby-data:/var/lib/postgresql/data \
+                -e PGPASSWORD="$REPL_PASS" \
+                postgres:16-alpine \
+                pg_basebackup -h "$PRIMARY_IP" -p 5432 -U replicator -D /var/lib/postgresql/data -Fp -Xs -P -R
+            fi
+
+            docker rm -f pg-standby >/dev/null 2>&1 || true
+            docker run -d --name pg-standby --restart unless-stopped \
+              -v pg-standby-data:/var/lib/postgresql/data \
+              postgres:16-alpine
+
+            sleep 5
+            docker logs --tail 20 pg-standby
+          REMOTE
+
+      - name: Confirm the primary sees the replica streaming
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd /opt/gul && docker compose exec -T postgres sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"SELECT client_addr, state, sync_state FROM pg_stat_replication;\"'" < /dev/null

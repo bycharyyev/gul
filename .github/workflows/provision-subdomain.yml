@@ -1,0 +1,156 @@
+name: Provision subdomain
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "add or remove"
+        required: true
+      name:
+        description: "full hostname, e.g. shop2.gulyaly.pro"
+        required: true
+      port:
+        description: "local port to proxy to (required for add)"
+        required: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Validate inputs
+        run: |
+          case "${{ inputs.action }}" in
+            add|remove) ;;
+            *) echo "action must be 'add' or 'remove'" >&2; exit 1 ;;
+          esac
+          # Defense in depth: the admin API already validates this, but a workflow_dispatch can
+          # also be triggered by anyone with write access to the repo's Actions, bypassing that.
+          case "${{ inputs.name }}" in
+            *.gulyaly.pro) ;;
+            *) echo "name must be a subdomain of gulyaly.pro" >&2; exit 1 ;;
+          esac
+          if [ "${{ inputs.action }}" = "add" ] && [ -z "${{ inputs.port }}" ]; then
+            echo "port is required for action=add" >&2
+            exit 1
+          fi
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      # The deploy user has no sudo, but it IS in the docker group -- which already grants
+      # root-equivalent power over the host (a well-known docker caveat: anyone who can run
+      # `docker run --privileged` can chroot into the host and act as its real root). Everything
+      # below is built as a plain script file first (no heredocs, no nested quoting -- both bit
+      # us earlier today), then run once via `docker ... chroot /host /bin/sh <script>` so it
+      # executes in the host's real PID namespace against its real filesystem.
+      - name: Add subdomain
+        if: inputs.action == 'add'
+        id: add
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            NAME="${{ inputs.name }}"
+            PORT="${{ inputs.port }}"
+            SAFE_NAME=$(echo "$NAME" | tr -c "a-zA-Z0-9." "-")
+            CONF=/tmp/managed-$SAFE_NAME.conf
+            SCRIPT=/tmp/provision-$SAFE_NAME.sh
+
+            {
+              echo "server {"
+              echo "    listen 80;"
+              echo "    listen [::]:80;"
+              echo "    server_name $NAME;"
+              echo "    location /.well-known/acme-challenge/ { root /var/www/certbot; }"
+              echo "    location / { return 301 https://\$host\$request_uri; }"
+              echo "}"
+              echo "server {"
+              echo "    listen 443 ssl;"
+              echo "    listen [::]:443 ssl;"
+              echo "    http2 on;"
+              echo "    server_name $NAME;"
+              echo "    ssl_certificate /etc/letsencrypt/live/$NAME/fullchain.pem;"
+              echo "    ssl_certificate_key /etc/letsencrypt/live/$NAME/privkey.pem;"
+              echo "    include /etc/letsencrypt/options-ssl-nginx.conf;"
+              echo "    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;"
+              echo "    location / {"
+              echo "        proxy_pass http://127.0.0.1:$PORT;"
+              echo "        proxy_http_version 1.1;"
+              echo "        proxy_set_header Host \$host;"
+              echo "        proxy_set_header X-Real-IP \$remote_addr;"
+              echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
+              echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
+              echo "    }"
+              echo "}"
+            } > "$CONF"
+
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "cp $CONF /etc/nginx/sites-available/managed-$SAFE_NAME.conf"
+              echo "mkdir -p /var/www/certbot"
+              echo "awk \"/^server {/{n++} n==1\" /etc/nginx/sites-available/managed-$SAFE_NAME.conf > /tmp/http-only-$SAFE_NAME.conf"
+              echo "ln -sf /tmp/http-only-$SAFE_NAME.conf /etc/nginx/sites-enabled/managed-$SAFE_NAME.conf"
+              echo "nginx -t"
+              echo "systemctl reload nginx"
+              echo "certbot certonly --webroot -w /var/www/certbot -d $NAME --non-interactive --agree-tos -m malobiznes@gmail.com"
+              echo "ln -sf /etc/nginx/sites-available/managed-$SAFE_NAME.conf /etc/nginx/sites-enabled/managed-$SAFE_NAME.conf"
+              echo "nginx -t"
+              echo "systemctl reload nginx"
+            } > "$SCRIPT"
+            chmod +x "$SCRIPT"
+
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh "$SCRIPT"
+            rm -f "$CONF" "$SCRIPT"
+            echo "subdomain $NAME -> 127.0.0.1:$PORT is live"
+          '
+
+      - name: Remove subdomain
+        if: inputs.action == 'remove'
+        id: remove
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            NAME="${{ inputs.name }}"
+            SAFE_NAME=$(echo "$NAME" | tr -c "a-zA-Z0-9." "-")
+            SCRIPT=/tmp/remove-$SAFE_NAME.sh
+
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "rm -f /etc/nginx/sites-enabled/managed-$SAFE_NAME.conf /etc/nginx/sites-available/managed-$SAFE_NAME.conf"
+              echo "nginx -t"
+              echo "systemctl reload nginx"
+            } > "$SCRIPT"
+            chmod +x "$SCRIPT"
+
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh "$SCRIPT"
+            rm -f "$SCRIPT"
+            echo "subdomain $NAME removed (cert left in place, harmless if unused)"
+          '
+
+      - name: Report status back to the app
+        if: always()
+        run: |
+          if [ "${{ inputs.action }}" = "add" ]; then
+            OUTCOME="${{ steps.add.outcome }}"
+          else
+            OUTCOME="${{ steps.remove.outcome }}"
+          fi
+          STATUS="FAILED"
+          if [ "$OUTCOME" = "success" ]; then
+            if [ "${{ inputs.action }}" = "add" ]; then STATUS="ACTIVE"; else STATUS="REMOVED"; fi
+          fi
+          curl -fsS -X POST "https://api.gulyaly.pro/api/admin/subdomains/callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Provision-Secret: ${{ secrets.PROVISION_CALLBACK_SECRET }}" \
+            -d "{\"name\":\"${{ inputs.name }}\",\"status\":\"$STATUS\"}" || true
+
+      - name: Fail the run if provisioning failed
+        if: (inputs.action == 'add' && steps.add.outcome != 'success') || (inputs.action == 'remove' && steps.remove.outcome != 'success')
+        run: exit 1

@@ -1,0 +1,14 @@
+[Unit]
+Description=Re-assert the docker port restrictions
+
+[Timer]
+# Every ten minutes, because the rules live in a chain another program manages. A docker daemon
+# restart, a compose recreate, or anything that rebuilds the tables can drop them, and the failure
+# is silent -- the port simply starts answering the world again with nothing to say so. Re-running
+# is idempotent by design, so the cost of being wrong about that is nil and the cost of being
+# right is the customer database sitting open until somebody notices.
+OnBootSec=2min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

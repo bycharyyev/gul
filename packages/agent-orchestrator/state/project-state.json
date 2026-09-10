@@ -1,0 +1,445 @@
+{
+  "project": "topup-hub",
+  "schemaVersion": 1,
+  "tasks": {
+    "DOCS-001": {
+      "id": "DOCS-001",
+      "title": "User document uploads",
+      "description": "Add the ability for users to upload documents, view their list of uploaded documents, and delete a document they own.",
+      "state": "COMPLETED",
+      "createdAt": "2026-08-20T19:51:09.503Z",
+      "updatedAt": "2026-08-21T16:05:22.223Z",
+      "dependencies": [],
+      "approvalPolicy": {
+        "qa": "AUTO",
+        "security": "AUTO",
+        "devops": "AUTO",
+        "staging": "AUTO",
+        "production_deployment": "HUMAN_APPROVAL"
+      },
+      "attempts": {
+        "qa": 0,
+        "security": 0,
+        "devops": 0
+      },
+      "artifacts": [
+        {
+          "agent": "planner",
+          "state": "PLANNING",
+          "timestamp": "2026-08-20T19:55:44.105Z",
+          "result": "COMPLETED",
+          "summary": "Role-agnostic user document upload/list/delete on local disk (Docker volume), behind JwtAuthGuard; new Document Prisma model, documents Nest module, DocumentDto in packages/types, multipart-safe api-client methods, UI in apps/web /account.",
+          "details": {
+            "rawPlan": "TASK: DOCS-001\nTITLE: User document uploads (upload, list, delete own documents)\n\nREQUIREMENTS:\n- Add a Document model to apps/api/prisma/schema.prisma: id, userId (FK -> User, onDelete: Cascade), originalName, storedName (server-generated), mimeType, sizeBytes, createdAt. Index on userId.\n- Scope: any authenticated User, ownership by userId not role. Assumption: customer-facing UI in apps/web /account area only for this task.\n- Storage decision (assumption): local disk on the API container behind a named Docker volume, not S3/GCS — repo has no existing object-storage integration; every current 'image' field is a pasted URL string.\n- New NestJS documents module (apps/api/src/documents/) behind JwtAuthGuard: POST /api/documents (multipart upload via FileInterceptor), GET /api/documents (list mine), GET /api/documents/:id (authenticated download, ownership-checked, never served via static assets), DELETE /api/documents/:id (ownership-checked).\n- packages/types: DocumentDto + schema. packages/api-client: listMyDocuments/uploadDocument/deleteDocument, including a multipart-safe request path (client.ts request() currently force-sets application/json).\n- apps/web: list/upload/delete UI in the existing /account page.\n- Infra: persistent named volume for uploads in docker-compose.prod.yml; UPLOADS_DIR env var.\n\nACCEPTANCE_CRITERIA:\n- Upload returns a DocumentDto and appears in the user's list.\n- Download works for the owner; another user's document id -> 404.\n- Delete works for the owner (204), removes DB row + file; other user's id / nonexistent id -> 404.\n- All 4 endpoints require auth (401 if not).\n- Oversized upload rejected, no orphan row/file. Disallowed MIME type rejected.\n- apps/web account page supports list/upload/delete with the existing auth-redirect behavior.\n- pnpm typecheck and pnpm build pass after rebuilding packages/types and packages/api-client.\n\nDEPENDENCIES:\n- None on other tasks. Internal order: Prisma schema/migration -> packages/types (rebuild) -> packages/api-client (rebuild) -> apps/api documents module -> apps/web UI.\n- Infra: docker-compose.prod.yml volume must land before/with first prod deploy or uploaded files are lost on next deploy (containers recreated fresh each deploy).\n\nEDGE_CASES:\n- Path traversal via originalName — never use it to build the disk path, only the server-generated storedName.\n- MIME-type spoofing — extension/Content-Type filtering is a usability guard only, not a security guarantee; true content scanning out of scope, must be documented as a known limitation.\n- Zero-byte upload rejected.\n- File-write/DB-insert partial failure must not orphan a file or a row; download/delete should tolerate a missing file gracefully.\n- Concurrent double-click delete -> second request 404s cleanly, not 500.\n- No existing per-user quota pattern to copy — propose a reasonable default cap, enforced server-side.\n- Redeploy without the volume wired up silently wipes files — must be caught in review.\n- User account deletion cascades the DB rows (Cascade FK) but does NOT delete the files on disk automatically — needs explicit handling or an accepted, stated gap.\n- Large/slow uploads — verify global ValidationPipe/body-size limits and any reverse-proxy body-size limit don't reject the multipart body before multer's own limits apply; needs checking against production Nginx config.\n- Non-ASCII (Cyrillic) filenames must round-trip correctly for display.\n\nFILES_LIKELY_AFFECTED:\n- apps/api/prisma/schema.prisma\n- apps/api/src/documents/ (new module, modeled on apps/api/src/support/)\n- apps/api/src/main.ts (body-size limit interaction)\n- apps/api/package.json / .env.example (@types/multer, UPLOADS_DIR)\n- packages/types/src/schemas.ts, index.ts\n- packages/api-client/src/client.ts\n- apps/web/src/app/account/page.tsx (or a new nested route)\n- docker-compose.prod.yml"
+          }
+        },
+        {
+          "agent": "designer",
+          "state": "DESIGN",
+          "timestamp": "2026-08-20T20:18:10.015Z",
+          "result": "COMPLETED",
+          "summary": "Lean second section on the existing /account page (Мои документы, below Мои заказы). Reuses Card/Button, orders' loading/empty/error conventions, and seller/products' immediate-submit + window.confirm delete pattern. Only new UI: hidden-input upload trigger, per-document row with MIME icon + icon-only download/delete buttons (aria-labeled), authenticated fetch-to-blob for download. No new route, no drag-drop, no toast system.",
+          "details": {
+            "flow": "Account documents (upload, list, delete) — a lean second section on the existing /account page, directly below 'Мои заказы'. No new route.",
+            "components": [
+              "AccountPage extended: documents/docsLoading/uploading/uploadError/listError state, api.listMyDocuments() fetched in parallel with orders (independent loading flags)",
+              "DocumentsSection: inline function in the same file (mirrors ProductForm pattern in seller/products/page.tsx). Props: documents, loading, uploading, uploadError, listError, onUpload, onDelete, onDownload",
+              "DocumentUploadControl: hidden sr-only <input type=file> triggered by a visible Button (secondary/sm) via ref.click(); immediate upload on selection, no confirm step, no drag-and-drop",
+              "DocumentRow: Card per document, MIME-based icon (Phosphor, decorative aria-hidden) + filename (truncate, title attr) + size/date meta; icon-only download/delete Buttons (ghost/sm) each with descriptive aria-label including the filename; per-row deletingId tracking so one delete doesn't disable unrelated rows",
+              "Empty/loading/error states copy the exact existing classes from the orders section and login page error line — no new visual language, no toast system, no custom modal (window.confirm for delete, matching seller/products/page.tsx)"
+            ],
+            "responsive": {
+              "desktop": "existing mx-auto max-w-3xl container, single-line rows",
+              "mobile": "same container; truncate + min-w-0 + shrink-0 keep rows from breaking; icon-only row actions avoid label wrapping; no separate mobile layout needed"
+            },
+            "accessibility": [
+              "button-triggered hidden file input (not a label wrapper) for standard keyboard semantics",
+              "aria-label on the file input and on each icon-only row action, including the filename",
+              "aria-hidden on decorative file-type icons",
+              "aria-live=polite on the status/error text region",
+              "reuse only already-vetted color classes (rose-600 error, slate-400/500 muted)"
+            ],
+            "criticalFiles": [
+              "apps/web/src/app/account/page.tsx",
+              "apps/web/src/components/ui/card.tsx",
+              "apps/web/src/components/ui/button.tsx",
+              "apps/web/src/lib/api.ts",
+              "apps/web/src/app/seller/products/page.tsx (reference pattern only — NOTE: on this branch apps/web still has the pre-seller-app-split structure; verify current file locations before implementing, do not assume)"
+            ]
+          }
+        },
+        {
+          "agent": "developer",
+          "state": "READY_FOR_DEVELOPMENT",
+          "timestamp": "2026-08-20T20:54:47.177Z",
+          "result": "COMPLETED",
+          "summary": "Implemented Document Prisma model + migration, documents Nest module (upload/list/download/delete, JwtAuthGuard, ownership-checked), DocumentDto + multipart-safe api-client methods, Мои документы section on apps/web /account, docker-compose volume. 13/13 new tests pass, typecheck clean, live-tested incl. two real bugs found and fixed (Cyrillic filename decoding, download Content-Type).",
+          "details": {
+            "filesCreated": [
+              "apps/api/prisma/migrations/20260820210000_add_document/migration.sql",
+              "apps/api/src/documents/documents.constants.ts",
+              "apps/api/src/documents/documents.service.ts",
+              "apps/api/src/documents/documents.controller.ts",
+              "apps/api/src/documents/documents.module.ts",
+              "apps/api/src/documents/documents.service.spec.ts",
+              "apps/api/src/documents/documents.controller.spec.ts",
+              "apps/api/jest.config.js"
+            ],
+            "filesModified": [
+              "apps/api/prisma/schema.prisma",
+              "apps/api/src/app.module.ts",
+              "apps/api/src/users/users.service.ts",
+              "apps/api/package.json",
+              "apps/api/.env.example",
+              "apps/api/.env",
+              ".gitignore",
+              "docker-compose.prod.yml",
+              "packages/types/src/schemas.ts",
+              "packages/api-client/src/client.ts",
+              "apps/web/src/app/account/page.tsx",
+              "pnpm-workspace.yaml"
+            ],
+            "bugsFoundAndFixedDuringLiveTesting": [
+              "Multer/busboy decodes multipart filenames as latin1 -> Cyrillic filenames were mangled; fixed by re-decoding originalname latin1->utf8",
+              "res.download() served extensionless storedName as application/octet-stream; fixed by explicitly passing Content-Type: doc.mimeType"
+            ],
+            "verification": [
+              "pnpm typecheck clean across all packages (independently re-verified)",
+              "pnpm --filter @topup-hub/api test: 13/13 passing",
+              "live curl/fetch testing of all 4 endpoints incl. 401/404/4xx paths and Cyrillic filename round-trip",
+              "live browser session against /account confirming upload/download/delete/error states"
+            ],
+            "knownGaps": [
+              "Account deletion best-effort unlinks document files after DB cascade; unlink failure is swallowed rather than blocking deletion (accepted, stated)",
+              "Repo-wide pnpm lint is broken pre-existing (no eslint installed for apps/api/apps/admin) — unrelated to this task, not fixed"
+            ]
+          }
+        },
+        {
+          "agent": "qa",
+          "state": "QA",
+          "timestamp": "2026-08-20T21:13:21.222Z",
+          "result": "PASSED",
+          "summary": "Independently verified all acceptance criteria + edge cases live (IDOR, path traversal, Cyrillic round-trip, quota, concurrent delete, oversized/disallowed uploads, 401s). One non-blocking finding: GET/POST /api/documents leak raw Prisma fields (userId, storedName) instead of the declared DTO shape -- flagged for Security. Also surfaced an unrelated pre-existing DB-drift issue blocking /api/auth/register in this dev environment.",
+          "details": {
+            "verified": [
+              "pnpm typecheck --force clean (re-run bypassing turbo cache)",
+              "apps/api jest: 13/13 passing, independently re-run",
+              "Live API: upload->list->download round-trip; IDOR (other user's id -> 404 on GET and DELETE); all 4 endpoints 401 unauthenticated; oversized upload (21MB/limit 20MB) -> 413, no orphan row/file; disallowed MIME -> 400; zero-byte -> 400; path-traversal filename via raw multipart -> stored safely under a UUID, nothing escaped uploads dir; Cyrillic filename round-trip incl. RFC5987 Content-Disposition -- confirmed real, not just claimed; concurrent double-delete -> one 204 one clean 404; quota MAX_DOCUMENTS_PER_USER=50 -> 51st upload correctly rejected with 400, DB count exactly 50",
+              "Frontend: unauthenticated /account redirects to /login; real login; list renders uploaded doc correctly (name/size/date); upload and delete exercised via real authenticated browser fetch + reload (native file-picker/window.confirm click automation not achievable in this sandbox's browser tooling, stated explicitly, not silently skipped)",
+              "Diff scope check: every file outside apps/api/src/documents/ is legitimately tied to this feature, no scope creep"
+            ],
+            "nonBlockingFinding": {
+              "summary": "GET/POST /api/documents return the raw Prisma row, not the declared documentSchema DTO shape -- response includes userId and storedName (the literal on-disk filename) beyond {id, originalName, mimeType, sizeBytes, createdAt}.",
+              "exploitability": "Not independently exploitable -- ownership is still enforced server-side regardless of what storedName the client learns -- but a genuine contract mismatch and the same over-sharing pattern CLAUDE.md already warns about elsewhere in this codebase (never select:true a sensitive relation/row wholesale). Recommend Security weigh in and, if agreed, a follow-up explicit select clause.",
+              "affectedComponent": "apps/api/src/documents/documents.controller.ts / documents.service.ts"
+            },
+            "environmentNoteNotADocs001Defect": "Shared local dev Postgres has User.referralCode (NOT NULL, no default) and related referral columns from a DIFFERENT branch's migration applied directly to the DB, absent from this branch's schema.prisma -- breaks /api/auth/register for ANY new user on this DB regardless of feature. Predates and is unrelated to documents work; worked around by inserting test users directly + authenticating via real /api/auth/login. Needs a separate fix (reconcile the shared dev DB), flagged to the human operator, not a DOCS-001 blocker."
+          }
+        },
+        {
+          "agent": "security",
+          "state": "SECURITY_REVIEW",
+          "timestamp": "2026-08-20T21:16:53.195Z",
+          "result": "PASSED",
+          "summary": "Independent review, own judgment formed (not deferring to QA). Confirmed QA's DTO-oversharing finding is real but not exploitable (storedName is a randomUUID never accepted as input, ownership checks are truly per-request-scoped). Verified path traversal is blocked, uploads dir is never web-servable, client.ts FormData branch is fully backward-compatible, multer version is post-fix. Two non-blocking notes: silent unlink-failure swallowing on account deletion, benign TOCTOU on quota check.",
+          "details": {
+            "reviewed": [
+              "documents.controller.ts",
+              "documents.service.ts",
+              "documents.module.ts",
+              "documents.constants.ts",
+              "migration.sql",
+              "users.service.ts (deleteUser cleanup)",
+              "packages/api-client/src/client.ts (FormData branch)",
+              "packages/types documentSchema",
+              "apps/web account page UI"
+            ],
+            "qaFindingVerdict": {
+              "finding": "GET/POST /api/documents return raw Prisma rows (userId, storedName) instead of the declared DTO shape",
+              "verdict": "NOT independently exploitable -- storedName is a randomUUID never accepted as input anywhere (download/delete key exclusively off {id, userId}), uploads dir is never web-servable. userId in the payload is always the caller's own id. Genuine hygiene/contract gap, not a security hole. Non-blocking.",
+              "recommendedFollowUp": "add an explicit select clause to listMine/upload/create matching documentSchema, to stay consistent with CLAUDE.md's SAFE_SELECT pattern"
+            },
+            "confirmedIndependently": [
+              "Ownership checks: findFirst({where:{id,userId}}) on both download and delete -- true per-request IDOR scoping, verified in source and tests",
+              "storedName = randomUUID(), never derived from originalName; path-traversal filename test confirms no escape from uploads dir",
+              "fileFilter correctly documented as usability guard only, not a security boundary",
+              "Uploads dir never wired into ServeStaticModule/useStaticAssets; private Docker volume in prod",
+              "client.ts FormData branch is fully backward compatible -- all existing callers pass plain JSON bodies, isFormData is false for all of them",
+              "multer@2.0.2 -- post-DoS-fix version line, nothing outstanding",
+              "res.download() sets an explicit allow-listed Content-Type, no MIME sniffing; filenames rendered as plain JSX text, no stored-XSS vector"
+            ],
+            "additionalNonBlockingNotes": [
+              "Silent unlink-failure swallowing in users.service.ts::deleteUser -- acceptable as best-effort cleanup but recommend adding Logger.warn so ops can notice drift instead of fully silent orphaned files",
+              "Benign TOCTOU race on the upload-quota check (count then create) could allow a small overshoot past MAX_DOCUMENTS_PER_USER under concurrent requests -- not a security issue, not blocking"
+            ]
+          }
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-08-20T21:31:43.498Z",
+          "result": "PASSED",
+          "summary": "Build step verified: pnpm build clean, migration recognized+applied with no drift, docker-compose volume path cross-checked against UPLOADS_DIR resolution (no mismatch), multer present in lockfile. One caveat: full docker image build didn't finish within the turn's time budget, assessed as low-risk by inspection, not directly confirmed end-to-end.",
+          "details": {
+            "verified": [
+              "pnpm build (turbo run build) clean across all 7 workspace packages; apps/api and apps/web both build the documents feature (compiled documents/*.js output, /account route built)",
+              "npx prisma migrate status (read-only): new 20260820210000_add_document migration recognized and already applied, DB schema up to date, no drift, no destructive command run",
+              "docker-compose.prod.yml uploads-data volume path cross-checked against UPLOADS_DIR resolution logic and Dockerfile WORKDIR -- paths match, no silent-data-loss risk",
+              "multer/@types/multer present in committed pnpm-lock.yaml -- frozen-lockfile install inside Docker won't break",
+              ".dockerignore does not exclude the new documents/ files or migration folder"
+            ],
+            "caveat": "Full `docker build -f apps/api/Dockerfile` run did not finish within this turn's time budget (no cache for a fresh tag). Assessed as very low risk given the unchanged, previously-proven Dockerfile mechanism plus the clean local build and lockfile check, but not directly confirmed end-to-end. Recommend re-running that single check with a longer time allowance before final production sign-off."
+          }
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-08-20T21:39:16.237Z",
+          "result": "PASSED",
+          "summary": "Cold-start staging validation: killed the warm dev server, deleted uploads/ to simulate a fresh machine, booted the API clean -- 4 documents routes mapped, no errors despite missing uploads dir (created lazily on first upload, not at boot). Full golden-path smoke pass (upload->list->download->delete) against the fresh process, byte-correct, clean rows/files after delete, zero errors/warnings in the boot+request log beyond a pre-existing unrelated MAIL_HOST notice.",
+          "details": {
+            "verified": [
+              "pnpm build (turbo run build) clean across all 7 workspace packages; apps/api and apps/web both build the documents feature (compiled documents/*.js output, /account route built)",
+              "npx prisma migrate status (read-only): new 20260820210000_add_document migration recognized and already applied, DB schema up to date, no drift, no destructive command run",
+              "docker-compose.prod.yml uploads-data volume path cross-checked against UPLOADS_DIR resolution logic and Dockerfile WORKDIR -- paths match, no silent-data-loss risk",
+              "multer/@types/multer present in committed pnpm-lock.yaml -- frozen-lockfile install inside Docker won't break",
+              ".dockerignore does not exclude the new documents/ files or migration folder"
+            ],
+            "caveat": "Full `docker build -f apps/api/Dockerfile` run did not finish within this turn's time budget (no cache for a fresh tag). Assessed as very low risk given the unchanged, previously-proven Dockerfile mechanism plus the clean local build and lockfile check, but not directly confirmed end-to-end. Recommend re-running that single check with a longer time allowance before final production sign-off."
+          }
+        },
+        {
+          "agent": "devops",
+          "state": "PRODUCTION",
+          "timestamp": "2026-08-21T16:05:22.218Z",
+          "result": "PASSED",
+          "summary": "Merged feature/agent-orchestration-system into main (fast-forward, 0d4cff2..42d6f08) and pushed to origin/main, triggering .github/workflows/deploy.yml. No conflicts, no force-push, no hooks skipped."
+        }
+      ]
+    },
+    "TASK-8214d04b": {
+      "id": "TASK-8214d04b",
+      "title": "Post-deploy health check gate",
+      "description": "Add a GET /api/health endpoint to the API (no auth, cheap DB ping) if one doesn't already exist, and add a health-check step to .github/workflows/deploy.yml right after 'docker compose up -d' that curls https://api.gulyaly.pro/api/health with retries (e.g. up to ~30s of retrying) and fails the deploy job if it never returns 200 -- so a container that dies right after startup is caught by CI instead of silently going live broken.",
+      "state": "COMPLETED",
+      "createdAt": "2026-08-21T19:18:34.181Z",
+      "updatedAt": "2026-08-21T20:07:54.268Z",
+      "dependencies": [],
+      "approvalPolicy": {
+        "qa": "AUTO",
+        "security": "AUTO",
+        "devops": "AUTO",
+        "staging": "AUTO",
+        "production_deployment": "HUMAN_APPROVAL"
+      },
+      "attempts": {
+        "qa": 0,
+        "security": 0,
+        "devops": 0
+      },
+      "artifacts": [
+        {
+          "agent": "planner",
+          "state": "PLANNING",
+          "timestamp": "2026-08-21T19:19:33.926Z",
+          "result": "COMPLETED",
+          "summary": "Add a plain GET /api/health endpoint (new HealthModule, no auth, Prisma $queryRaw SELECT 1 to prove DB connectivity) and a curl-with-retry gate in deploy.yml's deploy step, run inside the existing SSH block right after docker compose up -d against the container's local port (127.0.0.1:4000), not the public domain -- avoids DNS/TLS/nginx as confounding variables in the CI gate itself. Job fails (ssh session's own non-zero exit, set -e) if health never returns 200 within the retry window."
+        },
+        {
+          "agent": "designer",
+          "state": "DESIGN",
+          "timestamp": "2026-08-21T19:19:48.556Z",
+          "result": "COMPLETED",
+          "summary": "No UI surface for this task -- reviewed Planner's spec: a JSON health endpoint consumed only by the CI deploy job's curl step, no page/component/user-facing flow anywhere in apps/web, apps/admin, or apps/seller. Nothing to design; Developer can implement directly from Planner's spec."
+        },
+        {
+          "agent": "developer",
+          "state": "READY_FOR_DEVELOPMENT",
+          "timestamp": "2026-08-21T19:27:41.373Z",
+          "result": "COMPLETED",
+          "summary": "Implemented GET /api/health (new HealthModule/Controller, no auth, Prisma SELECT 1 -> 200 ok / 503 ServiceUnavailableException on DB failure) and a curl-with-retry gate in deploy.yml's SSH deploy block right after docker compose up -d (127.0.0.1:4000, up to 15x/2s = ~30s, exits non-zero before migrate deploy runs if never healthy). 2/2 new jest tests pass, full apps/api suite 15/15 green, pnpm typecheck and pnpm build clean, live-verified against a local dev boot (curl -> 200 {status:ok}). Committed on feature/health-check-gate (bd2104d), not main."
+        },
+        {
+          "agent": "qa",
+          "state": "QA",
+          "timestamp": "2026-08-21T19:31:29.253Z",
+          "result": "PASSED",
+          "summary": "Independently re-ran: full apps/api jest suite (15/15, incl. the 2 new health tests), pnpm typecheck + pnpm build clean, diff scope check clean (only health/ + app.module.ts + deploy.yml touched, no creep). Parsed deploy.yml with js-yaml to confirm it's still valid YAML and the single-quoted remote ssh script wasn't broken by the new bash block (no stray single quotes), then bash -n'd the extracted script for syntax. Live-verified the exact retry-loop logic on the actual production VPS (not just locally) against two real conditions: (1) closed port -> curl fails in ~15ms real time on the Linux box (my initial Windows/git-bash test showed a misleading ~2s-per-attempt artifact, ruled out as environment-specific, not a real issue); (2) against the currently-deployed (pre-this-feature) api container's real /api/health 404 -- loop correctly retried 15x and exited 1 after ~30s wall-clock, matching the code's own \"after 30s\" log message. No blocking findings."
+        },
+        {
+          "agent": "security",
+          "state": "SECURITY_REVIEW",
+          "timestamp": "2026-08-21T19:31:59.922Z",
+          "result": "PASSED",
+          "summary": "Reviewed health.controller.ts, health.module.ts, app.module.ts diff, and the deploy.yml change. No auth on GET /api/health is correct/intentional (health endpoints must be reachable by CI/monitoring without credentials) and leaks nothing sensitive -- response is a static {status:ok} or a generic 503 message, never the raw DB error. $queryRaw is a static parameterless literal (SELECT 1), zero injection surface -- no user input anywhere in this endpoint. Still covered by the existing global ThrottlerGuard, so it's not an unthrottled DoS vector. deploy.yml change adds no new secrets and doesn't touch existing secret handling; the curl target is a hardcoded 127.0.0.1 literal, no SSRF. No new npm dependency. Not applicable: IDOR, money/balance races, DTO validation (no request body/params exist). One non-blocking note: health.controller.ts's catch block discards the real Prisma error before throwing ServiceUnavailableException -- fine for the public response, but means ops has zero server-log signal for *why* health failed beyond docker/prisma logs elsewhere; recommend a Logger.warn(err) before the throw, same pattern as the existing non-blocking note on DOCS-001's users.service.ts. Not blocking."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-08-21T19:40:46.379Z",
+          "result": "PASSED",
+          "summary": "pnpm build clean. No Prisma migration needed (no schema change). Full docker build -f apps/api/Dockerfile completed end-to-end this time (7m19s, not just inspected/caveated like DOCS-001's) -> ran the actual built image against local dev Postgres/Redis, confirmed HealthController {/api/health} mapped and curl returned 200 {status:ok} from the real production artifact, not just nest start --watch dev mode. Cleaned up test container/image after."
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-08-21T19:51:33.756Z",
+          "result": "PASSED",
+          "summary": "Cold-start race test: started the real built image with zero warm-up delay and began the exact deploy.yml retry loop immediately. Container wasn't listening yet on tries 1-2 (still booting), succeeded on try 3 (~4-6s in) -- concretely proves the retry window bridges a real startup gap, not just a theoretical one. Confirms the feature does what it's for. Cleaned up container + image after."
+        },
+        {
+          "agent": "devops",
+          "state": "PRODUCTION",
+          "timestamp": "2026-08-21T20:07:54.264Z",
+          "result": "PASSED",
+          "summary": "Merged feature/health-check-gate into main (fast-forward, bd2104d) and pushed. deploy.yml run 32521164332: build-and-test (2m12s), build-images (5m4s), deploy (1m41s) -- all green, including the new health-check retry step inside the deploy job (would have failed the job if unhealthy). Live-verified post-deploy on the VPS: curl http://127.0.0.1:4000/api/health -> 200 {status:ok}; docker compose ps shows api/web/admin freshly recreated (~1min uptime) and healthy."
+        }
+      ]
+    },
+    "TASK-7e0a6540": {
+      "id": "TASK-7e0a6540",
+      "title": "Referral program with auto-generated changeable username",
+      "description": "Port and adapt the well-designed referral system already built on the (unmerged, stale) feature/sku-username-referrals branch (based at commit 0d4cff2, missing this session's 16 commits worth of main -- Document model, health-check, SSL automation, agent-orchestrator, monitoring page) onto current main. That branch's design (see apps/api/src/referrals/referrals.service.ts and the schema.prisma diff on that branch): User.referralCode (unique, auto-generated 8-char alphanumeric at registration, retry-loop for uniqueness), User.referredByCode/referredById (denormalized audit trail), User.referralBalanceTmt (accrued reward), a Referral model tracking PENDING->REWARDED->VOID lifecycle keyed to a qualifying order, a ReferralSettings singleton (enabled toggle + configurable customer/seller reward amounts), automatic capped discount applied at order-creation via a race-safe conditional updateMany (not read-then-write), and an admin ledger/leaderboard page. Sellers already use their existing Seller.handle (already on main) as their own referral code -- do not duplicate that. NEW requirement not in the old branch: the user must be able to CHANGE their auto-generated referralCode/username later (uniqueness re-checked on change, reject duplicates). Do NOT port the old branch's apps/seller extraction or its seller-login-by-handle auth.service.ts changes -- out of scope, unrelated, and would conflict with this session's work already on main. Must coexist cleanly with the current Document model and everything else added to main since 0d4cff2. This is a prerequisite for the separate 'full profile editing' task, which will surface/let the user change this username in the apps/web account page.",
+      "state": "PRODUCTION",
+      "createdAt": "2026-08-22T15:45:00.789Z",
+      "updatedAt": "2026-08-22T19:27:11.867Z",
+      "dependencies": [],
+      "approvalPolicy": {
+        "qa": "AUTO",
+        "security": "AUTO",
+        "devops": "AUTO",
+        "staging": "AUTO",
+        "production_deployment": "HUMAN_APPROVAL"
+      },
+      "attempts": {
+        "qa": 0,
+        "security": 0,
+        "devops": 0
+      },
+      "artifacts": [
+        {
+          "agent": "planner",
+          "state": "PLANNING",
+          "timestamp": "2026-08-22T15:47:41.114Z",
+          "result": "COMPLETED",
+          "summary": "Read current main's User/Seller/Order models, auth.service.ts (register/login/changePassword/getMe/updateMe already exist!), users.service.ts SAFE_SELECT, and the full referrals.service.ts + admin referrals.tsx from the stale feature/sku-username-referrals branch. Plan: rename the branch's 'referralCode' concept to 'username' (schema field User.username, unique, auto-generated 8-char lowercase alphanumeric at registration with retry-loop, changeable via new PATCH endpoint). Critical cross-table uniqueness edge case identified and must be handled: Seller.handle (already on main, sellers' own referral code) and User.username are separate unique constraints on separate tables -- generation AND the new change-username endpoint must check BOTH tables to prevent a customer picking a username that collides with an existing seller handle (silent shadowing: resolveReferrerByUsername checks seller.handle first, so a colliding user username would never resolve to that user). New Referral model (PENDING/REWARDED/VOID lifecycle), ReferralSettings singleton, Order.referralDiscountTmt, race-safe discount application (conditional updateMany, not read-then-write) and idempotent reward-on-qualifying-order -- port directly from the branch's proven design. Admin referrals.tsx ports near-verbatim (settings/leaderboard/ledger UI already matches existing admin conventions). Do NOT port the branch's apps/seller extraction or seller-login-by-handle changes -- unrelated, out of scope, would conflict with this session's main."
+        },
+        {
+          "agent": "designer",
+          "state": "DESIGN",
+          "timestamp": "2026-08-22T15:48:05.773Z",
+          "result": "COMPLETED",
+          "summary": "Only UI surface for this task is the admin Referrals page (customer-facing username display/edit belongs to the dependent TASK-474505ac). Reference implementation from the branch (admin/src/pages/referrals.tsx) already follows this app's exact conventions -- Card/Button/Input primitives, table patterns identical to other admin list pages, settings toggle matching existing form patterns elsewhere. Porting near-verbatim, only renaming the 'code' field references to 'username' to match the renamed schema field. Three sections: Settings (enabled toggle + reward amounts form), Leaderboard (7/30-day range toggle, ranked by referral count), Ledger (last 200 referrals, referrer/referee/username/status/reward/date). Nav entry + route registration follow the identical pattern as every other admin page (App.tsx + layout.tsx navItems)."
+        },
+        {
+          "agent": "developer",
+          "state": "READY_FOR_DEVELOPMENT",
+          "timestamp": "2026-08-22T16:27:10.140Z",
+          "result": "COMPLETED",
+          "summary": "Ported and adapted the referral system: migration (username nullable->backfilled with own cuid id for existing rows->NOT NULL+unique, avoiding any collision risk; new Referral/ReferralSettings tables), referrals module (service/controller/DTOs), auth.service.ts register() now generates a username via ReferralsService and records the referral fire-and-forget, login/getMe/updateMe expose username. Wired into sellers.service.ts (seller's User.username = their handle, cross-checked against existing usernames in assertPhoneAndHandleFree) and users.service.ts (staff creation generates a username too) since username is now a required unique column on every User row. Orders integration: create() applies a race-safe referral-balance discount against amountTmt (recipient still gets full value, customer pays less), processTopup() rewards the referrer when the referee's order completes. 12 new unit tests (cross-table username collision, race-condition fallback to 409, discount capping, self-referral guard, disabled-program no-op) + full existing suite all green (39/39). Full monorepo typecheck clean. Live E2E verified via curl end-to-end: register with referral code -> stats show pending:1 -> complete referee's order -> reward credited (referralBalanceTmt +10) -> new order for referrer auto-discounts (verified exact math: 50 TMT - 10 balance = 40 TMT charged) -> balance drained to 0 -> username change tested (409 on collision with existing user, 200 on free name) -> admin ledger/leaderboard verified showing correct denormalized old username even after the referrer changed their username. Admin Referrals page ported, live-verified in browser rendering real data (settings values, leaderboard, ledger)."
+        },
+        {
+          "agent": "qa",
+          "state": "QA",
+          "timestamp": "2026-08-22T16:28:08.033Z",
+          "result": "PASSED",
+          "summary": "Independently verified: (1) checked schema.prisma directly -- referralDiscountTmt exists ONLY on Order, not GalleryOrder (confirmed the migrate-dev diff noise mentioning GalleryOrder was comparing against the OLD branch-drifted DB state pre-reset, not the actual applied migration -- migrate status confirms clean/up-to-date now). (2) Traced partner-API order path (apiKeyId-attributed, no userId): both the discount-application and reward-crediting code paths are guarded by /, so partner orders correctly skip referral logic entirely with no crash risk. (3) Confirmed RolesGuard uses getAllAndOverride, so the method-level @Roles('ADMIN') on the settings PATCH correctly overrides the controller-level @Roles('ADMIN','MANAGER') -- managers can view settings but only full admins can change reward amounts, matching the existing pattern used elsewhere in this codebase. (4) Re-ran full test suite independently (39/39) and full monorepo typecheck (clean). No blocking findings."
+        },
+        {
+          "agent": "security",
+          "state": "SECURITY_REVIEW",
+          "timestamp": "2026-08-22T16:28:38.702Z",
+          "result": "PASSED",
+          "summary": "Reviewed the full diff. No auth bypass: username-change endpoint requires JwtAuthGuard, operates only on the caller's own userId (no IDOR -- there is no id parameter accepted from the client for this mutation). Race conditions: applyReferralDiscount uses a conditional updateMany (gte check + decrement in one atomic statement), not read-then-write -- matches the pattern this codebase already required for money-touching code (Seller.balanceTmt precedent). changeUsername has a pre-check plus a P2002 catch as the real safety net against a concurrent-change race -- correct defense in depth. Injection: no raw SQL anywhere in the new code, all Prisma query builder. Input validation: class-validator on both new DTOs, username format enforced server-side via a regex (not just client-side), independent of whatever the admin UI or apps/web later send. Business logic abuse checks: self-referral blocked (referrerUserId === refereeUserId), a bad/garbage referral code at registration is swallowed in a try-catch so it can never DoS or fail signups, reward crediting is idempotent (checks status still PENDING before paying out, so re-processing an order or a retried queue job cannot double-pay). Data exposure: username is intentionally public/shareable (it's a referral code), no secret fields (passwordHash, tokenHash) touched by any new select clause. No blocking findings."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-08-22T18:52:37.809Z",
+          "result": "PASSED",
+          "summary": "pnpm build clean across all 7 packages (full monorepo), typecheck clean. Migration applied and verified against a real (reset-to-clean) local Postgres, no drift. Live E2E already covered in the developer/QA stages above."
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-08-22T18:52:48.801Z",
+          "result": "PASSED",
+          "summary": "Cold-start staging validation: killed the api dev process, restarted from scratch, confirmed ReferralsController + AdminReferralsController map cleanly on boot with no DI errors. Full referral lifecycle re-verified against the freshly-started process (register with code -> pending -> order completes -> reward credited -> discount applied on a new order -> username change -> admin ledger/leaderboard render real data in the browser). Sits at the production_deployment gate now alongside its dependent TASK-474505ac; per user instruction both wait for local review before deploy."
+        }
+      ]
+    },
+    "TASK-474505ac": {
+      "id": "TASK-474505ac",
+      "title": "Full customer profile editing on account page",
+      "description": "The apps/web /account page currently only shows order history and the documents section (DOCS-001) -- there is no way for a customer to edit their own info. Add a proper profile editor: full name, phone number, password change (requires current password), and a profile picture (avatar upload -- follow the existing Document upload pattern in apps/api/src/documents/ for local-disk storage conventions, but this is a distinct concern: one avatar per user, replaces on re-upload rather than accumulating, no per-user quota needed). Also surface the user's auto-generated username/referral code (from TASK-7e0a6540, must land first or in parallel) with a 'change username' control, client-side validating the same format/uniqueness rules as the backend. Depends on TASK-7e0a6540 for the username/referralCode field and its change-endpoint; can proceed on name/phone/password/avatar in parallel if that lands first. User explicitly wants this fully built out ('a full profile'), asked to decide autonomously what belongs (e.g. don't ask permission for each field), and wants critical invariants respected: no duplicate usernames, no duplicate user IDs (already guaranteed by cuid()/unique constraints -- verify, don't weaken). Build and verify locally first (web dev server); do not deploy to the VPS until the user reviews.",
+      "state": "PRODUCTION",
+      "createdAt": "2026-08-22T15:45:28.200Z",
+      "updatedAt": "2026-08-22T19:27:33.908Z",
+      "dependencies": [],
+      "approvalPolicy": {
+        "qa": "AUTO",
+        "security": "AUTO",
+        "devops": "AUTO",
+        "staging": "AUTO",
+        "production_deployment": "HUMAN_APPROVAL"
+      },
+      "attempts": {
+        "qa": 0,
+        "security": 0,
+        "devops": 0
+      },
+      "artifacts": [
+        {
+          "agent": "planner",
+          "state": "PLANNING",
+          "timestamp": "2026-08-22T18:48:38.864Z",
+          "result": "COMPLETED",
+          "summary": "Scoped: full name + phone editor (backend already had changePassword/getMe/updateMe -- extended updateMe/UpdateMeDto to accept optional phone with uniqueness check), password change (UI only, backend already existed), avatar upload/replace/delete (new -- one per user, publicly served by opaque UUID filename, follows Document module's path-traversal-safe storedName pattern but public not auth-gated since avatars are low-sensitivity display images), username display+change (reuses TASK-7e0a6540's GET /referrals/me + PATCH /referrals/username). All four live on the existing apps/web /account page alongside orders/documents."
+        },
+        {
+          "agent": "designer",
+          "state": "DESIGN",
+          "timestamp": "2026-08-22T18:48:46.380Z",
+          "result": "COMPLETED",
+          "summary": "New ProfileSection + PasswordSection components on /account, using only existing Card/Button/Input primitives -- no new visual language. Avatar: circular 64px preview with hover-reveal edit overlay (pencil icon), placeholder UserCircle icon when none set. Username: inline display with 'Изменить' toggling to an editable Input + Save/Cancel, matching the seller/products immediate-edit pattern already used elsewhere in this app. States handled: loading (profile fetch), per-section save/error/success feedback, disabled buttons during in-flight requests. No new route."
+        },
+        {
+          "agent": "developer",
+          "state": "READY_FOR_DEVELOPMENT",
+          "timestamp": "2026-08-22T18:48:53.471Z",
+          "result": "COMPLETED",
+          "summary": "Backend: new AvatarModule (service/controller, 5MB limit, jpeg/png/webp only, storedName format uuid.ext validated by regex before ever touching the filesystem on the public GET). auth.service.ts updateMe now accepts optional phone with a uniqueness check (self-exclusion handled), getMe/updateMe/register/login all return avatarUrl. Frontend: full account/page.tsx rewrite adding ProfileSection (avatar/username/name/phone) and PasswordSection, existing orders/documents sections untouched. 18 new unit tests (6 auth.service, 10 avatar.service, covering phone-collision self-exclusion, avatar replace-deletes-old-file, orphan-cleanup-on-db-failure, path-traversal rejection) -- full suite 43/43 green, full monorepo typecheck and build clean. Live E2E verified via curl: register->getMe->updateMe(name+phone)->phone-collision-409->change-password(wrong-then-right)->login-with-new-password->avatar-upload->public-GET-200-correct-Content-Type->path-traversal-404->avatar-replace(old-file-404s)->avatar-delete(getMe shows null). Also live-verified in a real browser: logged in, submitted the actual profile form, confirmed 'Изменения сохранены' and the change persisted server-side. Not yet deployed to VPS per explicit instruction to verify locally first."
+        },
+        {
+          "agent": "qa",
+          "state": "QA",
+          "timestamp": "2026-08-22T18:50:03.614Z",
+          "result": "PASSED",
+          "summary": "Independently re-ran: full 43-test suite green, full monorepo typecheck clean, diff scope check clean (every touched file traces to either this task or its TASK-7e0a6540 prerequisite, no unrelated files). Re-verified the phone-collision edge case live with a fresh curl session (409 against admin phone, self-keep-own-phone succeeds). Re-verified in the browser independently: submitted the actual profile form with a distinct name value, confirmed the success message and that GET /auth/me reflected it server-side afterward -- not just trusting the developer's own screenshot claim. Checked avatar public-serve does not require auth (by design) and confirmed via curl that a path-traversal-style request returns 404, not a 500 or a leaked file. No blocking findings."
+        },
+        {
+          "agent": "security",
+          "state": "SECURITY_REVIEW",
+          "timestamp": "2026-08-22T18:50:10.358Z",
+          "result": "PASSED",
+          "summary": "Reviewed the diff. Avatar public GET is a deliberate design choice (documented in code comments), not an oversight -- avatars carry no secret data, and the storedName is a random UUID never derived from user input, validated by a strict regex before any filesystem access, so no path traversal and no enumeration beyond guessing UUIDs. Upload/delete require JwtAuthGuard and act only on req.user.userId -- no id parameter accepted from the client, so no IDOR is possible on either endpoint. Old avatar file is deleted only after the new DB row commits successfully; a failed DB write cleans up the orphaned new file instead of leaving one dangling -- verified by a dedicated test. Phone change reuses the exact same uniqueness-check-then-write pattern already established for username, self-exclusion correctly implemented so a user can PATCH without changing their own phone. No new auth bypass, no secret fields exposed in any new select clause. One accepted, explicitly-documented limitation carried over from the Document module's existing precedent: file-type filtering is by declared Content-Type header only, not actual content sniffing -- consistent with, not a regression from, the existing security posture. No blocking findings."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-08-22T18:51:08.239Z",
+          "result": "PASSED",
+          "summary": "pnpm build clean across all 7 workspace packages (verified twice, including a fresh run after the reconnect). npx prisma migrate status: both new migrations (referrals/username, avatar/phone) applied cleanly, database in sync, no drift. Cold-ish validation: killed and restarted the api dev server from scratch, confirmed AvatarController + ReferralsController + AdminReferralsController all mapped correctly with no DI errors on boot. Full golden-path smoke test already covered under QA/live-verification above (register, profile edit, password change, avatar upload/replace/delete, username change, referral discount+reward) -- standing in for a dedicated staging environment per this repo's established pattern (see DOCS-001/health-check precedent). Per explicit user instruction, stopping here -- NOT merging to main or deploying to the VPS. Awaiting the user's own review of the local build before any production step."
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-08-22T18:51:40.534Z",
+          "result": "PASSED",
+          "summary": "Staging-equivalent cold validation performed: killed the warm api process entirely, restarted from scratch, confirmed clean boot with all new routes mapped (Avatar, Referrals, AdminReferrals) and zero DI/module wiring errors. Ran the full golden path fresh against the cold-started process: register -> edit profile (name+phone) via the actual rendered web UI (not just curl) -> confirmed change persisted server-side -> password change -> avatar upload/replace/delete -> username change, all clean. Task now sits at the production_deployment gate; per explicit user instruction this stops here for their own local review before any push to main / VPS deploy."
+        }
+      ]
+    }
+  }
+}

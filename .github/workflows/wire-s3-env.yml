@@ -1,0 +1,105 @@
+name: Wire S3_* into primary and secondary .env, recreate api
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wire-primary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Set S3_* in /opt/gul/.env, recreate api
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+          S3_PRIVATE_BUCKET: ${{ secrets.S3_PRIVATE_BUCKET }}
+        run: |
+          cat > /tmp/env-update.sh <<'SCRIPT'
+          set -e
+          cd /opt/gul
+          set_kv() {
+            key="$1"; val="$2"
+            if grep -q "^${key}=" .env; then
+              sed -i "s#^${key}=.*#${key}=\"${val}\"#" .env
+            else
+              echo "${key}=\"${val}\"" >> .env
+            fi
+          }
+          set_kv S3_ENDPOINT '__S3_ENDPOINT_PLACEHOLDER__'
+          set_kv S3_ACCESS_KEY_ID '__S3_ACCESS_KEY_ID_PLACEHOLDER__'
+          set_kv S3_SECRET_ACCESS_KEY '__S3_SECRET_ACCESS_KEY_PLACEHOLDER__'
+          set_kv S3_PUBLIC_BUCKET '__S3_PUBLIC_BUCKET_PLACEHOLDER__'
+          set_kv S3_PRIVATE_BUCKET '__S3_PRIVATE_BUCKET_PLACEHOLDER__'
+          docker compose up -d --force-recreate --no-deps api
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
+            sleep 2
+          done
+          exit 1
+          SCRIPT
+          sed -i "s#__S3_ENDPOINT_PLACEHOLDER__#$S3_ENDPOINT#" /tmp/env-update.sh
+          sed -i "s#__S3_ACCESS_KEY_ID_PLACEHOLDER__#$S3_ACCESS_KEY_ID#" /tmp/env-update.sh
+          sed -i "s#__S3_SECRET_ACCESS_KEY_PLACEHOLDER__#$S3_SECRET_ACCESS_KEY#" /tmp/env-update.sh
+          sed -i "s#__S3_PUBLIC_BUCKET_PLACEHOLDER__#$S3_PUBLIC_BUCKET#" /tmp/env-update.sh
+          sed -i "s#__S3_PRIVATE_BUCKET_PLACEHOLDER__#$S3_PRIVATE_BUCKET#" /tmp/env-update.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/env-update.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/env-update.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'bash /tmp/env-update.sh && rm -f /tmp/env-update.sh' < /dev/null
+          rm -f /tmp/env-update.sh
+
+  wire-secondary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Set S3_* in /opt/gul-secondary/.env, recreate api
+        env:
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+          S3_PRIVATE_BUCKET: ${{ secrets.S3_PRIVATE_BUCKET }}
+        run: |
+          cat > /tmp/env-update.sh <<'SCRIPT'
+          set -e
+          cd /opt/gul-secondary
+          set_kv() {
+            key="$1"; val="$2"
+            if grep -q "^${key}=" .env; then
+              sed -i "s#^${key}=.*#${key}=\"${val}\"#" .env
+            else
+              echo "${key}=\"${val}\"" >> .env
+            fi
+          }
+          set_kv S3_ENDPOINT '__S3_ENDPOINT_PLACEHOLDER__'
+          set_kv S3_ACCESS_KEY_ID '__S3_ACCESS_KEY_ID_PLACEHOLDER__'
+          set_kv S3_SECRET_ACCESS_KEY '__S3_SECRET_ACCESS_KEY_PLACEHOLDER__'
+          set_kv S3_PUBLIC_BUCKET '__S3_PUBLIC_BUCKET_PLACEHOLDER__'
+          set_kv S3_PRIVATE_BUCKET '__S3_PRIVATE_BUCKET_PLACEHOLDER__'
+          docker compose up -d --force-recreate --no-deps api
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
+            sleep 2
+          done
+          exit 1
+          SCRIPT
+          sed -i "s#__S3_ENDPOINT_PLACEHOLDER__#$S3_ENDPOINT#" /tmp/env-update.sh
+          sed -i "s#__S3_ACCESS_KEY_ID_PLACEHOLDER__#$S3_ACCESS_KEY_ID#" /tmp/env-update.sh
+          sed -i "s#__S3_SECRET_ACCESS_KEY_PLACEHOLDER__#$S3_SECRET_ACCESS_KEY#" /tmp/env-update.sh
+          sed -i "s#__S3_PUBLIC_BUCKET_PLACEHOLDER__#$S3_PUBLIC_BUCKET#" /tmp/env-update.sh
+          sed -i "s#__S3_PRIVATE_BUCKET_PLACEHOLDER__#$S3_PRIVATE_BUCKET#" /tmp/env-update.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/env-update.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/env-update.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" 'bash /tmp/env-update.sh && rm -f /tmp/env-update.sh' < /dev/null
+          rm -f /tmp/env-update.sh

@@ -1,0 +1,124 @@
+name: Install disk usage email alert (both VPS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      alert_password:
+        description: 'Password for the new "alerts" SASL account'
+        required: true
+      alert_to:
+        description: 'Destination email for alerts'
+        required: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Mask the password
+        run: echo "::add-mask::${{ inputs.alert_password }}"
+
+      - name: Create the "alerts" SASL account (secondary, additive -- no restart)
+        env:
+          PASS: ${{ inputs.alert_password }}
+        run: |
+          cat > /tmp/create-alerts-sasl.sh <<'SCRIPT'
+          set -e
+          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.pro alerts
+          sasldblistusers2
+          SCRIPT
+          sed -i "s#__PASS_PLACEHOLDER__#$PASS#" /tmp/create-alerts-sasl.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/create-alerts-sasl.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/create-alerts-sasl.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/create-alerts-sasl.sh:/host/tmp/create-alerts-sasl.sh alpine chroot /host /bin/bash /tmp/create-alerts-sasl.sh
+            status=$?
+            rm -f /tmp/create-alerts-sasl.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/create-alerts-sasl.sh
+
+      - name: Map alerts@gulyaly.pro to the alerts SASL account (reject_sender_login_mismatch rejects unmapped senders too, not just conflicting ones)
+        run: |
+          cat > /tmp/map-alerts.sh <<'SCRIPT'
+          set -e
+          grep -q '^alerts@gulyaly.pro ' /etc/postfix/sender_login_maps 2>/dev/null || \
+            echo 'alerts@gulyaly.pro alerts@mail.gulyaly.pro' >> /etc/postfix/sender_login_maps
+          postmap hash:/etc/postfix/sender_login_maps
+          cat /etc/postfix/sender_login_maps
+          SCRIPT
+          scp -i ~/.ssh/id_ed25519 /tmp/map-alerts.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/map-alerts.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/map-alerts.sh:/host/tmp/map-alerts.sh alpine chroot /host /bin/bash /tmp/map-alerts.sh
+            status=$?
+            rm -f /tmp/map-alerts.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/map-alerts.sh
+
+      - name: Install script + timer on primary and secondary
+        env:
+          PASS: ${{ inputs.alert_password }}
+          ALERT_TO: ${{ inputs.alert_to }}
+        run: |
+          install_on() {
+            host="$1"; user="$2"
+            scp -i ~/.ssh/id_ed25519 infra/alerts/gul-disk-alert.sh "$user@$host:/tmp/gul-disk-alert.sh"
+            scp -i ~/.ssh/id_ed25519 infra/alerts/gul-disk-alert.service "$user@$host:/tmp/gul-disk-alert.service"
+            scp -i ~/.ssh/id_ed25519 infra/alerts/gul-disk-alert.timer "$user@$host:/tmp/gul-disk-alert.timer"
+            cat > /tmp/install-remote.sh <<'REMOTE'
+          set -e
+          # cp, not mv -- /tmp/*.sh here is itself a bind mount layered on top of the -v /:/host
+          # mount, and rename() across that boundary isn't guaranteed; cp always works.
+          cp /tmp/gul-disk-alert.sh /usr/local/bin/gul-disk-alert.sh
+          chmod 755 /usr/local/bin/gul-disk-alert.sh
+          cp /tmp/gul-disk-alert.service /etc/systemd/system/gul-disk-alert.service
+          cp /tmp/gul-disk-alert.timer /etc/systemd/system/gul-disk-alert.timer
+          cat > /etc/gul-disk-alert.env <<ENV
+          MAIL_ALERT_USER=alerts
+          MAIL_ALERT_PASS=__PASS_PLACEHOLDER__
+          MAIL_ALERT_TO=__ALERT_TO_PLACEHOLDER__
+          MAIL_RELAY_HOST=mail.gulyaly.pro
+          ENV
+          chmod 600 /etc/gul-disk-alert.env
+          systemctl daemon-reload
+          systemctl enable --now gul-disk-alert.timer
+          systemctl status gul-disk-alert.timer --no-pager
+          REMOTE
+            sed -i "s#__PASS_PLACEHOLDER__#$PASS#; s#__ALERT_TO_PLACEHOLDER__#$ALERT_TO#" /tmp/install-remote.sh
+            scp -i ~/.ssh/id_ed25519 /tmp/install-remote.sh "$user@$host:/tmp/install-remote.sh"
+            ssh -i ~/.ssh/id_ed25519 "$user@$host" '
+              docker run --rm --pid=host --privileged -v /:/host -v /tmp/install-remote.sh:/host/tmp/install-remote.sh -v /tmp/gul-disk-alert.sh:/host/tmp/gul-disk-alert.sh -v /tmp/gul-disk-alert.service:/host/tmp/gul-disk-alert.service -v /tmp/gul-disk-alert.timer:/host/tmp/gul-disk-alert.timer alpine chroot /host /bin/bash /tmp/install-remote.sh
+              status=$?
+              rm -f /tmp/install-remote.sh /tmp/gul-disk-alert.sh /tmp/gul-disk-alert.service /tmp/gul-disk-alert.timer
+              exit $status
+            ' < /dev/null
+            rm -f /tmp/install-remote.sh
+          }
+          install_on "${{ secrets.DEPLOY_HOST }}" "${{ secrets.DEPLOY_USER }}"
+          install_on "${{ secrets.SECONDARY_HOST }}" "${{ secrets.SECONDARY_USER }}"
+
+      - name: Verify -- force a real test send on primary, confirm relay accepted it
+        run: |
+          cat > /tmp/test-send.sh <<'SCRIPT'
+          set -e
+          /usr/local/bin/gul-disk-alert.sh --test
+          echo "script exit: $?"
+          SCRIPT
+          scp -i ~/.ssh/id_ed25519 /tmp/test-send.sh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/test-send.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/test-send.sh:/host/tmp/test-send.sh alpine chroot /host /bin/bash /tmp/test-send.sh
+            status=$?
+            rm -f /tmp/test-send.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/test-send.sh

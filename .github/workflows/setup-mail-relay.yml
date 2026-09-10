@@ -1,0 +1,199 @@
+name: Set up mail relay on secondary VPS
+
+# One-time (idempotent) setup: installs Postfix on the secondary VPS as an authenticated
+# SMTP submission relay (port 587, SASL, STARTTLS) and wires the primary's production .env to
+# use it. mail.gulyaly.pro currently resolves to the PRIMARY (the *.gulyaly.pro wildcard covers
+# it -- there's no dedicated DNS record pointing it at the secondary yet), so a publicly-trusted
+# Let's Encrypt cert for that name can't be issued on the secondary today. Works around this by
+# pinning the relay's own self-signed certificate as the trusted CA for this one connection
+# (see MAIL_TLS_CA_BASE64/MAIL_TLS_SERVERNAME in email.service.ts) instead of leaving TLS
+# unverified. The real long-term fix is a DNS A record for "mail" pointing at the secondary's IP,
+# same category of manual step as the one already documented in HIGH_AVAILABILITY.md.
+#
+# The SMTP account password is generated fresh inside this run and never leaves it -- not stored
+# as a repo secret, not printed to logs -- so re-running this workflow rotates the password.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Generate a fresh SMTP password (masked, never stored)
+        run: |
+          PASS=$(openssl rand -base64 24)
+          echo "::add-mask::$PASS"
+          echo "MAIL_PASS=$PASS" >> "$GITHUB_ENV"
+
+      - name: Install and configure Postfix on the secondary
+        run: |
+          cat > /tmp/mail-setup.sh <<'SCRIPT'
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          MAIL_PASS='__MAIL_PASS_PLACEHOLDER__'
+          echo "postfix postfix/mailname string mail.gulyaly.pro" | debconf-set-selections
+          echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections
+          apt-get update -qq
+          apt-get install -y -qq postfix libsasl2-modules sasl2-bin openssl >/dev/null
+
+          mkdir -p /etc/postfix/ssl
+          if [ ! -f /etc/postfix/ssl/cert.pem ]; then
+            openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+              -keyout /etc/postfix/ssl/key.pem -out /etc/postfix/ssl/cert.pem \
+              -subj "/CN=mail.gulyaly.pro"
+          fi
+          chmod 600 /etc/postfix/ssl/key.pem
+
+          # Without this, Cyrus SASL has no app-specific config telling it to actually check the
+          # sasldb2 database this script populates below -- it can silently fall back to some
+          # other pwcheck method (e.g. saslauthd/PAM) and every login just fails "authentication
+          # failed" regardless of what's in sasldb2. Confirmed as the real root cause: adding only
+          # smtpd_sasl_local_domain (a realm setting) did not fix the actual auth failures.
+          mkdir -p /usr/lib/sasl2
+          cat > /usr/lib/sasl2/smtpd.conf <<'SASLCONF'
+          pwcheck_method: auxprop
+          auxprop_plugin: sasldb
+          mech_list: PLAIN LOGIN
+          SASLCONF
+
+          postconf -e "myhostname = mail.gulyaly.pro"
+          postconf -e "mydestination = localhost"
+          postconf -e "mynetworks = 127.0.0.0/8"
+          postconf -e "inet_interfaces = all"
+          postconf -e "smtpd_tls_cert_file = /etc/postfix/ssl/cert.pem"
+          postconf -e "smtpd_tls_key_file = /etc/postfix/ssl/key.pem"
+          postconf -e "smtpd_use_tls = yes"
+          postconf -e "smtpd_tls_security_level = may"
+          postconf -e "smtpd_sasl_type = cyrus"
+          postconf -e "smtpd_sasl_path = smtpd"
+          postconf -e "smtpd_sasl_auth_enable = yes"
+          # Must match the realm the sasldb2 user below is created with (-u mail.gulyaly.pro) --
+          # without this, Postfix doesn't know what realm to assume for a bare "noreply" login
+          # (no @domain), so the lookup misses the sasldb2 entry and every auth attempt gets a
+          # generic "authentication failed" (confirmed: this was the actual first-attempt bug).
+          postconf -e "smtpd_sasl_local_domain = mail.gulyaly.pro"
+          postconf -e "smtpd_sasl_security_options = noanonymous"
+          postconf -e "smtpd_relay_restrictions = permit_mynetworks,permit_sasl_authenticated,reject_unauth_destination"
+          postconf -e "smtpd_recipient_restrictions = permit_mynetworks,permit_sasl_authenticated,reject_unauth_destination"
+          postconf -M submission/inet="submission inet n - y - - smtpd" 2>/dev/null || true
+          # Debian/Ubuntu's default master.cf runs smtpd chrooted under /var/spool/postfix -- from
+          # in there it cannot see /usr/lib/sasl2/smtpd.conf or /etc/sasldb2 at all, so every SASL
+          # lookup fails regardless of how correct that config is. Confirmed as the actual root
+          # cause: auth kept failing identically even after both the realm setting and the SASL
+          # app-config fix. This is a small dedicated relay box, not a hardened multi-tenant
+          # system, so disabling chroot is the pragmatic fix over mirroring config into the jail.
+          postconf -F '*/*/chroot = n'
+          postconf -P "submission/inet/syslog_name=postfix/submission"
+          postconf -P "submission/inet/smtpd_tls_security_level=encrypt"
+          postconf -P "submission/inet/smtpd_sasl_auth_enable=yes"
+          postconf -P "submission/inet/smtpd_relay_restrictions=permit_sasl_authenticated,reject"
+          postconf -P "submission/inet/smtpd_recipient_restrictions=permit_sasl_authenticated,reject"
+
+          adduser postfix sasl >/dev/null 2>&1 || true
+          echo "$MAIL_PASS" | saslpasswd2 -p -c -u mail.gulyaly.pro noreply
+          chgrp sasl /etc/sasldb2
+          chmod 640 /etc/sasldb2
+
+          systemctl enable postfix >/dev/null 2>&1 || true
+          systemctl restart saslauthd 2>/dev/null || true
+          systemctl restart postfix
+          sleep 1
+          systemctl is-active postfix
+          ss -tlnp | grep -E ":587|:25" || true
+          echo "--- CERT PEM (public, safe to print) ---"
+          cat /etc/postfix/ssl/cert.pem
+          SCRIPT
+          # Bake the password into the script content itself (avoids passing it through nested
+          # ssh/docker/chroot shell layers, a known source of quoting bugs in this repo).
+          sed -i "s#__MAIL_PASS_PLACEHOLDER__#$MAIL_PASS#" /tmp/mail-setup.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/mail-setup.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/mail-setup.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/mail-setup.sh:/host/tmp/mail-setup.sh alpine chroot /host /bin/bash /tmp/mail-setup.sh
+            status=$?
+            rm -f /tmp/mail-setup.sh
+            exit $status
+          ' < /dev/null > /tmp/mail-setup-output.txt
+          cat /tmp/mail-setup-output.txt
+
+      - name: Ensure ufw is actually enabled and lock port 587 to the primary's IP (and port 25 to nobody)
+        run: |
+          cat > /tmp/mail-ufw.sh <<SCRIPT
+          set -e
+          # Idempotent baseline -- ufw's own state on this box was never verified as enabled by
+          # earlier session work (only the primary's ufw is documented as active). Without
+          # explicitly enabling it, an "allow from X" rule below would be a no-op: nothing was
+          # denying by default, so postfix's port 25/587 would otherwise be open to the internet.
+          # This is a fresh Ubuntu 26.04 box -- ufw isn't installed by default (confirmed: "ufw:
+          # not found" on the first run of this workflow).
+          command -v ufw >/dev/null || (export DEBIAN_FRONTEND=noninteractive && apt-get update -qq && apt-get install -y -qq ufw >/dev/null)
+          ufw allow 22/tcp
+          ufw allow 80/tcp
+          ufw allow 443/tcp
+          ufw allow from ${{ secrets.DEPLOY_HOST }} to any port 587 proto tcp comment 'mail submission from primary'
+          ufw deny 25/tcp comment 'no public inbound smtp -- this box only relays outbound for our own app'
+          ufw --force enable
+          ufw reload
+          ufw status verbose
+          SCRIPT
+          scp -i ~/.ssh/id_ed25519 /tmp/mail-ufw.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/mail-ufw.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            docker run --rm --pid=host --network=host --privileged -v /:/host -v /tmp/mail-ufw.sh:/host/tmp/mail-ufw.sh alpine chroot /host /bin/sh /tmp/mail-ufw.sh
+          ' < /dev/null
+
+      - name: Extract the relay's cert PEM and base64-encode it
+        run: |
+          awk '/-----BEGIN CERTIFICATE-----/{flag=1} flag; /-----END CERTIFICATE-----/{flag=0}' /tmp/mail-setup-output.txt > /tmp/mail-cert.pem
+          test -s /tmp/mail-cert.pem
+          base64 -w0 /tmp/mail-cert.pem > /tmp/mail-cert.b64
+          echo "cert length: $(wc -c < /tmp/mail-cert.b64)"
+
+      - name: Wire the primary's .env to use the relay, and restart the api container
+        run: |
+          cat > /tmp/mail-env-update.sh <<'SCRIPT'
+          set -e
+          cd /opt/gul
+          set_kv() {
+            key="$1"; val="$2"
+            if grep -q "^${key}=" .env; then
+              sed -i "s#^${key}=.*#${key}=\"${val}\"#" .env
+            else
+              echo "${key}=\"${val}\"" >> .env
+            fi
+          }
+          set_kv MAIL_HOST '__MAIL_HOST_PLACEHOLDER__'
+          set_kv MAIL_PORT '587'
+          set_kv MAIL_SECURE 'false'
+          set_kv MAIL_USER 'noreply'
+          set_kv MAIL_PASS '__MAIL_PASS_PLACEHOLDER__'
+          set_kv MAIL_FROM 'Gulyaly <noreply@gulyaly.pro>'
+          set_kv MAIL_TLS_CA_BASE64 '__MAIL_CA_PLACEHOLDER__'
+          set_kv MAIL_TLS_SERVERNAME 'mail.gulyaly.pro'
+          docker compose up -d --force-recreate api
+          SCRIPT
+          CA_B64=$(cat /tmp/mail-cert.b64)
+          sed -i "s#__MAIL_HOST_PLACEHOLDER__#${{ secrets.SECONDARY_HOST }}#" /tmp/mail-env-update.sh
+          sed -i "s#__MAIL_PASS_PLACEHOLDER__#$MAIL_PASS#" /tmp/mail-env-update.sh
+          sed -i "s#__MAIL_CA_PLACEHOLDER__#$CA_B64#" /tmp/mail-env-update.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/mail-env-update.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/mail-env-update.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'bash /tmp/mail-env-update.sh && rm -f /tmp/mail-env-update.sh' < /dev/null
+          rm -f /tmp/mail-env-update.sh
+
+      - name: Health-check the api after the .env change
+        run: |
+          for i in $(seq 1 15); do
+            curl -fsS "https://api.gulyaly.pro/api/health/ready" > /dev/null && echo healthy && break
+            sleep 2
+          done
+
+      - name: Clean up local temp files
+        if: always()
+        run: rm -f /tmp/mail-setup.sh /tmp/mail-ufw.sh /tmp/mail-setup-output.txt /tmp/mail-cert.pem /tmp/mail-cert.b64

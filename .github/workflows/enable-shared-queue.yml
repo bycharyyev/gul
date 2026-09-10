@@ -1,0 +1,109 @@
+name: Enable shared queue (WRITES)
+
+# Prepares both machines to share one Redis: generates the password, writes it into each .env,
+# tells the secondary where the primary is, and opens the port to the secondary alone.
+#
+# Run this BEFORE pushing the compose change that switches them over. Nothing here alters running
+# behaviour -- the two variables it writes are unread until the compose files reference them -- so
+# the order is: this workflow, then the push. Reversed, redis would start demanding a password the
+# API is not yet sending, and neither node could queue anything until the second half landed.
+#
+# The password is generated in-run and written straight to the two .env files rather than being
+# minted as a GitHub secret: one fewer standing credential, and it is only ever needed by these
+# two hosts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type SHARE to proceed
+        required: true
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the confirmation
+        run: |
+          [ "${{ inputs.confirm }}" = "SHARE" ] || { echo "not confirmed" >&2; exit 1; }
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Generate the password and place it on both hosts
+        env:
+          PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SECONDARY: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -e
+          PASS=$(openssl rand -hex 24)
+
+          # Written via a script carrying a placeholder that is substituted locally, then scp'd --
+          # never interpolated through ssh's own quoting. Every nested-quoting bug in this repo's
+          # history came from trying to pass a secret through several shells at once. '#' as the
+          # sed delimiter because '/' shows up in generated material.
+          cat > /tmp/set-env.sh <<'SCRIPT'
+          #!/bin/sh
+          set -e
+          ENV_FILE="$1"
+          shift
+          for pair in "$@"; do
+            key=${pair%%=*}
+            # Replace the line if the key is already there, append it if not. Rewriting the file
+            # through a temp and mv keeps it whole if the box dies mid-write.
+            if grep -q "^${key}=" "$ENV_FILE"; then
+              grep -v "^${key}=" "$ENV_FILE" > "$ENV_FILE.tmp"
+            else
+              cp "$ENV_FILE" "$ENV_FILE.tmp"
+            fi
+            printf '%s\n' "$pair" >> "$ENV_FILE.tmp"
+            mv "$ENV_FILE.tmp" "$ENV_FILE"
+          done
+          # Report names only, never values.
+          echo "keys now present:"
+          grep -oE '^(REDIS_PASSWORD|PRIMARY_REDIS_HOST|REDIS_URL)=' "$ENV_FILE" | sort -u
+          SCRIPT
+
+          for target in "$PRIMARY" "$SECONDARY"; do
+            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes /tmp/set-env.sh "$target:/tmp/set-env.sh"
+          done
+
+          echo "--- primary ---"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$PRIMARY" \
+            "sh /tmp/set-env.sh /opt/gul/.env 'REDIS_PASSWORD=$PASS' && rm -f /tmp/set-env.sh"
+
+          echo "--- secondary ---"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$SECONDARY" \
+            "sh /tmp/set-env.sh /opt/gul-secondary/.env 'REDIS_PASSWORD=$PASS' 'PRIMARY_REDIS_HOST=$PRIMARY_IP' && rm -f /tmp/set-env.sh"
+
+          rm -f /tmp/set-env.sh
+
+      - name: Open the port to the secondary, and to nobody else
+        env:
+          PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          set -e
+          # --network=host is not optional. --pid=host alone leaves the container in its own
+          # network namespace, where ufw edits the throwaway container's firewall and report
+          # success having changed nothing on the host. This is documented in CLAUDE.md and it has
+          # already caught a script in this repo out once.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$PRIMARY" "
+            echo '#!/bin/sh' > /tmp/ufw-redis.sh
+            echo 'set -e' >> /tmp/ufw-redis.sh
+            echo 'ufw allow from $SECONDARY_IP to any port 6379 proto tcp comment \"redis: shared queue from secondary\"' >> /tmp/ufw-redis.sh
+            echo 'ufw status numbered | grep 6379 || true' >> /tmp/ufw-redis.sh
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/ufw-redis.sh
+            rm -f /tmp/ufw-redis.sh
+          "
+
+      - name: What happens next
+        run: |
+          echo "Both .env files now carry the password; the secondary also knows the primary's address."
+          echo "Nothing reads them yet. Push the compose change to switch both nodes over in one go."

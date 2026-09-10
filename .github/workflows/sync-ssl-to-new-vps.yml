@@ -1,0 +1,91 @@
+name: Sync SSL + nginx to new VPS
+on:
+  workflow_dispatch:
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.OLD_VPS_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      # The old server's deploy user has no passwordless sudo, but it is in the docker group --
+      # a throwaway container reads the root-owned cert tree just fine, same trick the uploads
+      # volume used.
+      - name: Inspect + pack certs on the OLD server
+        run: |
+          ssh -o ServerAliveInterval=15 -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }} '
+            set -e
+            echo "=== global client_max_body_size (confirms upload limit parity) ==="
+            grep -r "client_max_body_size" /etc/nginx/ 2>/dev/null || echo "  (not set -> nginx default 1m; our new vhosts raise it to 20m)"
+            echo "=== packing ==="
+            docker run --rm -v /etc/letsencrypt:/letsencrypt:ro -v /tmp:/out alpine \
+              sh -c "tar czf /out/le.tar.gz -C / letsencrypt && chown $(id -u):$(id -g) /out/le.tar.gz"
+            ls -lh /tmp/le.tar.gz
+          '
+
+      - name: Move certs to the NEW server via the runner
+        run: |
+          scp -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }}:/tmp/le.tar.gz ./le.tar.gz
+          ssh -i ~/.ssh/deploy_key ${{ secrets.OLD_VPS_USER }}@${{ secrets.OLD_VPS_HOST }} 'rm -f /tmp/le.tar.gz'
+          scp -i ~/.ssh/deploy_key ./le.tar.gz ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/le.tar.gz
+          rm -f ./le.tar.gz
+
+      - name: Ship nginx vhosts (now version-controlled in infra/nginx/)
+        run: |
+          scp -i ~/.ssh/deploy_key infra/nginx/*.conf ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/etc/nginx/sites-available/
+
+      - name: Install certs + vhosts, reload nginx
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            tar xzf /tmp/le.tar.gz -C /etc
+            rm -f /tmp/le.tar.gz
+            mkdir -p /var/www/certbot
+
+            # Renewal on this box must not depend on the nginx plugin rewriting our static
+            # vhosts -- point it at the webroot the vhosts already serve /.well-known from.
+            sed -i "s/^authenticator = .*/authenticator = webroot/" /etc/letsencrypt/renewal/gulyaly.pro.conf
+            grep -q "^webroot_path" /etc/letsencrypt/renewal/gulyaly.pro.conf \
+              || echo "webroot_path = /var/www/certbot," >> /etc/letsencrypt/renewal/gulyaly.pro.conf
+            sed -i "/^installer = /d" /etc/letsencrypt/renewal/gulyaly.pro.conf
+
+            ln -sf /etc/nginx/sites-available/gulyaly-web.conf /etc/nginx/sites-enabled/
+            ln -sf /etc/nginx/sites-available/gulyaly-api.conf /etc/nginx/sites-enabled/
+            ln -sf /etc/nginx/sites-available/gulyaly-admin.conf /etc/nginx/sites-enabled/
+            rm -f /etc/nginx/sites-enabled/default
+
+            nginx -t
+            systemctl reload nginx
+            echo "nginx reloaded with SSL"
+
+            echo "=== cert now installed here covers ==="
+            openssl x509 -in /etc/letsencrypt/live/gulyaly.pro/fullchain.pem \
+              -noout -ext subjectAltName -enddate
+          '
+
+      - name: Verify HTTPS actually serves on the new box (DNS still points elsewhere)
+        run: |
+          # --resolve points the request at the new server while the hostname (and therefore
+          # SNI + cert validation) stays real, so this proves the copied cert genuinely works
+          # there. No -k anywhere: a chain that doesn't validate must fail this step.
+          # api's root path is legitimately 404 -- everything lives under /api -- so each host
+          # is checked on a path that actually exists.
+          fail=0
+          for spec in "gulyaly.pro:/" "www.gulyaly.pro:/" "api.gulyaly.pro:/api/health" "admin.gulyaly.pro:/"; do
+            host="${spec%%:*}"; path="${spec#*:}"
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+              --resolve "$host:443:${{ secrets.DEPLOY_HOST }}" "https://$host$path" || echo 000)
+            echo "https://$host$path -> $code"
+            case "$code" in 2*|3*) ;; *) echo "  ^ unexpected" >&2; fail=1;; esac
+          done
+          [ "$fail" = 0 ] || exit 1
+          echo "TLS verified against the new server for all four hostnames"

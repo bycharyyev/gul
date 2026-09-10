@@ -1,0 +1,80 @@
+name: gulyaly_mobile
+description: Gulyaly customer app — top-ups and gallery orders.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State. Riverpod's code generation is skipped deliberately -- the generated providers add a
+  # build step for no benefit at this size, and hand-written notifiers stay readable.
+  flutter_riverpod: ^2.6.1
+
+  # HTTP. Chosen over package:http for interceptors, which is what makes one central auth and
+  # error layer possible instead of scattering token handling across call sites.
+  dio: ^5.7.0
+
+  # Routing with typed redirects, so the auth guard lives in one place.
+  go_router: ^14.6.2
+
+  # Tokens go to Keychain / EncryptedSharedPreferences, never to SharedPreferences.
+  flutter_secure_storage: ^9.2.2
+
+  # Value semantics for models and states: == and copyWith without hand-writing them, which is
+  # what makes Riverpod rebuild correctly and tests compare cleanly.
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Disk-backed image cache. Image.network re-downloads on every rebuild and keeps nothing between
+  # launches -- unacceptable for a product grid on mobile data.
+  cached_network_image: ^3.4.1
+
+  # The OS share sheet. A referral code exists to be sent to someone; copy-to-clipboard is the
+  # fallback, not the feature.
+  share_plus: ^10.1.4
+
+  # Legal pages are rendered into a WebView from API content, with every navigation blocked --
+  # a reader, deliberately not a browser. See profile/presentation/legal_page_screen.dart.
+  webview_flutter: ^4.10.0
+
+  # Opens a social profile in the real app or browser. An embedded webview is the wrong place for
+  # Instagram or TikTok -- both detect it and refuse to log a person in.
+  url_launcher: ^6.3.1
+
+  # Native playback for the full-screen commerce feed. The feed only initializes the one visible
+  # video; photos and text posts pay no player cost.
+  video_player: ^2.9.2
+
+  # Choosing an avatar from the gallery or camera.
+  image_picker: ^1.1.2
+
+  # Plain key/value on disk, for the one thing that is neither a secret nor a request:
+  # the copy the welcome screen was last served. Deliberately not flutter_secure_storage
+  # -- that is the keystore, for tokens, and encrypting a headline is a category error.
+  shared_preferences: ^2.3.3
+
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.9.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  # No `generate: true`: app copy lives in lib/core/l10n/strings.dart rather than ARB files.
+  # gen-l10n would add a build step and generated sources for a few dozen strings, and it cannot
+  # express `tkm` cleanly anyway -- see the note in that file.
+
+  assets:
+    - assets/brand/

@@ -1,0 +1,82 @@
+name: Diagnose VPS
+on:
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+      - name: Clean up leftover temp file from a previous rotation run (contained plaintext secrets)
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            rm -f /tmp/gate.service.work
+            echo "cleaned"
+          ' < /dev/null
+      - name: Read-only capacity diagnostics
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            echo "=== CPU ==="
+            nproc
+            lscpu | grep -E "Model name|CPU\(s\)|MHz|Socket"
+            echo
+            echo "=== RAM ==="
+            free -h
+            echo
+            echo "=== DISK ==="
+            df -h /
+            echo
+            echo "=== LOAD ==="
+            uptime
+            echo
+            echo "=== DOCKER STATS (live snapshot) ==="
+            docker stats --no-stream
+            echo
+            echo "=== PER-CONTAINER MEMORY LIMITS ==="
+            docker inspect --format "{{.Name}}: Memory={{.HostConfig.Memory}} CPUs={{.HostConfig.NanoCpus}}" $(docker ps -q)
+            echo
+            echo "=== NGINX WORKERS ==="
+            grep -E "worker_processes|worker_connections|worker_rlimit_nofile" /etc/nginx/nginx.conf
+            echo
+            echo "=== POSTGRES MAX CONNECTIONS ==="
+            cd /opt/gul && docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\" -c \"SHOW max_connections;\""
+            echo
+            echo "=== POSTGRES CURRENT CONNECTIONS ==="
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\" -c \"SELECT count(*) FROM pg_stat_activity;\""
+            echo
+            echo "=== ROOT AUTHORIZED_KEYS (public key material only, safe to log) ==="
+            cat ~/.ssh/authorized_keys
+            echo
+            echo "=== DOCKER VOLUMES ==="
+            docker volume ls
+            echo
+            echo "=== COMPOSE PROJECT NAME (dirname compose reads by default) ==="
+            cd /opt/gul && pwd && docker compose config --format json | head -c 200
+            echo
+            echo "=== .env KEYS ONLY (no values) ==="
+            grep -oE "^[A-Z_]+=" /opt/gul/.env
+            echo
+            echo "=== NGINX VHOSTS ==="
+            for f in /etc/nginx/sites-enabled/*; do echo "--- $f ---"; cat "$f"; done
+            echo
+            echo "=== netdata-check service on 8899 ==="
+            ss -tlnp 2>/dev/null | grep 8899 || echo "  nothing listening on 8899"
+            systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null \
+              | grep -viE "systemd|dbus|cron|ssh|nginx|docker|containerd|network|resolved|logind|udev|polkit|rsyslog|snapd|unattended|multipath|irqbalance|getty|accounts|chrony|qemu|serial|user@|packagekit|ufw"
+            echo "=== netdata itself ==="
+            systemctl is-active netdata 2>&1
+            netdata -v 2>&1 || true
+            echo
+            echo "=== netdata-gate.service unit (secrets redacted) ==="
+            systemctl cat netdata-gate.service 2>&1 | sed -E "s/^(Environment=GATE_(PASS|SECRET))=.*/\1=<redacted>/"
+            echo
+            echo "=== fail2ban jails ==="
+            fail2ban-client status 2>&1
+            echo
+            echo "=== ufw status (deploy has no sudo, so via docker chroot) ==="
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "ufw status verbose" 2>&1
+          '

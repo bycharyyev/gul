@@ -1,0 +1,116 @@
+name: FAILOVER to secondary VPS
+
+# Manual, deliberate emergency action -- run this only when the primary VPS is actually down
+# (not just its app tier -- if only primary's containers died, the secondary is *already* serving
+# correctly since enable-active-active.yml made it a normal, continuously-running node pointed at
+# primary's database over the network; this workflow is for when primary's database itself is
+# gone too). Promotes the standby replica to a real read-write primary (irreversible: it stops
+# following the old primary) and repoints the secondary's already-running app containers from
+# primary's (now-dead) database to its own newly-writable local one. Does NOT touch DNS -- that
+# stays a manual step on purpose (see docs/architecture/HIGH_AVAILABILITY.md: automatic DNS
+# failover was rejected as a split-brain risk with only two nodes, and reg.ru's DNS API needs a
+# whitelisted static IP that hasn't been set up).
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "FAILOVER" to confirm -- this promotes the replica and cannot be undone'
+        required: true
+      fence_confirm:
+        description: 'Type "PRIMARY_POWERED_OFF" after fencing the primary in the VPS control panel'
+        required: true
+
+jobs:
+  failover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to proceed without explicit confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "FAILOVER" ]; then
+            echo "Confirmation text did not match 'FAILOVER' -- aborting, nothing was touched." >&2
+            exit 1
+          fi
+          if [ "${{ inputs.fence_confirm }}" != "PRIMARY_POWERED_OFF" ]; then
+            echo "Primary fencing was not confirmed -- aborting to prevent split-brain." >&2
+            exit 1
+          fi
+
+      - name: Verify the fenced primary is unreachable
+        run: |
+          if timeout 5 bash -c '</dev/tcp/${{ secrets.DEPLOY_HOST }}/22' 2>/dev/null; then
+            echo "Primary still accepts SSH connections. Power it off/fence it before promotion." >&2
+            exit 1
+          fi
+          echo "Primary SSH is unreachable; operator also confirmed provider-level fencing."
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
+          }
+
+      - name: Verify replica state and promote it to a writable primary
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            # -U gul_prod: pg-standby has no OS/role named "postgres" -- its data dir is a
+            # pg_basebackup copy of primary, which only has the roles primary actually has
+            # (superuser is $POSTGRES_USER from primary'"'"'s .env, not the image default "postgres").
+            set -eu
+            IN_RECOVERY=$(docker exec -u postgres pg-standby psql -U gul_prod -Atqc "SELECT pg_is_in_recovery()")
+            [ "$IN_RECOVERY" = "t" ] || { echo "standby is not in recovery; refusing promotion" >&2; exit 1; }
+            LAG_BYTES=$(docker exec -u postgres pg-standby psql -U gul_prod -Atqc "SELECT COALESCE(pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()), -1)::bigint")
+            case "$LAG_BYTES" in (*[!0-9]*|'') echo "replication lag is unavailable; refusing promotion" >&2; exit 1;; esac
+            [ "$LAG_BYTES" -le 16777216 ] || { echo "replica is $LAG_BYTES bytes behind (>16 MiB RPO gate); refusing promotion" >&2; exit 1; }
+            echo "replica lag gate passed: $LAG_BYTES bytes"
+            docker exec -u postgres pg-standby psql -v ON_ERROR_STOP=1 -U gul_prod -c "SELECT pg_promote(wait_seconds => 60);"
+            docker exec -u postgres pg-standby psql -U gul_prod -Atqc "SELECT NOT pg_is_in_recovery()" | grep -qx t
+          ' < /dev/null
+
+      - name: Repoint the app tier to the promoted DB and local emergency queue
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            cd /opt/gul-secondary
+            sed -i -E "s#@[0-9.]+:5432#@postgres:5432#" .env
+            if grep -q "^PRIMARY_REDIS_HOST=" .env; then
+              sed -i "s/^PRIMARY_REDIS_HOST=.*/PRIMARY_REDIS_HOST=redis/" .env
+            else
+              echo "PRIMARY_REDIS_HOST=redis" >> .env
+            fi
+            docker compose up -d redis
+            for i in $(seq 1 20); do
+              REDIS_ID=$(docker compose ps -q redis)
+              [ -n "$REDIS_ID" ] && [ "$(docker inspect --format "{{.State.Health.Status}}" "$REDIS_ID")" = "healthy" ] && break
+              [ "$i" -eq 20 ] && { echo "local emergency Redis did not become ready" >&2; exit 1; }
+              sleep 1
+            done
+            docker compose up -d --force-recreate api
+          ' < /dev/null
+
+      - name: Wait for the API to become healthy against its own local (promoted) database
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            # 40 attempts / 2s = up to 80s -- the first live test (2026-08-28) timed out at the
+            # old 30s window: pg_promote() itself returns immediately, but the container needs a
+            # few more seconds to finish settling into a fully-accepting-connections primary state
+            # (confirmed healthy manually ~90s after promote in that run).
+            for i in $(seq 1 40); do
+              curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
+              sleep 2
+            done
+            echo "api did not become healthy in time -- check: cd /opt/gul-secondary && docker compose logs api" >&2
+            exit 1
+          ' < /dev/null
+
+      - name: What to do next (manual, on purpose)
+        run: |
+          echo "Secondary is now writing to its own (just-promoted) database instead of primary's."
+          echo "The API is also using secondary's local emergency Redis; durable sweepers will rebuild pending work."
+          echo "If a second A record for gulyaly.pro already points here, most clients have already"
+          echo "failed over on their own. Otherwise, do this by hand: point/add the gulyaly.pro DNS"
+          echo "A record at ${{ secrets.SECONDARY_HOST }}. TTL is already low."

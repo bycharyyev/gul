@@ -1,0 +1,118 @@
+# Production compose file for the VPS. CI builds api/web/admin images, pushes them to GHCR
+# tagged by commit SHA, and the deploy step writes that SHA into IMAGE_TAG in /opt/gul/.env
+# before `docker compose pull && up -d` (see .github/workflows/deploy.yml) — immutable tags mean
+# a previous deploy is always addressable for rollback, which the deploy step does automatically
+# if the new tag fails its health check. Real secrets live only in /opt/gul/.env on the server
+# (never committed).
+#
+# Every service below gets the same log cap: 10MB per file, 5 files kept (50MB/service ceiling).
+# Added 2026-08-28 after primary hit 98% disk — the actual cause that night was accumulated
+# unused docker images (see deploy.yml's prune step), not container logs, but there was no cap on
+# log growth either (confirmed: no /etc/docker/daemon.json existed anywhere, so the json-file
+# driver's default is unbounded). Doing it here instead of a host-level daemon.json on purpose:
+# this applies on the next normal `docker compose up -d` a deploy already does, with no separate
+# docker-daemon restart (and therefore no extra container-restart event) needed to take effect.
+x-logging: &default-logging
+  # journald instead of json-file: makes container logs show up in Netdata's built-in systemd
+  # journal viewer alongside Postfix/nginx/OpenDKIM logs, no separate log-shipping tool needed.
+  # Retention is bounded by journald.conf's SystemMaxUse (set via setup-netdata-secondary-streaming.yml),
+  # not per-container here -- journald has no per-container size cap option.
+  driver: journald
+  options:
+    tag: "{{.Name}}"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Needed so the secondary VPS's standby replica can stream WAL from here. Not open to the
+    # internet at large -- the host firewall (ufw) only allows this port from the secondary's
+    # own IP, everything else is dropped before it ever reaches Postgres's own auth.
+    ports:
+      - "5432:5432"
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file: .env
+    # A password, because this port is no longer only on the docker network. Redis ships with no
+    # authentication and answers whoever connects, so publishing it unprotected would hand anyone
+    # who reached the port the whole job queue and the ability to empty it.
+    #
+    # appendonly: the queue is now shared, so a restart losing whatever was in flight would strand
+    # orders on both nodes rather than one. The stuck-order sweeper would find them, but taking
+    # ten minutes to recover something that did not need losing is not a good trade for a file.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Published for the same reason as postgres above, and protected the same way: ufw allows this
+    # port from the secondary's IP alone. Both nodes need one queue -- with a queue each, an order
+    # accepted on one node is invisible to the other's worker and to the admin console's view of
+    # the backlog, and the alert dedup that already assumes a shared Redis fires twice.
+    ports:
+      - "6379:6379"
+    logging: *default-logging
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/gul-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Set here rather than in .env so that the password arriving and the client starting to use
+      # it are the same `docker compose up`. Split across the two, there is a window where redis
+      # demands a password the API is not sending, or the reverse -- and in that window nothing
+      # can be queued on either node.
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      # Matches UPLOADS_DIR's default (./uploads resolved against the api container's
+      # cwd, /repo/apps/api) — set UPLOADS_DIR in /opt/gul/.env only if that ever changes.
+      - uploads-data:/repo/apps/api/uploads
+    logging: *default-logging
+
+  web:
+    image: ghcr.io/${GHCR_OWNER}/gul-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"
+    logging: *default-logging
+
+  admin:
+    image: ghcr.io/${GHCR_OWNER}/gul-admin:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8081:80"
+    logging: *default-logging
+
+volumes:
+  postgres-data:
+  redis-data:
+  uploads-data:

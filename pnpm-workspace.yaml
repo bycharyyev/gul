@@ -1,0 +1,24 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+overrides:
+  multer: ">=2.2.0"
+  lodash: ">=4.17.24"
+  postcss: ">=8.5.23"
+  js-yaml: ">=4.3.1"
+  qs: ">=6.15.2"
+  file-type: ">=21.3.2"
+  deepmerge-ts: ">=8.0.0"
+  sharp: ">=0.35.0"
+  body-parser: ">=1.20.6"
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  argon2: true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true

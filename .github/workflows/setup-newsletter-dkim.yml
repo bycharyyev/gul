@@ -1,0 +1,76 @@
+name: Set up DKIM for newsletter.gulyaly.pro (separate selector, doesn't touch the existing one)
+
+# Adds a second DKIM key/selector for the marketing-mail domain, additive only:
+# - Generates a new 2048-bit keypair for newsletter.gulyaly.pro, selector "news2026"
+# - Appends one line each to the EXISTING /etc/opendkim/KeyTable and /etc/opendkim/SigningTable
+#   (the gulyaly.pro/"mail" selector entries already there are untouched)
+# - Reloads opendkim to pick up the new tables (does not restart Postfix, does not affect
+#   in-flight transactional mail signing for gulyaly.pro)
+# opendkim.conf itself needs no change -- KeyTable/SigningTable already support multiple
+# domains; the top-level Domain/Selector/KeyFile directives there are only opendkim's
+# single-domain fallback, superseded by table lookups whenever an entry matches.
+#
+# Does NOT touch DNS -- the generated public key is printed at the end as the exact TXT record
+# to add by hand via the Timeweb panel, per the explicit ask not to automate that part here.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dkim:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Generate keypair, append to KeyTable/SigningTable, reload opendkim
+        run: |
+          cat > /tmp/newsletter-dkim.sh <<'SCRIPT'
+          set -e
+          mkdir -p /etc/opendkim/keys/newsletter.gulyaly.pro
+          cd /etc/opendkim/keys/newsletter.gulyaly.pro
+          if [ ! -f news2026.private ]; then
+            opendkim-genkey -b 2048 -d newsletter.gulyaly.pro -s news2026 -D /etc/opendkim/keys/newsletter.gulyaly.pro
+          fi
+          chown -R opendkim:opendkim /etc/opendkim/keys/newsletter.gulyaly.pro
+          chmod 600 news2026.private
+
+          KEYTABLE_LINE="news2026._domainkey.newsletter.gulyaly.pro newsletter.gulyaly.pro:news2026:/etc/opendkim/keys/newsletter.gulyaly.pro/news2026.private"
+          SIGNINGTABLE_LINE="*@newsletter.gulyaly.pro news2026._domainkey.newsletter.gulyaly.pro"
+
+          grep -qxF "$KEYTABLE_LINE" /etc/opendkim/KeyTable || echo "$KEYTABLE_LINE" >> /etc/opendkim/KeyTable
+          grep -qxF "$SIGNINGTABLE_LINE" /etc/opendkim/SigningTable || echo "$SIGNINGTABLE_LINE" >> /etc/opendkim/SigningTable
+
+          echo "--- KeyTable now ---"
+          cat /etc/opendkim/KeyTable
+          echo "--- SigningTable now ---"
+          cat /etc/opendkim/SigningTable
+
+          systemctl reload-or-restart opendkim
+          sleep 1
+          systemctl is-active opendkim
+
+          echo "--- DKIM PUBLIC KEY DNS TXT RECORD for newsletter.gulyaly.pro (public, safe to print) ---"
+          cat /etc/opendkim/keys/newsletter.gulyaly.pro/news2026.txt
+          SCRIPT
+          scp -i ~/.ssh/id_ed25519 /tmp/newsletter-dkim.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/newsletter-dkim.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/newsletter-dkim.sh:/host/tmp/newsletter-dkim.sh alpine chroot /host /bin/bash /tmp/newsletter-dkim.sh
+            status=$?
+            rm -f /tmp/newsletter-dkim.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/newsletter-dkim.sh
+
+      - name: Confirm existing gulyaly.pro/mail signing is untouched
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "
+              echo \"mail.private still present: \$(test -f /etc/opendkim/keys/gulyaly.pro/mail.private && echo yes || echo NO)\"
+              grep \"gulyaly.pro\" /etc/opendkim/SigningTable
+            "
+          ' < /dev/null

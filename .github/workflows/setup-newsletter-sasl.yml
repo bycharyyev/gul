@@ -1,0 +1,57 @@
+name: Create newsletter SASL account (step 3a -- purely additive, no main.cf/master.cf change)
+
+# Creates one new sasldb2 entry, nothing else. Doesn't touch main.cf, master.cf, or restart
+# postfix -- saslpasswd2 just writes to sasldb2 directly, no reload needed for a new account to
+# become usable (SASL auth reads the db live). Deliberately split from sender_login_maps +
+# reject_sender_login_mismatch (that's step 3c, later, only after the app-side transporter for
+# this account is confirmed working in production).
+
+on:
+  workflow_dispatch:
+    inputs:
+      password:
+        description: 'Password for the newsletter@mail.gulyaly.pro SASL account'
+        required: true
+
+jobs:
+  create-account:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Mask the password in logs
+        run: echo "::add-mask::${{ inputs.password }}"
+
+      - name: Create the account
+        env:
+          NEWSLETTER_PASS: ${{ inputs.password }}
+        run: |
+          cat > /tmp/newsletter-sasl.sh <<'SCRIPT'
+          set -e
+          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.pro newsletter
+          chgrp sasl /etc/sasldb2
+          chmod 640 /etc/sasldb2
+          echo "--- accounts now (names only) ---"
+          sasldblistusers2
+          SCRIPT
+          sed -i "s#__PASS_PLACEHOLDER__#$NEWSLETTER_PASS#" /tmp/newsletter-sasl.sh
+          scp -i ~/.ssh/id_ed25519 /tmp/newsletter-sasl.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/newsletter-sasl.sh
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/newsletter-sasl.sh:/host/tmp/newsletter-sasl.sh alpine chroot /host /bin/bash /tmp/newsletter-sasl.sh
+            status=$?
+            rm -f /tmp/newsletter-sasl.sh
+            exit $status
+          ' < /dev/null
+          rm -f /tmp/newsletter-sasl.sh
+
+      - name: Confirm postfix/opendkim untouched (no restart happened)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            systemctl show postfix --property=ActiveEnterTimestamp
+            systemctl is-active postfix opendkim
+          ' < /dev/null

@@ -1,0 +1,81 @@
+name: Enable active/active app tier on secondary
+
+# Decouples app HA from database HA: the secondary's api/web/admin run continuously (not just
+# "prepared"), connecting to the PRIMARY's Postgres over the network (same replication IP
+# allowance, extended to the real app user/database, not just the `replicator` role). The
+# database itself stays single-primary/standby -- only the app tier becomes genuinely
+# active/active. See docs/architecture/HIGH_AVAILABILITY.md for the full reasoning.
+#
+# Safe to re-run: every step is idempotent (checks before appending, `up -d` is a no-op for
+# anything already in the desired state).
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  primary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Allow the secondary to connect as the real app DB user, not just for replication
+        env:
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "SECONDARY_IP='$SECONDARY_IP' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul
+            USER_LINE="host all all $SECONDARY_IP/32 scram-sha-256"
+            docker compose exec -T postgres sh -c "grep -qxF \"$USER_LINE\" /var/lib/postgresql/data/pg_hba.conf || echo \"$USER_LINE\" >> /var/lib/postgresql/data/pg_hba.conf" < /dev/null
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"SELECT pg_reload_conf();\"" < /dev/null
+          REMOTE
+
+  secondary:
+    needs: primary
+    runs-on: ubuntu-latest
+    # Needed for the `docker login ghcr.io` below -- job permissions aren't inherited across jobs.
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Point secondary's .env at primary's DB over the network, then start the app tier
+        env:
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
+            "PRIMARY_IP='$PRIMARY_IP' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul-secondary
+            # DATABASE_URL's host segment matches the primary's docker-compose service name
+            # ("postgres") today -- swap it for the primary's real IP so this node's app talks to
+            # the one authoritative (writable) database over the network instead of its own
+            # local, read-only standby. Idempotent: a rerun with the same IP is a no-op.
+            sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" .env
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker compose pull
+            docker compose up -d
+          REMOTE
+
+      - name: Wait for the secondary's own API to become healthy against the remote DB
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            for i in $(seq 1 15); do
+              curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
+              sleep 2
+            done
+            echo "secondary api did not become healthy in time -- check: cd /opt/gul-secondary && docker compose logs api" >&2
+            exit 1
+          ' < /dev/null
