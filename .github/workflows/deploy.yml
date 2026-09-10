@@ -1,5 +1,11 @@
 name: Deploy
 on:
+  # A manual button, because until now the only way to ship was to push code into one of the
+  # paths below. That meant a deploy that failed for a reason unrelated to the release -- a
+  # runner outage, a registry blip, an account that could not start jobs -- could only be retried
+  # by inventing a commit. Rerunning the failed run is not the same thing: it replays the
+  # original SHA, which is wrong as soon as a fix has landed.
+  workflow_dispatch:
   push:
     branches: [main]
     # Without this, every push -- including a new one-off ops workflow or an infra/nginx tweak
