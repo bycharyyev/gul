@@ -34,6 +34,7 @@ import '../features/topup/data/topup_repository.dart';
 import '../features/topup/domain/topup_options.dart';
 import '../features/topup/presentation/topup_controller.dart';
 import '../features/chat/data/chat_repository.dart';
+import '../features/seller/data/seller_repository.dart';
 import '../features/chat/domain/chat_models.dart';
 import '../features/social/data/social_feed_repository.dart';
 import '../features/social/presentation/social_feed_controller.dart';
@@ -206,6 +207,10 @@ final socialFeedRepositoryProvider = Provider<SocialFeedRepository>(
 );
 
 /// Feed is session-bound: likes/saves and personal ranking must never outlive sign-out.
+final sellerRepositoryProvider = Provider<SellerRepository>(
+  (ref) => SellerRepository(ref.watch(apiClientProvider)),
+);
+
 final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) => ChatRepository(ref.watch(apiClientProvider)),
 );

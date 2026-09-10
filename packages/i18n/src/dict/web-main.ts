@@ -67,6 +67,8 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.subtitle":
       "Заведите свой магазин на Gulyaly — своя витрина по адресу gulyaly.com/@username, товары с артикулами, чат с покупателями и уведомления о заказах в Telegram.",
     "web.becomeSeller.phoneLabel": "Телефон (для входа)",
+    "web.becomeSeller.signedInNotice":
+      "Вы вошли в аккаунт — телефон, почта и пароль берутся из него. Заполните только сведения о магазине.",
     "web.becomeSeller.emailLabel": "Email",
     "web.becomeSeller.emailHint": "На него придёт решение по заявке — это единственный способ с вами связаться до одобрения.",
     "web.becomeSeller.passwordLabel": "Пароль",
@@ -239,6 +241,8 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.subtitle":
       "Set up your own shop on Gulyaly — your own storefront at gulyaly.com/@username, products with SKUs, chat with customers, and Telegram order notifications.",
     "web.becomeSeller.phoneLabel": "Phone (for sign-in)",
+    "web.becomeSeller.signedInNotice":
+      "You are signed in — phone, email and password come from your account. Fill in the shop details only.",
     "web.becomeSeller.emailLabel": "Email",
     "web.becomeSeller.emailHint": "The decision on your application comes here — it is the only way to reach you before approval.",
     "web.becomeSeller.passwordLabel": "Password",
@@ -401,6 +405,8 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.subtitle":
       "Gulyaly-da öz dükanyňyzy açyň — gulyaly.com/@username salgysynda öz witriniňiz, artikully harytlar, müşderiler bilen söhbetdeşlik we Telegram-da sargytlar barada bildirişler.",
     "web.becomeSeller.phoneLabel": "Telefon (girmek üçin)",
+    "web.becomeSeller.signedInNotice":
+      "Siz hasabyňyza girdiňiz — telefon, poçta we parol şondan alynýar. Diňe dükan maglumatlaryny dolduryň.",
     "web.becomeSeller.emailLabel": "Email",
     "web.becomeSeller.emailHint": "Arza boýunça karar şu salga geler — tassyklanýança siziň bilen habarlaşmagyň ýeke-täk ýoly.",
     "web.becomeSeller.passwordLabel": "Parol",

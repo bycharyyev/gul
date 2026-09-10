@@ -218,6 +218,18 @@ class Strings {
       'chat.open': 'Открыть',
       'chat.noChannels': 'Каналов пока нет',
       'chat.readOnly': 'В канале пишет только автор',
+      'creator.title': 'Открыть магазин',
+      'creator.intro':
+          'Заявку рассмотрит администратор. Телефон и пароль указывать не нужно — они уже есть в вашем аккаунте.',
+      'creator.shopName': 'Название магазина',
+      'creator.handle': 'Адрес магазина',
+      'creator.handleHint':
+          'Латиницей, строчными: gulbahar. По нему клиенты найдут вас.',
+      'creator.description': 'О магазине',
+      'creator.submit': 'Отправить заявку',
+      'creator.sentTitle': 'Заявка отправлена',
+      'creator.sentBody':
+          'Мы напишем, когда администратор её рассмотрит. После одобрения магазин появится в вашем профиле.',
       'chat.newGroup': 'Новая группа',
       'chat.groupName': 'Название группы',
       'chat.create': 'Создать',
@@ -686,6 +698,18 @@ class Strings {
       'chat.open': 'Open',
       'chat.noChannels': 'No channels yet',
       'chat.readOnly': 'Only the author posts in a channel',
+      'creator.title': 'Open a shop',
+      'creator.intro':
+          'An administrator reviews the application. No phone or password needed — your account already has both.',
+      'creator.shopName': 'Shop name',
+      'creator.handle': 'Shop address',
+      'creator.handleHint':
+          'Lowercase latin: gulbahar. This is how customers find you.',
+      'creator.description': 'About the shop',
+      'creator.submit': 'Send application',
+      'creator.sentTitle': 'Application sent',
+      'creator.sentBody':
+          'We will write when an administrator has reviewed it. Once approved, the shop appears in your profile.',
       'chat.newGroup': 'New group',
       'chat.groupName': 'Group name',
       'chat.create': 'Create',
@@ -1151,6 +1175,18 @@ class Strings {
       'chat.open': 'Açmak',
       'chat.noChannels': 'Entek kanal ýok',
       'chat.readOnly': 'Kanalda diňe awtor ýazýar',
+      'creator.title': 'Dükan açmak',
+      'creator.intro':
+          'Arzany administrator seredýär. Telefon we parol gerek däl — olar hasabyňyzda eýýäm bar.',
+      'creator.shopName': 'Dükanyň ady',
+      'creator.handle': 'Dükanyň salgysy',
+      'creator.handleHint':
+          'Latyn kiçi harplar: gulbahar. Müşderiler sizi şu boýunça tapar.',
+      'creator.description': 'Dükan barada',
+      'creator.submit': 'Arza ibermek',
+      'creator.sentTitle': 'Arza iberildi',
+      'creator.sentBody':
+          'Administrator seredende ýazarys. Tassyklanansoň dükan profiliňizde peýda bolar.',
       'chat.newGroup': 'Täze topar',
       'chat.groupName': 'Toparyň ady',
       'chat.create': 'Döretmek',

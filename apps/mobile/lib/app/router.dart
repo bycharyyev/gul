@@ -22,6 +22,7 @@ import '../features/chat/presentation/channels_screen.dart';
 import '../features/chat/presentation/group_info_screen.dart';
 import '../features/chat/presentation/join_group_screen.dart';
 import '../features/chat/presentation/new_group_screen.dart';
+import '../features/seller/presentation/become_creator_screen.dart';
 import '../features/chat/presentation/chat_inbox_screen.dart';
 import '../features/chat/presentation/chat_room_screen.dart';
 import '../features/orders/presentation/order_detail_screen.dart';
@@ -232,6 +233,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'edit',
                     builder: (_, __) => const EditProfileScreen(),
+                  ),
+                  GoRoute(
+                    path: BecomeCreatorScreen.pathSegment,
+                    builder: (_, __) => const BecomeCreatorScreen(),
                   ),
                   GoRoute(
                     path: 'password',

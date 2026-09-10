@@ -4,6 +4,7 @@ import { SellersService } from "./sellers.service";
 import { CreateSellerDto } from "./dto/create-seller.dto";
 import { UpdateSellerDto } from "./dto/update-seller.dto";
 import { CreateSellerApplicationDto } from "./dto/create-seller-application.dto";
+import { ApplyAsMeDto } from "./dto/apply-as-me.dto";
 import { ReviewApplicationDto } from "./dto/review-application.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -121,6 +122,19 @@ export class SellersController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
+  /**
+   * Apply from inside the app, as the account already signed in.
+   *
+   * The public form cannot serve somebody who already has an account -- it asks for a phone that
+   * is by definition taken. This one takes neither phone nor password: both come from the token.
+   */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("apply-as-me")
+  applyAsMe(@Body() dto: ApplyAsMeDto, @CurrentUser() user: AuthedUser) {
+    return this.sellers.applyAsCurrentUser(user.userId, dto);
+  }
+
   @Get("applications")
   listApplications(@Query("status") status?: SellerApplicationStatus) {
     return this.sellers.listApplications(status);

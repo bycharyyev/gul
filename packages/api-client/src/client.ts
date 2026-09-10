@@ -1255,6 +1255,24 @@ export class ApiClient {
   }
 
   // ---- Seller applications (public self-signup, admin-moderated) ----
+  /**
+   * Apply from an account that already exists.
+   *
+   * Sends neither phone nor password: both come from the session. `applyForSeller` below cannot
+   * serve a signed-in person at all — it names a phone that is by definition already registered,
+   * and the server refuses it.
+   */
+  applyAsSellerFromMyAccount(input: {
+    handle: string;
+    shopName: string;
+    description?: string;
+  }) {
+    return this.request<{ id: string; status: string }>("/sellers/apply-as-me", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
   applyForSeller(input: CreateSellerApplicationInput) {
     return this.request<SellerApplicationDto>("/sellers/apply", {
       method: "POST",

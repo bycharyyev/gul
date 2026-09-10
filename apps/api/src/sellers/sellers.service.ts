@@ -8,6 +8,7 @@ import { EmailService } from "../email/email.service";
 import type { CreateSellerDto } from "./dto/create-seller.dto";
 import type { UpdateSellerDto } from "./dto/update-seller.dto";
 import type { CreateSellerApplicationDto } from "./dto/create-seller-application.dto";
+import type { ApplyAsMeDto } from "./dto/apply-as-me.dto";
 import type { ReviewApplicationDto } from "./dto/review-application.dto";
 import type { SellerApplicationStatus } from "@prisma/client";
 
@@ -309,6 +310,60 @@ export class SellersService {
 
   // ---- Seller applications (public self-signup, admin-moderated) ----
 
+  /**
+   * A shop application from somebody already signed in.
+   *
+   * Separate from `applyForSeller` because of one thing: the identity. The public form has to ask
+   * for a phone and a password, since the applicant has no account yet -- and that is exactly why
+   * it cannot serve a person who does. `assertPhoneAndHandleFree` rejects a phone that is already
+   * registered, so before this existed a customer could never become a seller at all. The public
+   * "become a seller" page was unusable for anybody who had ever ordered anything.
+   *
+   * Here the phone comes off the session and nothing about who is applying is read from the body.
+   */
+  async applyAsCurrentUser(userId: string, dto: ApplyAsMeDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, phone: true, email: true, fullName: true, passwordHash: true, role: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+    if (user.role === "SELLER") throw new ConflictException("У вас уже есть магазин");
+    if (user.role !== "CUSTOMER") {
+      // A staff account running a shop it also moderates is a conflict of interest, not a
+      // convenience. If it is ever wanted it should be a deliberate decision, not a side effect.
+      throw new ConflictException("Сотрудник не может подать заявку на магазин");
+    }
+
+    await this.assertHandleFree(dto.handle);
+    if (await this.referrals.isUsernameTaken(dto.handle)) {
+      throw new ConflictException("Handle already taken");
+    }
+
+    const pendingConflict = await this.prisma.sellerApplication.findFirst({
+      where: { status: "PENDING", OR: [{ phone: user.phone }, { handle: dto.handle }] },
+    });
+    if (pendingConflict) {
+      throw new ConflictException("Заявка с таким телефоном или username уже на рассмотрении");
+    }
+
+    const application = await this.prisma.sellerApplication.create({
+      data: {
+        phone: user.phone,
+        email: user.email,
+        // Never used for this application -- approval promotes the existing account and leaves
+        // its password alone. Carried because the column is required and because an application
+        // must still be approvable if the account is deleted before review.
+        passwordHash: user.passwordHash,
+        fullName: user.fullName,
+        handle: dto.handle,
+        shopName: dto.shopName,
+        description: dto.description,
+      },
+    });
+
+    return { id: application.id, status: application.status };
+  }
+
   async applyForSeller(dto: CreateSellerApplicationDto) {
     await this.assertPhoneAndHandleFree(dto.phone, dto.handle);
 
@@ -382,8 +437,27 @@ export class SellersService {
 
   async approveApplication(id: string, dto: ReviewApplicationDto, adminId: string) {
     const application = await this.getApplicationOrThrow(id);
-    // Re-check freshness — phone/handle may have been taken by someone else since the application was filed.
-    await this.assertPhoneAndHandleFree(application.phone, application.handle);
+
+    // The account this application belongs to, if there already is one. Applications filed from
+    // inside the app name a phone that is already registered on purpose -- approving those must
+    // promote that account rather than refuse, which is what used to happen.
+    const existing = await this.prisma.user.findUnique({
+      where: { phone: application.phone },
+      select: { id: true, role: true },
+    });
+
+    // The handle is checked either way: it becomes a public @name and must still be free.
+    await this.assertHandleFree(application.handle);
+    if (await this.referrals.isUsernameTaken(application.handle)) {
+      throw new ConflictException("Handle already taken");
+    }
+    if (existing) {
+      if (existing.role === "SELLER") throw new ConflictException("У этого аккаунта уже есть магазин");
+      if (existing.role !== "CUSTOMER") {
+        throw new ConflictException("Сотрудник не может стать продавцом");
+      }
+      return this.promoteToSeller(existing.id, application, dto, adminId);
+    }
 
     // The application address is carried onto the account, but deliberately as UNVERIFIED: they
     // typed it into a form, which is not proof they control it. Order and payout mail stays
@@ -425,6 +499,54 @@ export class SellersService {
 
     // The activation moment: without this the applicant has no way to learn they were approved
     // and simply has to keep trying to log in.
+    void this.email.sendSellerApplicationMail("SELLER_APPROVED", {
+      email: application.email,
+      name: application.fullName ?? seller.shopName,
+      shopName: seller.shopName,
+    });
+
+    return seller;
+  }
+
+  /**
+   * Turns an existing customer into a seller.
+   *
+   * Their password, name and email are left exactly as they are. The application carries a
+   * password hash because the public form collects one, and applying it here would let anybody
+   * who filed an application overwrite the credentials of the account it named -- the one thing
+   * this path must never do.
+   */
+  private async promoteToSeller(
+    userId: string,
+    application: { id: string; handle: string; shopName: string; description: string | null; email: string | null; fullName: string | null },
+    dto: ReviewApplicationDto,
+    adminId: string,
+  ) {
+    const [, seller] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { role: "SELLER" },
+      }),
+      this.prisma.seller.create({
+        data: {
+          userId,
+          handle: application.handle,
+          shopName: application.shopName,
+          description: application.description,
+        },
+        include: { user: { select: USER_SELECT } },
+      }),
+      this.prisma.sellerApplication.update({
+        where: { id: application.id },
+        data: { status: "APPROVED", reviewNote: dto.note, reviewedAt: new Date() },
+      }),
+    ]);
+
+    this.auditLog.record(adminId, "seller.application.approve", "SellerApplication", application.id, {
+      sellerId: seller.id,
+      promotedExistingUser: userId,
+    });
+
     void this.email.sendSellerApplicationMail("SELLER_APPROVED", {
       email: application.email,
       name: application.fullName ?? seller.shopName,

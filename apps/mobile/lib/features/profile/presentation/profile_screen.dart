@@ -14,6 +14,7 @@ import '../../../core/widgets/skeleton.dart';
 import '../../support/presentation/support_screen.dart';
 import '../domain/profile_overview.dart';
 import 'change_password_screen.dart';
+import '../../seller/presentation/become_creator_screen.dart';
 import 'edit_profile_screen.dart';
 import 'email_verification_screen.dart';
 import 'legal_page_screen.dart';
@@ -148,6 +149,16 @@ class ProfileScreen extends ConsumerWidget {
                   title: strings.get('profile.changePassword'),
                   onTap: () => context.push(ChangePasswordScreen.path),
                 ),
+                // Only where it leads somewhere. A seller already has a shop, and staff cannot
+                // have one -- offering it to either is offering a door that answers "no".
+                if (ref.watch(authControllerProvider).user?.role == 'CUSTOMER')
+                  _Tile(
+                    icon: Icons.storefront_outlined,
+                    title: strings.get('creator.title'),
+                    onTap: () => context.push(
+                      '${ProfileScreen.path}/${BecomeCreatorScreen.pathSegment}',
+                    ),
+                  ),
               ],
             ),
 
