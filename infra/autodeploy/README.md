@@ -1,11 +1,15 @@
 # Auto-deploy from the server side
 
-The server watches `main` and ships it. No runner in the middle, so a GitHub Actions billing
-block — which stops *every* job, including the build — no longer stops releases.
+The server watches `main` and ships it, with no runner in the middle.
 
-`deploy.yml` still exists and still works when Actions is available. The two do not fight: both
-write the same `IMAGE_TAG` into `/opt/gul/.env`, and this one does nothing when the tag it would
-deploy is already the tag running. Whichever gets there first wins, and the other is a no-op.
+**This is a standby, not the normal path.** `deploy.yml` is how releases ship; it runs on free,
+unmetered runners now that the repository is public. This exists because that was not always true:
+a billing block stops *every* Actions job, the build included, and for a day nothing could reach
+production and no image was built for it either.
+
+Not installed on the server by default — see "Installing" below. Installed, the two do not fight:
+both write the same `IMAGE_TAG` into `/opt/gul/.env`, and this one does nothing when the tag it
+would deploy is already the tag running. Whichever gets there first wins, the other is a no-op.
 
 ## What it does on each tick
 
