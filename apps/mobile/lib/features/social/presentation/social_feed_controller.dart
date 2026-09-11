@@ -57,6 +57,58 @@ class SocialFeedController extends StateNotifier<AsyncValue<SocialFeedState>> {
     }
   }
 
+  /// Likes or unlikes a post without disturbing the feed around it.
+  ///
+  /// The screen used to invalidate the whole provider after a reaction, which refetched the feed,
+  /// rebuilt the PageView and threw the reader back to the first post -- a tap on a heart moved
+  /// the page out from under the finger. Nothing about a like changes which posts exist or in
+  /// what order, so nothing outside that one post should move.
+  Future<void> toggleLike(SocialPost post) => _mutate(
+    post,
+    post.copyWith(
+      likedByMe: !post.likedByMe,
+      likeCount: post.likeCount + (post.likedByMe ? -1 : 1),
+    ),
+    () => _repository.toggleLike(post),
+  );
+
+  Future<void> toggleSave(SocialPost post) => _mutate(
+    post,
+    post.copyWith(savedByMe: !post.savedByMe),
+    () => _repository.toggleSave(post),
+  );
+
+  /// Shows the new state immediately, then keeps whatever the server confirms — and puts the old
+  /// state back if it refuses. A reaction that waits for a round trip feels broken on a slow
+  /// connection, and one that never checks leaves an invented truth on screen.
+  Future<void> _mutate(
+    SocialPost original,
+    SocialPost optimistic,
+    Future<SocialPost> Function() call,
+  ) async {
+    _replace(optimistic);
+    try {
+      _replace(await call());
+    } catch (_) {
+      _replace(original);
+    }
+  }
+
+  /// Swaps one post for its new version, leaving the list's length and order untouched — which is
+  /// what keeps the PageView on the page the reader is looking at.
+  void _replace(SocialPost post) {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncValue.data(
+      current.copyWith(
+        posts: [
+          for (final existing in current.posts)
+            if (existing.id == post.id) post else existing,
+        ],
+      ),
+    );
+  }
+
   /// Fetches the next page. Safe to call on every page turn: it is a no-op while one is already
   /// in flight or once the server has said there is nothing more, so the screen does not need to
   /// track either condition itself.

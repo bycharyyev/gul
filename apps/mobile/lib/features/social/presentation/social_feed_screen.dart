@@ -411,15 +411,9 @@ class _ProductTag extends StatelessWidget {
 class _ActionRail extends ConsumerWidget {
   const _ActionRail({required this.post});
   final SocialPost post;
-  Future<void> _toggle(WidgetRef ref, bool like) async {
-    final repository = ref.read(socialFeedRepositoryProvider);
-    // Optimism makes a lightweight reaction feel immediate. A failed mutation gets the feed
-    // invalidated, rather than silently leaving an invented local truth on screen.
-    try {
-      await (like ? repository.toggleLike(post) : repository.toggleSave(post));
-    } finally {
-      ref.invalidate(socialFeedProvider);
-    }
+  Future<void> _toggle(WidgetRef ref, bool like) {
+    final feed = ref.read(socialFeedProvider.notifier);
+    return like ? feed.toggleLike(post) : feed.toggleSave(post);
   }
 
   @override

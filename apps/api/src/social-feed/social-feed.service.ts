@@ -10,6 +10,7 @@ import type {
   SocialPostStatus,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { buildViewerSignals, NO_SIGNALS, rankPage } from "./ranking";
 import { AuditLogService } from "../audit-log/audit-log.service";
 import { StorageService } from "../storage/storage.service";
 import {
@@ -254,22 +255,9 @@ export class SocialFeedService {
     const selected = posts.slice(0, safeTake);
     const boundary = selected.at(-1);
 
-    // The per-author cap used to decide membership: a third post by the same author was skipped,
-    // and the cursor moved past it regardless, so it was never served again. On this feed, where
-    // one seller writes nearly everything, that left exactly two posts and then reported the end
-    // of the feed -- every other post the seller had published was silently unreachable.
-    //
-    // The cap now decides order within the page instead. A prolific author still cannot hold the
-    // top of a page while other authors are on it, but nothing is discarded and the page keeps its
-    // length, which is the behaviour a feed with one active seller needs.
-    const authorCounts = new Map<string, number>();
-    const repeatRank = new Map<string, number>();
-    for (const post of selected) {
-      const seen = authorCounts.get(post.authorId) ?? 0;
-      authorCounts.set(post.authorId, seen + 1);
-      repeatRank.set(post.id, seen < 2 ? 0 : 1);
-    }
-    const rank = (post: PostWithDetails) => repeatRank.get(post.id) ?? 0;
+    // Ordering lives in ranking.ts: weights, cold-start floor and author spread in one readable
+    // place, as pure functions over plain rows. Membership stays here, decided by chronology, for
+    // the cursor reason spelled out above.
     const ids = selected.map((p) => p.id);
     const interactions =
       viewer && ids.length
@@ -291,59 +279,33 @@ export class SocialFeedService {
     // One history read, not two. Both signals it feeds -- who the viewer engages with, and which
     // products they engage with -- only reorder the page that chronology already fixed, so a
     // viewer sees the same posts as everyone else, arranged to suit them.
-    let display = [...selected].sort(
-      (a, b) =>
-        rank(a) - rank(b) ||
-        Number(b.publishedAt) - Number(a.publishedAt) ||
-        b.id.localeCompare(a.id),
-    );
-    if (viewer && selected.length > 1) {
-      const history = await this.prisma.socialInteraction.findMany({
-        where: {
-          userId: viewer.userId,
-          type: { in: ["LIKE", "SAVE", "PRODUCT_CLICK"] },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 300,
-        select: {
-          type: true,
-          post: {
-            select: {
-              authorId: true,
-              products: { select: { productId: true } },
-            },
-          },
-        },
-      });
-      const authorAffinity = new Map<string, number>();
-      const productAffinity = new Set<string>();
-      for (const action of history) {
-        const weight =
-          action.type === "SAVE" ? 3 : action.type === "PRODUCT_CLICK" ? 2 : 1;
-        authorAffinity.set(
-          action.post.authorId,
-          (authorAffinity.get(action.post.authorId) ?? 0) + weight,
-        );
-        for (const tagged of action.post.products)
-          productAffinity.add(tagged.productId);
-      }
-      display = [...selected].sort((a, b) => {
-        const score = (post: PostWithDetails) =>
-          Math.min(30, authorAffinity.get(post.authorId) ?? 0) +
-          post.products.filter((x) => productAffinity.has(x.productId)).length *
-            10 +
-          Math.min(2, post.productClickCount) +
-          Math.min(1, post.likeCount + post.saveCount);
-        return (
-          // Ahead of affinity: a page must not open with three posts by the same author just
-          // because the viewer likes them.
-          rank(a) - rank(b) ||
-          score(b) - score(a) ||
-          Number(b.publishedAt) - Number(a.publishedAt) ||
-          b.id.localeCompare(a.id)
-        );
-      });
-    }
+    // One history read, not two. Both signals it feeds -- who the viewer engages with, and which
+    // products they engage with -- only reorder the page that chronology already fixed, so a
+    // viewer sees the same posts as everyone else, arranged to suit them.
+    const signals =
+      viewer && selected.length > 1
+        ? buildViewerSignals(
+            await this.prisma.socialInteraction.findMany({
+              where: {
+                userId: viewer.userId,
+                type: { in: ["LIKE", "SAVE", "PRODUCT_CLICK"] },
+              },
+              orderBy: { createdAt: "desc" },
+              take: 300,
+              select: {
+                type: true,
+                post: {
+                  select: {
+                    authorId: true,
+                    products: { select: { productId: true } },
+                  },
+                },
+              },
+            }),
+          )
+        : NO_SIGNALS;
+    const display = rankPage(selected, signals, new Date());
+
     return {
       items: display.map((p) => ({
         ...p,
