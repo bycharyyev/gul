@@ -184,6 +184,19 @@ class _CreateSocialPostScreenState
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
+              // The app's FilledButton theme asks for `Size.fromHeight(54)` — that is
+              // `Size(infinity, 54)`, meant for the full-width primary button at the bottom of a
+              // page. In an AppBar's actions row that demand takes the whole toolbar: the button
+              // is laid out wider than the bar and draws nothing, and the title is squeezed to
+              // zero. Both simply vanished. A toolbar button has to state its own size.
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onPressed: _canPost ? _submit : null,
               child: Text(
                 _uploading ? s.get('feed.uploading') : s.get('feed.publish'),

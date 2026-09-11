@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gulyaly_mobile/app/providers.dart';
 import 'package:gulyaly_mobile/core/l10n/strings.dart';
+import 'package:gulyaly_mobile/core/theme/app_theme.dart';
 import 'package:gulyaly_mobile/features/gallery/data/gallery_repository.dart';
 import 'package:gulyaly_mobile/features/gallery/domain/gallery_product.dart';
 import 'package:gulyaly_mobile/features/social/data/social_feed_repository.dart';
@@ -34,6 +35,9 @@ Future<void> _open(
           galleryRepositoryProvider.overrideWithValue(gallery),
       ],
       child: MaterialApp(
+        // The real theme, not the default one: the bug this screen had lived in the app's own
+        // FilledButton theme and is invisible under Material's defaults.
+        theme: AppTheme.light(),
         home: const CreateSocialPostScreen(),
         builder: (context, child) =>
             StringsScope(strings: const Strings('ru'), child: child!),
@@ -58,6 +62,20 @@ void main() {
     expect(find.text('Что нового?'), findsOneWidget);
     expect(find.byType(SegmentedButton<SocialPostKind>), findsNothing);
     expect(find.text('Видео'), findsNothing);
+  });
+
+  testWidgets('the toolbar keeps both its title and its publish button', (
+    t,
+  ) async {
+    // Both disappeared on the phone. The app's FilledButton theme asks for Size.fromHeight(54) --
+    // Size(infinity, 54) -- for the full-width button at the bottom of a page; in an AppBar that
+    // demand eats the whole toolbar, so the button drew nothing and the title was squeezed to
+    // nothing. The screen had no way to publish anything at all.
+    await _open(t, repo: _Repository());
+
+    final button = find.widgetWithText(FilledButton, 'Опубликовать');
+    expect(t.getSize(button).width, lessThan(360));
+    expect(t.getSize(find.text('Создать')).width, greaterThan(0));
   });
 
   testWidgets('publishing stays off until there is something to publish', (
