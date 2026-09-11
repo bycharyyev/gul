@@ -39,8 +39,13 @@ async function main() {
 
   await prisma.paymentMethod.upsert({
     where: { code: "MANUAL" },
-    create: { code: "MANUAL", name: "Bank card / SBP (demo)", provider: "manual", sortOrder: 1 },
-    update: {},
+    // The name is what a customer reads in the top-up form. Nobody can pay by card here --
+    // `manual` means a person confirms a transfer -- so naming it after a card promised a form
+    // that does not exist, and "(demo)" ended up in the Play store screenshots. `update` carries
+    // the name too: an environment seeded before this stays wrong otherwise, which is exactly
+    // what happened to production.
+    create: { code: "MANUAL", name: "Перевод по реквизитам", provider: "manual", sortOrder: 1 },
+    update: { name: "Перевод по реквизитам" },
   });
 
   const contentPages = [
