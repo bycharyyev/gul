@@ -47,7 +47,12 @@ const POST_INCLUDE = {
       // fetched per author by the client: a feed of twelve posts would otherwise be twelve more
       // requests, and the button would appear a moment after the post it belongs to.
       sellerProfile: {
-        select: { handle: true, shopName: true, logoUrl: true, isEnabled: true },
+        select: {
+          handle: true,
+          shopName: true,
+          logoUrl: true,
+          isEnabled: true,
+        },
       },
     },
   },
@@ -124,25 +129,32 @@ export class SocialFeedService {
       hasMedia: dto.mediaType !== "TEXT",
       author: await this.authorStanding(userId),
     });
-    return this.prisma.socialPost.create({
-      data: {
-        authorId: userId,
-        body,
-        mediaType: dto.mediaType,
-        mediaUrl: dto.mediaUrl,
-        thumbnailUrl: dto.thumbnailUrl,
-        status: verdict.status,
-        moderationNote: verdict.reason,
-        publishedAt: verdict.status === "PUBLISHED" ? new Date() : null,
-        products: {
-          create: dto.productIds.map((productId, sortOrder) => ({
-            productId,
-            sortOrder,
-          })),
+    // Returned in the same shape the feed serves, not as the raw row. The row's `products` are
+    // join records with the product nested inside, and its author carries no avatar URL -- a
+    // client that can read a feed item could not read this, and the post it had just created
+    // looked to it like a failure. It had in fact been created, so the person was told publishing
+    // failed and then found two of them.
+    return this.publicShape(
+      await this.prisma.socialPost.create({
+        data: {
+          authorId: userId,
+          body,
+          mediaType: dto.mediaType,
+          mediaUrl: dto.mediaUrl,
+          thumbnailUrl: dto.thumbnailUrl,
+          status: verdict.status,
+          moderationNote: verdict.reason,
+          publishedAt: verdict.status === "PUBLISHED" ? new Date() : null,
+          products: {
+            create: dto.productIds.map((productId, sortOrder) => ({
+              productId,
+              sortOrder,
+            })),
+          },
         },
-      },
-      include: POST_INCLUDE,
-    });
+        include: POST_INCLUDE,
+      }),
+    );
   }
 
   /** What this author's record says, for the auto-moderation decision. */
@@ -190,30 +202,32 @@ export class SocialFeedService {
     if (!this.trustedMedia(mediaUrl) || !this.trustedMedia(thumbnailUrl))
       throw new BadRequestException("Only trusted uploaded media may be used");
     if (dto.productIds) await this.assertTagProducts(dto.productIds);
-    return this.prisma.socialPost.update({
-      where: { id },
-      data: {
-        body,
-        mediaType,
-        mediaUrl,
-        thumbnailUrl,
-        status: "PENDING",
-        moderationNote: null,
-        publishedAt: null,
-        ...(dto.productIds
-          ? {
-              products: {
-                deleteMany: {},
-                create: dto.productIds.map((productId, sortOrder) => ({
-                  productId,
-                  sortOrder,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: POST_INCLUDE,
-    });
+    return this.publicShape(
+      await this.prisma.socialPost.update({
+        where: { id },
+        data: {
+          body,
+          mediaType,
+          mediaUrl,
+          thumbnailUrl,
+          status: "PENDING",
+          moderationNote: null,
+          publishedAt: null,
+          ...(dto.productIds
+            ? {
+                products: {
+                  deleteMany: {},
+                  create: dto.productIds.map((productId, sortOrder) => ({
+                    productId,
+                    sortOrder,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: POST_INCLUDE,
+      }),
+    );
   }
 
   async removeMine(id: string, userId: string) {
@@ -524,7 +538,9 @@ export class SocialFeedService {
     // Hiding is reversible and leaving it up is not: a post seen by thousands while it waits in a
     // queue cannot be unseen. The unique constraint on (postId, userId) is what makes the count
     // mean "distinct people" rather than "times the button was pressed".
-    const reports = await this.prisma.socialPostReport.count({ where: { postId } });
+    const reports = await this.prisma.socialPostReport.count({
+      where: { postId },
+    });
     if (reports >= REPORT_HIDE_THRESHOLD) {
       await this.prisma.socialPost.updateMany({
         where: { id: postId, status: "PUBLISHED" },

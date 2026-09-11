@@ -13,6 +13,21 @@ function target(prisma: Record<string, unknown>, storage: unknown = STORAGE) {
   );
 }
 
+
+/** A created row as Prisma returns it, for mocks that only care that creation happened. */
+const CREATED_ROW = {
+  id: "p1",
+  authorId: "u1",
+  author: {
+    id: "u1",
+    fullName: "A",
+    username: "a",
+    avatarPath: null,
+    sellerProfile: null,
+  },
+  products: [],
+};
+
 describe("SocialFeedService safety and idempotency", () => {
   it("refuses remote media rather than fetching arbitrary URLs", async () => {
     const prisma = { galleryProduct: { findMany: jest.fn() } };
@@ -31,7 +46,7 @@ describe("SocialFeedService safety and idempotency", () => {
     // ourselves. Nothing could be published with a photo or a video on it.
     const prisma = {
       galleryProduct: { findMany: jest.fn().mockResolvedValue([]) },
-      socialPost: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
+      socialPost: { create: jest.fn().mockResolvedValue(CREATED_ROW), count: jest.fn().mockResolvedValue(0) },
     };
 
     await expect(
@@ -233,7 +248,7 @@ describe("SocialFeedService safety and idempotency", () => {
   });
 
   it("publishes a trusted author's post without a person, and holds a newcomer's", async () => {
-    const create = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue(CREATED_ROW);
     const base = {
       galleryProduct: { findMany: jest.fn().mockResolvedValue([]) },
       socialPost: { create, count: jest.fn() },
@@ -271,7 +286,7 @@ describe("SocialFeedService safety and idempotency", () => {
     const count = jest.fn().mockResolvedValue(0);
     const prisma = {
       galleryProduct: { findMany: jest.fn().mockResolvedValue([]) },
-      socialPost: { create: jest.fn().mockResolvedValue({}), count },
+      socialPost: { create: jest.fn().mockResolvedValue(CREATED_ROW), count },
     };
 
     await target(prisma).create("u1", {
@@ -520,7 +535,7 @@ describe("publishing a video", () => {
     const prisma = {
       galleryProduct: { findMany: jest.fn().mockResolvedValue([]) },
       socialPost: {
-        create: jest.fn().mockResolvedValue({}),
+        create: jest.fn().mockResolvedValue(CREATED_ROW),
         count: jest.fn().mockResolvedValue(0),
       },
     };
@@ -541,5 +556,86 @@ describe("publishing a video", () => {
         productIds: [],
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe("what a write returns", () => {
+  const created = {
+    id: "p1",
+    authorId: "u1",
+    createdAt: new Date("2026-09-12T00:00:00Z"),
+    publishedAt: null,
+    status: "PENDING",
+    author: {
+      id: "u1",
+      fullName: "A",
+      username: "a",
+      avatarPath: "https://open.s3.regru.cloud/avatars/a.jpg",
+      sellerProfile: null,
+    },
+    // Prisma returns the join rows, with the product nested inside each one.
+    products: [
+      {
+        postId: "p1",
+        productId: "prod-1",
+        sortOrder: 0,
+        product: { id: "prod-1", name: "Букет", priceTmt: "350" },
+      },
+    ],
+  };
+
+  it("gives back a post shaped like the ones in the feed", async () => {
+    // It used to give back the raw row: `products` as join records, and an author with no avatar
+    // URL. A client that can read a feed item could not read this, so publishing a post with a
+    // product tagged on it reported a failure -- after creating the post. The author was told it
+    // failed and then found two of them.
+    const prisma = {
+      galleryProduct: {
+        findMany: jest.fn().mockResolvedValue([{ id: "prod-1" }]),
+      },
+      socialPost: {
+        create: jest.fn().mockResolvedValue(created),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+
+    const post = await target(prisma).create("u1", {
+      mediaType: "TEXT",
+      body: "Привет",
+      productIds: ["prod-1"],
+    } as never);
+
+    expect(post.products).toEqual([
+      { id: "prod-1", name: "Букет", priceTmt: "350" },
+    ]);
+    expect(post.author.avatarUrl).toBe(
+      "https://open.s3.regru.cloud/avatars/a.jpg",
+    );
+  });
+
+  it("returns an edited post in that same shape", async () => {
+    const prisma = {
+      galleryProduct: {
+        findMany: jest.fn().mockResolvedValue([{ id: "prod-1" }]),
+      },
+      socialPost: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "p1",
+          authorId: "u1",
+          status: "PUBLISHED",
+          mediaType: "TEXT",
+          body: "old",
+        }),
+        update: jest.fn().mockResolvedValue(created),
+      },
+    };
+
+    const post = await target(prisma).updateMine("p1", "u1", {
+      body: "Новый текст",
+    } as never);
+
+    expect(post.products).toEqual([
+      { id: "prod-1", name: "Букет", priceTmt: "350" },
+    ]);
   });
 });
