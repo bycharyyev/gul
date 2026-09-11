@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../domain/shop_profile.dart';
 
 /// Opening a shop, from an account that already exists.
 ///
@@ -9,6 +10,13 @@ class SellerRepository {
   const SellerRepository(this._api);
 
   final ApiClient _api;
+
+  /// One shop's public page. No authentication: a shop is public, and a customer who has not
+  /// signed in must still be able to see whose video they just watched.
+  Future<ShopProfile> loadShop(String handle) async {
+    final json = await _api.get<Map<String, dynamic>>('/sellers/$handle');
+    return ShopProfile.fromJson(json);
+  }
 
   Future<void> applyAsMe({
     required String handle,

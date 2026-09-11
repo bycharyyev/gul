@@ -5,30 +5,37 @@ import '../domain/gallery_product.dart';
 /// What the catalogue screen filters by. A value type so it can key a provider — two identical
 /// filters must resolve to the same request rather than two.
 class GalleryFilter {
-  const GalleryFilter({this.categoryId, this.search});
+  const GalleryFilter({this.categoryId, this.search, this.sellerId});
 
   final String? categoryId;
   final String? search;
 
-  bool get isEmpty => categoryId == null && (search == null || search!.isEmpty);
+  /// One shop's shelf. The catalogue never sets it; a shop page always does.
+  final String? sellerId;
+
+  bool get isEmpty =>
+      categoryId == null && sellerId == null && (search == null || search!.isEmpty);
 
   GalleryFilter copyWith({
     String? categoryId,
     String? search,
+    String? sellerId,
     bool clearCategory = false,
   }) => GalleryFilter(
     categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
     search: search ?? this.search,
+    sellerId: sellerId ?? this.sellerId,
   );
 
   @override
   bool operator ==(Object other) =>
       other is GalleryFilter &&
       other.categoryId == categoryId &&
-      other.search == search;
+      other.search == search &&
+      other.sellerId == sellerId;
 
   @override
-  int get hashCode => Object.hash(categoryId, search);
+  int get hashCode => Object.hash(categoryId, search, sellerId);
 }
 
 class GalleryRepository {
@@ -57,6 +64,7 @@ class GalleryRepository {
       '/gallery/products',
       query: {
         if (filter.categoryId != null) 'categoryId': filter.categoryId,
+        if (filter.sellerId != null) 'sellerId': filter.sellerId,
         if (search != null && search.isNotEmpty) 'search': search,
       },
     );

@@ -35,8 +35,10 @@ import '../features/topup/domain/topup_options.dart';
 import '../features/topup/presentation/topup_controller.dart';
 import '../features/chat/data/chat_repository.dart';
 import '../features/seller/data/seller_repository.dart';
+import '../features/seller/domain/shop_profile.dart';
 import '../features/chat/domain/chat_models.dart';
 import '../features/social/data/social_feed_repository.dart';
+import '../features/social/domain/social_post.dart';
 import '../features/social/presentation/social_feed_controller.dart';
 
 final appConfigProvider = Provider<AppConfig>(
@@ -211,6 +213,19 @@ final sellerRepositoryProvider = Provider<SellerRepository>(
   (ref) => SellerRepository(ref.watch(apiClientProvider)),
 );
 
+/// One shop's public page, by handle.
+final shopProvider = FutureProvider.family<ShopProfile, String>(
+  (ref, handle) => ref.watch(sellerRepositoryProvider).loadShop(handle),
+);
+
+/// That shop's shelf. Separate from the profile so the header can render while it loads, and so a
+/// failure to list products does not take the whole page down with it.
+final shopProductsProvider = FutureProvider.family<List<GalleryProduct>, String>(
+  (ref, sellerId) => ref
+      .watch(galleryRepositoryProvider)
+      .loadProducts(GalleryFilter(sellerId: sellerId)),
+);
+
 final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) => ChatRepository(ref.watch(apiClientProvider)),
 );
@@ -248,6 +263,13 @@ final chatMessagesProvider = FutureProvider.family<ChatRoomView, String>((
 ) {
   _sessionKey(ref);
   return ref.watch(chatRepositoryProvider).messages(conversationId);
+});
+
+/// The signed-in author's own posts, every status. Session-bound like the feed itself.
+final myPostsProvider = FutureProvider<List<SocialPost>>((ref) async {
+  _sessionKey(ref);
+  final page = await ref.watch(socialFeedRepositoryProvider).loadMine();
+  return page.posts;
 });
 
 final socialFeedProvider =

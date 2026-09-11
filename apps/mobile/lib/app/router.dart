@@ -37,6 +37,8 @@ import '../features/profile/presentation/referral_screen.dart';
 import '../features/support/presentation/support_screen.dart';
 import '../features/topup/presentation/topup_screen.dart';
 import '../features/social/presentation/create_social_post_screen.dart';
+import '../features/seller/presentation/shop_screen.dart';
+import '../features/social/presentation/my_posts_screen.dart';
 import '../features/social/presentation/social_feed_screen.dart';
 import 'providers.dart';
 import 'shell.dart';
@@ -65,6 +67,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const WelcomeScreen(),
       ),
       GoRoute(path: LoginScreen.path, builder: (_, __) => const LoginScreen()),
+      // Outside the tab shell on purpose: a shop is reached from a post, it is not one of the
+      // five places the bottom bar navigates to, and it must close back onto the feed the reader
+      // came from rather than replace a tab.
+      GoRoute(
+        path: '/${ShopScreen.pathSegment}/:handle',
+        builder: (_, state) =>
+            ShopScreen(handle: state.pathParameters['handle']!),
+      ),
       GoRoute(
         path: RegisterScreen.path,
         builder: (_, __) => const RegisterScreen(),
@@ -155,6 +165,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: CreateSocialPostScreen.path,
                     builder: (_, __) => const CreateSocialPostScreen(),
+                  ),
+                  GoRoute(
+                    path: MyPostsScreen.pathSegment,
+                    builder: (_, __) => const MyPostsScreen(),
                   ),
                 ],
               ),

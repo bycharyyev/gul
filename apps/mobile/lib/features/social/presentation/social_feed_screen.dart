@@ -13,7 +13,9 @@ import '../../../core/media/video_cache.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/remote_image.dart';
+import '../../seller/presentation/shop_screen.dart';
 import '../domain/social_post.dart';
+import 'my_posts_screen.dart';
 import 'social_feed_controller.dart';
 
 /// A deliberately quiet full-screen shop window. The content gets the whole canvas; controls
@@ -65,6 +67,15 @@ class SocialFeedScreen extends ConsumerWidget {
                       ),
                     ),
                     const Spacer(),
+                    // An author's own posts live behind this, including the ones moderation has
+                    // not released yet -- which are invisible everywhere else in the app.
+                    IconButton.filledTonal(
+                      tooltip: strings.get('feed.mine'),
+                      onPressed: () =>
+                          context.push('$path/${MyPostsScreen.pathSegment}'),
+                      icon: const Icon(Icons.video_library_outlined),
+                    ),
+                    const SizedBox(width: 8),
                     IconButton.filledTonal(
                       tooltip: strings.get('feed.create'),
                       onPressed: () => context.push('$path/create'),
@@ -379,6 +390,50 @@ class _PostMeta extends StatelessWidget {
                 ),
               ),
             ),
+            // The way out of the feed and into the shop. Present only when the server sent a
+            // handle, which it does only for a shop that is open -- a button leading to a page
+            // that refuses to load is worse than no button. Without this, someone could watch a
+            // seller's video, want what was in it, and have nowhere to go.
+            if (post.shop != null)
+              Semantics(
+                button: true,
+                label: strings.get('feed.openShop'),
+                child: InkWell(
+                  onTap: () =>
+                      context.push(ShopScreen.pathFor(post.shop!.handle)),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33FFFFFF),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0x55FFFFFF)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.storefront_outlined,
+                          size: 15,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          strings.get('feed.openShop'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         if (post.text != null)
