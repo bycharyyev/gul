@@ -107,8 +107,9 @@ export class SocialFeedService {
       throw new BadRequestException("Text posts require body");
     if (dto.mediaType !== "TEXT" && !dto.mediaUrl)
       throw new BadRequestException("Media posts require mediaUrl");
-    if (dto.mediaType === "VIDEO" && !dto.thumbnailUrl)
-      throw new BadRequestException("Video posts require thumbnailUrl");
+    // A cover is optional. It used to be mandatory for video, which meant a person publishing one
+    // had to shoot, upload, and then separately produce a still image for it -- a step nothing
+    // downstream needs, since the player draws the first frame itself.
     if (
       !this.trustedMedia(dto.mediaUrl) ||
       !this.trustedMedia(dto.thumbnailUrl)
@@ -186,8 +187,6 @@ export class SocialFeedService {
       throw new BadRequestException("Text posts require body");
     if (mediaType !== "TEXT" && !mediaUrl)
       throw new BadRequestException("Media posts require mediaUrl");
-    if (mediaType === "VIDEO" && !thumbnailUrl)
-      throw new BadRequestException("Video posts require thumbnailUrl");
     if (!this.trustedMedia(mediaUrl) || !this.trustedMedia(thumbnailUrl))
       throw new BadRequestException("Only trusted uploaded media may be used");
     if (dto.productIds) await this.assertTagProducts(dto.productIds);

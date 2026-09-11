@@ -115,6 +115,10 @@ class _PostPage extends ConsumerWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
+        // A post with nothing to show still has to be a page somebody can read. Without its own
+        // ground a text post was a big empty light rectangle with white text written on it -- the
+        // caption, the author's name and the whole rail are white, because every other post in
+        // this feed is a photograph. Text posts get a dark ground of their own instead.
         gradient: isMedia
             ? LinearGradient(
                 begin: Alignment.topCenter,
@@ -124,7 +128,11 @@ class _PostPage extends ConsumerWidget {
                   Colors.black87,
                 ],
               )
-            : null,
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF2A2140), Color(0xFF120F1A)],
+              ),
       ),
       child: Stack(
         fit: StackFit.expand,
@@ -141,6 +149,7 @@ class _PostPage extends ConsumerWidget {
             ),
           if (post.kind == SocialPostKind.video && post.mediaUrl != null)
             _FeedVideo(url: post.mediaUrl!),
+          if (!isMedia) _TextPostBody(text: post.text ?? ''),
           // IgnorePointer, because a childless DecoratedBox answers a hit test itself: this
           // decoration covers the whole page and was quietly eating every tap meant for the
           // video under it, which is why tap-to-pause did nothing anywhere. It darkens the
@@ -166,7 +175,9 @@ class _PostPage extends ConsumerWidget {
             left: 18,
             right: 78,
             bottom: AppShell.contentBottomInset + 18,
-            child: _PostMeta(post: post),
+            // A text post prints its words in the middle of the page, so the row at the bottom
+            // says who wrote it and what is for sale, and does not repeat them.
+            child: _PostMeta(post: post, showText: isMedia),
           ),
         ],
       ),
@@ -359,9 +370,56 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
   }
 }
 
+/// A post that is only words, set like one.
+///
+/// The size follows the length, the way a short thought on X or Threads is set large and a long
+/// one is set small: a two-word post in body type looks like a mistake, and four paragraphs in
+/// display type do not fit. Anything longer than the page scrolls rather than being cut off.
+class _TextPostBody extends StatelessWidget {
+  const _TextPostBody({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final length = text.characters.length;
+    final size = length <= 60
+        ? 30.0
+        : length <= 180
+        ? 24.0
+        : length <= 420
+        ? 19.0
+        : 16.0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        26,
+        96,
+        26,
+        AppShell.contentBottomInset + 108,
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Text(
+            text,
+            textAlign: length <= 180 ? TextAlign.center : TextAlign.start,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size,
+              height: 1.35,
+              fontWeight: length <= 60 ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PostMeta extends StatelessWidget {
-  const _PostMeta({required this.post});
+  const _PostMeta({required this.post, this.showText = true});
   final SocialPost post;
+
+  /// False when the page already prints the words in full, so they are not said twice.
+  final bool showText;
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
@@ -436,7 +494,7 @@ class _PostMeta extends StatelessWidget {
               ),
           ],
         ),
-        if (post.text != null)
+        if (showText && post.text != null)
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(

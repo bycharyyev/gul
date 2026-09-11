@@ -7,10 +7,22 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../core/format/money.dart';
 import '../../../core/l10n/strings.dart';
+import '../../../core/widgets/remote_image.dart';
+import '../../gallery/data/gallery_repository.dart';
+import '../../gallery/domain/gallery_product.dart';
 import '../domain/social_post.dart';
 import 'social_feed_screen.dart';
 
+/// Writing a post.
+///
+/// Deliberately shaped like a post box and not like a form: a text field you can simply type in,
+/// and two optional attachments under it. The kind of post is *derived* from what is attached —
+/// nobody decides in advance that they are writing "a photo post" and then goes looking for a
+/// photo. It used to open on a three-way Видео/Фото/Текст switch, ask for a caption, a media
+/// file, a separate cover image for video, and a comma-separated list of product **ids** typed by
+/// hand, which is not something a person can do.
 class CreateSocialPostScreen extends ConsumerStatefulWidget {
   const CreateSocialPostScreen({super.key});
   static const path = 'create';
@@ -21,60 +33,50 @@ class CreateSocialPostScreen extends ConsumerStatefulWidget {
 
 class _CreateSocialPostScreenState
     extends ConsumerState<CreateSocialPostScreen> {
-  final _form = GlobalKey<FormState>();
   final _text = TextEditingController();
-  final _media = TextEditingController();
-  final _thumbnail = TextEditingController();
-  final _product = TextEditingController();
-  SocialPostKind _kind = SocialPostKind.video;
+
+  /// The uploaded file's URL and what it turned out to be. Null until something is attached; the
+  /// post is TEXT for exactly as long as this is null.
+  String? _mediaUrl;
+  SocialPostKind? _mediaKind;
+
+  /// Local file shown while and after uploading, so the attachment is visible as a picture rather
+  /// than as the URL string the old screen printed under the button.
+  File? _preview;
+
+  final List<GalleryProduct> _products = [];
+  static const _maxProducts = 6;
+
   bool _busy = false;
-  bool _uploadingMedia = false;
-  bool _uploadingThumbnail = false;
-  // 0..1 while a file is going out, null otherwise. Null and 0 are different things here: null
-  // means "not uploading", 0 means "uploading, nothing sent yet".
-  double? _mediaProgress;
-  double? _thumbnailProgress;
+  bool _uploading = false;
+  double? _progress;
+
   @override
   void dispose() {
     _text.dispose();
-    _media.dispose();
-    _thumbnail.dispose();
-    _product.dispose();
     super.dispose();
   }
 
+  bool get _canPost =>
+      !_busy &&
+      !_uploading &&
+      (_text.text.trim().isNotEmpty || _mediaUrl != null);
+
   Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
     final s = Strings.of(context);
-    if (_kind == SocialPostKind.text && _text.text.trim().isEmpty) {
-      _toast(s.get('feed.captionRequired'));
-      return;
-    }
-    if (_kind != SocialPostKind.text && _media.text.trim().isEmpty) {
-      _toast(s.get('feed.mediaRequired'));
-      return;
-    }
-    if (_kind == SocialPostKind.video && _thumbnail.text.trim().isEmpty) {
-      _toast(s.get('feed.thumbnailRequired'));
-      return;
-    }
+    if (!_canPost) return;
     setState(() => _busy = true);
     try {
       await ref
           .read(socialFeedRepositoryProvider)
           .create(
-            kind: _kind,
+            kind: _mediaKind ?? SocialPostKind.text,
             body: _text.text,
-            mediaUrl: _media.text,
-            thumbnailUrl: _thumbnail.text,
-            productIds: _product.text
-                .split(',')
-                .map((id) => id.trim())
-                .where((id) => id.isNotEmpty)
-                .take(6)
-                .toList(),
+            mediaUrl: _mediaUrl,
+            productIds: _products.map((p) => p.id).toList(),
           );
       ref.invalidate(socialFeedProvider);
+      ref.invalidate(myPostsProvider);
       if (!mounted) return;
       // A new post is created PENDING and the feed lists only PUBLISHED ones, so going straight
       // back to a feed that does not contain it is indistinguishable from the post never having
@@ -82,9 +84,6 @@ class _CreateSocialPostScreenState
       _toast(s.get('feed.sentToModeration'));
       context.go(SocialFeedScreen.path);
     } catch (e) {
-      // Previously there was no catch at all: a rejected post threw into nothing, the screen sat
-      // there, and "publishing does not work" was the only conclusion available to the person
-      // looking at it.
       if (mounted) {
         _toast(e is AppException ? s.error(e) : s.get('feed.publishFailed'));
       }
@@ -97,126 +96,75 @@ class _CreateSocialPostScreenState
   ///
   /// nginx and the API both cap an upload; without this the customer waits through a whole video
   /// upload on a mobile connection only to be told at the end that it was too big. The numbers
-  /// mirror uploads.constants.ts -- if those change, these follow.
+  /// mirror uploads.constants.ts — if those change, these follow.
   static const _maxImageBytes = 8 * 1024 * 1024;
   static const _maxVideoBytes = 60 * 1024 * 1024;
 
-  /// True when the file is small enough to send; toasts and returns false when it is not.
-  Future<bool> _withinLimit(
-    Strings s,
-    File file, {
-    required bool isVideo,
-  }) async {
-    final bytes = await file.length();
-    final limit = isVideo ? _maxVideoBytes : _maxImageBytes;
-    if (bytes <= limit) return true;
-    final mb = (limit / (1024 * 1024)).round();
-    _toast('${s.get('feed.fileTooLarge')} $mb МБ');
-    return false;
-  }
-
-  /// The spinner while a file is going out, showing how far along it is.
-  ///
-  /// Determinate the moment the first bytes are acknowledged: an indeterminate ring says only
-  /// "something is happening", which on a two-minute video upload is the same information as a
-  /// frozen screen.
-  Widget _uploadSpinner(double? progress) => SizedBox(
-    width: 18,
-    height: 18,
-    child: CircularProgressIndicator(strokeWidth: 2, value: progress),
-  );
-
-  String _uploadLabel(Strings s, double? progress) => progress == null
-      ? s.get('feed.uploading')
-      : '${s.get('feed.uploading')} ${(progress * 100).round()}%';
-
-  Future<void> _pickMedia() async {
+  /// One attachment button for both, because the phone's gallery holds both and the distinction
+  /// only matters afterwards. What came back decides whether this is a photo post or a video one.
+  Future<void> _attach({required bool video}) async {
     final s = Strings.of(context);
+    final picker = ImagePicker();
+    final picked = video
+        ? await picker.pickVideo(source: ImageSource.gallery)
+        : await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) return;
+    final file = File(picked.path);
+    final limit = video ? _maxVideoBytes : _maxImageBytes;
+    if (await file.length() > limit) {
+      _toast('${s.get('feed.fileTooLarge')} ${(limit / (1024 * 1024)).round()} МБ');
+      return;
+    }
     setState(() {
-      _uploadingMedia = true;
-      _mediaProgress = null;
+      _uploading = true;
+      _progress = 0;
+      _preview = file;
     });
     try {
-      final picker = ImagePicker();
-      final picked = _kind == SocialPostKind.video
-          ? await picker.pickVideo(source: ImageSource.gallery)
-          : await picker.pickImage(
-              source: ImageSource.gallery,
-              maxWidth: 1600,
-              imageQuality: 88,
-            );
-      if (picked == null) return;
-      final file = File(picked.path);
-      if (!await _withinLimit(
-        s,
-        file,
-        isVideo: _kind == SocialPostKind.video,
-      )) {
-        return;
-      }
       final result = await ref
           .read(socialFeedRepositoryProvider)
           .uploadMedia(
             file,
             onProgress: (value) {
-              if (mounted) setState(() => _mediaProgress = value);
+              if (mounted) setState(() => _progress = value);
             },
           );
+      if (!mounted) return;
       setState(() {
-        _kind = result.kind;
-        _media.text = result.url;
-        if (result.kind == SocialPostKind.photo) _thumbnail.clear();
+        _mediaUrl = result.url;
+        _mediaKind = result.kind;
       });
     } catch (e) {
-      _toast(e is AppException ? s.error(e) : s.get('feed.uploadFailed'));
+      if (mounted) {
+        setState(() => _preview = null);
+        _toast(e is AppException ? s.error(e) : s.get('feed.uploadFailed'));
+      }
     } finally {
       if (mounted) {
         setState(() {
-          _uploadingMedia = false;
-          _mediaProgress = null;
+          _uploading = false;
+          _progress = null;
         });
       }
     }
   }
 
-  Future<void> _pickThumbnail() async {
-    final s = Strings.of(context);
-    setState(() {
-      _uploadingThumbnail = true;
-      _thumbnailProgress = null;
-    });
-    try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        imageQuality: 82,
-      );
-      if (picked == null) return;
-      final file = File(picked.path);
-      if (!await _withinLimit(s, file, isVideo: false)) return;
-      final result = await ref
-          .read(socialFeedRepositoryProvider)
-          .uploadMedia(
-            file,
-            onProgress: (value) {
-              if (mounted) setState(() => _thumbnailProgress = value);
-            },
-          );
-      if (result.kind != SocialPostKind.photo) {
-        _toast(s.get('feed.thumbnailMustBeImage'));
-        return;
-      }
-      setState(() => _thumbnail.text = result.url);
-    } catch (e) {
-      _toast(e is AppException ? s.error(e) : s.get('feed.uploadFailed'));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _uploadingThumbnail = false;
-          _thumbnailProgress = null;
-        });
-      }
-    }
+  void _detach() => setState(() {
+    _mediaUrl = null;
+    _mediaKind = null;
+    _preview = null;
+  });
+
+  Future<void> _addProduct() async {
+    final chosen = await showModalBottomSheet<GalleryProduct>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => const _ProductPicker(),
+    );
+    if (chosen == null || !mounted) return;
+    if (_products.any((p) => p.id == chosen.id)) return;
+    setState(() => _products.add(chosen));
   }
 
   void _toast(String message) {
@@ -228,122 +176,259 @@ class _CreateSocialPostScreenState
   @override
   Widget build(BuildContext context) {
     final s = Strings.of(context);
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(s.get('feed.create'))),
+      appBar: AppBar(
+        title: Text(s.get('feed.create')),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(
+              onPressed: _canPost ? _submit : null,
+              child: Text(
+                _uploading ? s.get('feed.uploading') : s.get('feed.publish'),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
-        child: Form(
-          key: _form,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-            children: [
-              SegmentedButton<SocialPostKind>(
-                segments: [
-                  for (final kind in SocialPostKind.values)
-                    ButtonSegment(
-                      value: kind,
-                      icon: Icon(_icon(kind)),
-                      label: Text(s.get('feed.kind.${kind.name}')),
-                    ),
-                ],
-                selected: {_kind},
-                onSelectionChanged: (v) => setState(() => _kind = v.first),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            TextField(
+              controller: _text,
+              autofocus: true,
+              maxLines: null,
+              minLines: 4,
+              maxLength: 1200,
+              textCapitalization: TextCapitalization.sentences,
+              keyboardType: TextInputType.multiline,
+              // No label and no border: the page is the post. A label above an empty box is the
+              // thing that makes a composer feel like paperwork.
+              decoration: InputDecoration(
+                hintText: s.get('feed.composer.hint'),
+                border: InputBorder.none,
+                counterText: '',
               ),
-              const SizedBox(height: 18),
-              TextFormField(
-                controller: _text,
-                maxLines: 4,
-                maxLength: 1200,
-                decoration: InputDecoration(
-                  labelText: s.get('feed.caption'),
-                  hintText: s.get('feed.captionHint'),
-                ),
-              ),
-              if (_kind != SocialPostKind.text) ...[
-                const SizedBox(height: 14),
-                OutlinedButton.icon(
-                  onPressed: _uploadingMedia ? null : _pickMedia,
-                  icon: _uploadingMedia
-                      ? _uploadSpinner(_mediaProgress)
-                      : Icon(_icon(_kind)),
-                  label: Text(
-                    _uploadingMedia
-                        ? _uploadLabel(s, _mediaProgress)
-                        : _media.text.isEmpty
-                        ? s.get('feed.uploadMedia')
-                        : s.get('feed.mediaSelected'),
-                  ),
-                ),
-                if (_media.text.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _media.text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-              ],
-              if (_kind == SocialPostKind.video) ...[
-                const SizedBox(height: 14),
-                OutlinedButton.icon(
-                  onPressed: _uploadingThumbnail ? null : _pickThumbnail,
-                  icon: _uploadingThumbnail
-                      ? _uploadSpinner(_thumbnailProgress)
-                      : const Icon(Icons.image_outlined),
-                  label: Text(
-                    _uploadingThumbnail
-                        ? _uploadLabel(s, _thumbnailProgress)
-                        : _thumbnail.text.isEmpty
-                        ? s.get('feed.uploadThumbnail')
-                        : s.get('feed.thumbnailSelected'),
-                  ),
-                ),
-                if (_thumbnail.text.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _thumbnail.text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-              ],
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _product,
-                decoration: InputDecoration(
-                  labelText: s.get('feed.productId'),
-                  hintText: s.get('feed.productHint'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                s.get('feed.productNote'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _busy || _uploadingMedia || _uploadingThumbnail
-                    ? null
-                    : _submit,
-                child: Text(
-                  _uploadingMedia || _uploadingThumbnail
-                      ? s.get('feed.uploading')
-                      : s.get('feed.publish'),
-                ),
+              style: theme.textTheme.titleMedium,
+              onChanged: (_) => setState(() {}),
+            ),
+            if (_preview != null) ...[
+              const SizedBox(height: 8),
+              _Attachment(
+                file: _preview!,
+                isVideo: _mediaKind == SocialPostKind.video,
+                uploading: _uploading,
+                progress: _progress,
+                onRemove: _uploading ? null : _detach,
               ),
             ],
-          ),
+            if (_products.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final product in _products)
+                    InputChip(
+                      avatar: const Icon(Icons.shopping_bag_outlined, size: 18),
+                      label: Text(product.name),
+                      onDeleted: () =>
+                          setState(() => _products.remove(product)),
+                    ),
+                ],
+              ),
+            ],
+            const Divider(height: 32),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: s.get('feed.composer.addPhoto'),
+                  onPressed: _uploading ? null : () => _attach(video: false),
+                  icon: const Icon(Icons.image_outlined),
+                ),
+                IconButton(
+                  tooltip: s.get('feed.composer.addVideo'),
+                  onPressed: _uploading ? null : () => _attach(video: true),
+                  icon: const Icon(Icons.videocam_outlined),
+                ),
+                IconButton(
+                  tooltip: s.get('feed.composer.addProduct'),
+                  onPressed: _products.length >= _maxProducts
+                      ? null
+                      : _addProduct,
+                  icon: const Icon(Icons.sell_outlined),
+                ),
+                const Spacer(),
+                Text(
+                  '${_text.text.characters.length}/1200',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              s.get('feed.productNote'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  IconData _icon(SocialPostKind kind) => switch (kind) {
-    SocialPostKind.video => Icons.play_circle_outline_rounded,
-    SocialPostKind.photo => Icons.image_outlined,
-    SocialPostKind.text => Icons.text_fields_rounded,
-  };
+/// The attached file, shown as itself.
+class _Attachment extends StatelessWidget {
+  const _Attachment({
+    required this.file,
+    required this.isVideo,
+    required this.uploading,
+    required this.progress,
+    required this.onRemove,
+  });
+
+  final File file;
+  final bool isVideo;
+  final bool uploading;
+  final double? progress;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        children: [
+          // A video file cannot be drawn by Image.file, so it gets a plain plate with a film icon
+          // rather than a broken-image box.
+          if (isVideo)
+            Container(
+              height: 200,
+              width: double.infinity,
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.movie_outlined,
+                size: 48,
+                color: theme.colorScheme.outline,
+              ),
+            )
+          else
+            Image.file(
+              file,
+              height: 200,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: 200,
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+            ),
+          if (uploading)
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0x66000000),
+                child: Center(
+                  // Determinate as soon as the first bytes are acknowledged: an indeterminate
+                  // ring on a two-minute video upload says the same thing as a frozen screen.
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          if (onRemove != null)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton.filled(
+                onPressed: onRemove,
+                iconSize: 18,
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xAA000000),
+                ),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Choosing a product to tag, by looking at it.
+///
+/// What this replaces: a text field into which the author was expected to type product ids,
+/// comma-separated. Nobody knows a cuid, so in practice no post ever carried a product.
+class _ProductPicker extends ConsumerStatefulWidget {
+  const _ProductPicker();
+  @override
+  ConsumerState<_ProductPicker> createState() => _ProductPickerState();
+}
+
+class _ProductPickerState extends ConsumerState<_ProductPicker> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final s = Strings.of(context);
+    // Searched on the server, like the catalogue: filtering a downloaded page works at five
+    // products and stops working the moment the catalogue is real.
+    final products = ref.watch(galleryProductsProvider(GalleryFilter(search: _query)));
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintText: s.get('feed.composer.searchProduct'),
+                ),
+                onChanged: (value) => setState(() => _query = value.trim()),
+              ),
+            ),
+            Expanded(
+              child: products.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator()),
+                error: (_, __) => Center(child: Text(s.get('err.unknown'))),
+                data: (list) => list.isEmpty
+                    ? Center(child: Text(s.get('feed.composer.noProducts')))
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) => ListTile(
+                          leading: RemoteImage(
+                            url: list[i].imageUrl,
+                            width: 48,
+                            height: 48,
+                            fallbackIcon: Icons.shopping_bag_outlined,
+                          ),
+                          title: Text(list[i].name),
+                          subtitle: Text(
+                            Money.tmt(list[i].priceTmt, s.locale),
+                          ),
+                          onTap: () => Navigator.of(context).pop(list[i]),
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

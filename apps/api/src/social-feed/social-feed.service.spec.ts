@@ -511,3 +511,35 @@ describe("author avatars in the feed", () => {
     expect(page.items[0].author.avatarUrl).toBeNull();
   });
 });
+
+describe("publishing a video", () => {
+  it("does not demand a separately produced cover image", async () => {
+    // It used to. Someone publishing a video had to shoot it, upload it, and then make a still
+    // image for it before the API would take the post -- a step nothing downstream needs, since
+    // the player draws the first frame itself.
+    const prisma = {
+      galleryProduct: { findMany: jest.fn().mockResolvedValue([]) },
+      socialPost: {
+        create: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+    await expect(
+      target(prisma).create("u1", {
+        mediaType: "VIDEO",
+        mediaUrl: "https://open.s3.regru.cloud/uploads/a.mp4",
+        productIds: [],
+      } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it("still refuses a video with no video on it", async () => {
+    const prisma = { galleryProduct: { findMany: jest.fn() } };
+    await expect(
+      target(prisma).create("u1", {
+        mediaType: "VIDEO",
+        productIds: [],
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
