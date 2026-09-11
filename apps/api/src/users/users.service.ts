@@ -88,7 +88,7 @@ export class UsersService {
 
   async createStaff(dto: CreateStaffUserDto, adminId: string) {
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    if (existing) throw new ConflictException("Phone already registered");
+    if (existing) throw new ConflictException("PHONE_ALREADY_REGISTERED");
 
     const passwordHash = await argon2.hash(dto.password);
     const username = await this.referrals.generateUsername();

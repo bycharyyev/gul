@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
       select: { id: true, role: true, isBlocked: true },
     });
-    if (!user || user.isBlocked) throw new UnauthorizedException("Account blocked");
+    if (!user || user.isBlocked) throw new UnauthorizedException("ACCOUNT_BLOCKED");
     return { userId: user.id, role: user.role };
   }
 }

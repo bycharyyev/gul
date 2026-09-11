@@ -62,6 +62,33 @@ void main() {
       expect(const Strings('ru').error(e), 'Заказ уже оплачен');
     });
 
+    test('a stable code is said in the reader language, not passed through', () {
+      // The login screen showed the API's own "Invalid credentials" to Russian speakers, which
+      // is how a Russian app ends up with an English sentence on its very first screen.
+      const e = AppException(
+        kind: AppErrorKind.unauthorized,
+        serverMessage: 'INVALID_CREDENTIALS',
+      );
+      expect(const Strings('ru').error(e), 'Неверный номер или пароль.');
+      expect(const Strings('en').error(e), 'Wrong phone number or password.');
+      expect(
+        const Strings('tkm').error(e),
+        'Telefon belgisi ýa-da parol nädogry.',
+      );
+    });
+
+    test('an untranslated code is never shown raw', () {
+      // A code the API adds before this table knows it must not reach the screen: NEW_CODE_HERE
+      // tells a customer nothing, while the generic line at least says what to do.
+      const e = AppException(
+        kind: AppErrorKind.conflict,
+        serverMessage: 'SOME_FUTURE_CODE',
+      );
+      for (final locale in ['ru', 'en', 'tkm']) {
+        expect(Strings(locale).error(e), isNot(contains('SOME_FUTURE_CODE')));
+      }
+    });
+
     test('every kind has a fallback, in every locale', () {
       for (final locale in ['ru', 'en', 'tkm']) {
         for (final kind in AppErrorKind.values) {

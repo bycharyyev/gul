@@ -63,10 +63,13 @@ class Strings {
     // The API now reports field-level failures as the stable code VALIDATION_FAILED instead of a
     // raw English validator sentence, so this can be said in the user's language.
     if (e.serverCode == 'VALIDATION_FAILED') return get('err.validation');
-    // A stable code rather than a sentence, so it can be said in the customer's language and
-    // tell them what to do instead: open the product and copy the address-bar link.
-    if (server == 'SHORT_LINK_NOT_RESOLVED') return get('err.shortLink');
-    if (server != null && server.isNotEmpty) return server;
+    final coded = _errorCodeKeys[server];
+    if (coded != null) return get(coded);
+    // A code we have not translated yet. Showing it raw puts INVALID_CREDENTIALS in front of a
+    // customer, which is worse than saying nothing specific — the generic text below at least
+    // tells them what to do. Business messages the API writes as real sentences are unaffected:
+    // they do not look like this.
+    if (server != null && server.isNotEmpty && !_looksLikeCode(server)) return server;
     return switch (e.kind) {
       AppErrorKind.network => get('err.network'),
       AppErrorKind.timeout => get('err.timeout'),
@@ -80,6 +83,24 @@ class Strings {
       AppErrorKind.unknown => get('err.unknown'),
     };
   }
+
+  /// Stable codes the API answers business failures with, and the string that says each one in
+  /// the reader's language. A code carries no language, which is the whole point: the same
+  /// failure used to arrive as the English sentence "Invalid credentials" and was shown verbatim
+  /// on the login screen of a Russian app.
+  static const Map<String, String> _errorCodeKeys = {
+    'INVALID_CREDENTIALS': 'err.invalidCredentials',
+    'ACCOUNT_BLOCKED': 'err.accountBlocked',
+    'PHONE_ALREADY_REGISTERED': 'err.phoneTaken',
+    'CURRENT_PASSWORD_INCORRECT': 'err.currentPasswordWrong',
+    'SHORT_LINK_NOT_RESOLVED': 'err.shortLink',
+  };
+
+  /// Whether a server message is a code rather than a sentence meant to be read. Codes are
+  /// SCREAMING_SNAKE and single-token; every human-readable message the API writes has spaces
+  /// or lowercase letters in it, so nothing legitimate is caught here.
+  static bool _looksLikeCode(String message) =>
+      RegExp(r'^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$').hasMatch(message);
 
   static const Map<String, Map<String, String>> _table = {
     'ru': {
@@ -561,6 +582,10 @@ class Strings {
       'err.validation': 'Проверьте заполненные поля',
       'err.shortLink':
           'Короткая ссылка не раскрылась. Откройте товар в магазине и пришлите ссылку из адресной строки.',
+      'err.invalidCredentials': 'Неверный номер или пароль.',
+      'err.accountBlocked': 'Доступ к этому аккаунту закрыт. Напишите в поддержку.',
+      'err.phoneTaken': 'На этот номер уже зарегистрирован аккаунт.',
+      'err.currentPasswordWrong': 'Текущий пароль указан неверно.',
     },
     'en': {
       'app.title': 'Gulyaly',
@@ -1039,6 +1064,10 @@ class Strings {
       'err.validation': 'Check the fields you filled in',
       'err.shortLink':
           'That short link could not be expanded. Open the product in the shop and send the address-bar link.',
+      'err.invalidCredentials': 'Wrong phone number or password.',
+      'err.accountBlocked': 'This account is closed. Please contact support.',
+      'err.phoneTaken': 'An account already exists for this number.',
+      'err.currentPasswordWrong': 'That is not your current password.',
     },
     'tkm': {
       'app.title': 'Gulyaly',
@@ -1516,6 +1545,10 @@ class Strings {
       'err.validation': 'Doldurylan meýdanlary barlaň',
       'err.shortLink':
           'Gysga salgy açylmady. Harydy dükanda açyp, salgy setiriniň salgysyny iberiň.',
+      'err.invalidCredentials': 'Telefon belgisi ýa-da parol nädogry.',
+      'err.accountBlocked': 'Bu hasaba girmek ýapyk. Goldaw gullugyna ýazyň.',
+      'err.phoneTaken': 'Bu belgi bilen hasap eýýäm bar.',
+      'err.currentPasswordWrong': 'Häzirki parol nädogry görkezildi.',
     },
   };
 }

@@ -74,9 +74,15 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  // The failures below carry a stable SCREAMING_SNAKE code instead of an English sentence.
+  // Clients render the message verbatim when they recognise nothing better, so "Invalid
+  // credentials" was reaching Russian- and Turkmen-speaking customers untranslated on the very
+  // first screen of the app. A code has no language, so each client says it in the reader's own;
+  // see `error.*` in packages/i18n and `_errorCodeKeys` in the mobile app's strings table.
+  // Anything a person is meant to read belongs in those tables, not here.
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    if (existing) throw new ConflictException("Phone already registered");
+    if (existing) throw new ConflictException("PHONE_ALREADY_REGISTERED");
 
     const passwordHash = await argon2.hash(dto.password);
     const username = await this.referrals.generateUsername();
@@ -135,15 +141,15 @@ export class AuthService {
     // who has an account here.
     if (!user) {
       await this.loginAttempts.recordFailure(dto.phone);
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException("INVALID_CREDENTIALS");
     }
 
     const valid = await argon2.verify(user.passwordHash, dto.password);
     if (!valid) {
       await this.loginAttempts.recordFailure(dto.phone);
-      throw new UnauthorizedException("Invalid credentials");
+      throw new UnauthorizedException("INVALID_CREDENTIALS");
     }
-    if (user.isBlocked) throw new UnauthorizedException("Account blocked");
+    if (user.isBlocked) throw new UnauthorizedException("ACCOUNT_BLOCKED");
 
     // The right password erases the history: somebody who signs in correctly is never delayed,
     // however often they do it.
@@ -220,7 +226,7 @@ export class AuthService {
     if (!user) throw new NotFoundException("User not found");
 
     const valid = await argon2.verify(user.passwordHash, dto.currentPassword);
-    if (!valid) throw new BadRequestException("Current password is incorrect");
+    if (!valid) throw new BadRequestException("CURRENT_PASSWORD_INCORRECT");
 
     const passwordHash = await argon2.hash(dto.newPassword);
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
@@ -278,7 +284,7 @@ export class AuthService {
   async updateMe(userId: string, dto: UpdateMeDto) {
     if (dto.phone) {
       const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-      if (existing && existing.id !== userId) throw new ConflictException("Phone already registered");
+      if (existing && existing.id !== userId) throw new ConflictException("PHONE_ALREADY_REGISTERED");
     }
 
     const user = await this.prisma.user.update({

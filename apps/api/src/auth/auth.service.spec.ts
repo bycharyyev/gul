@@ -237,7 +237,7 @@ describe("AuthService", () => {
 
       await expect(
         service.register({ phone: "+70000000001", password: "password123" }),
-      ).rejects.toThrow("Phone already registered");
+      ).rejects.toThrow("PHONE_ALREADY_REGISTERED");
       expect(referrals.generateUsername).not.toHaveBeenCalled();
     });
   });

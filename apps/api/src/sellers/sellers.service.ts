@@ -52,7 +52,7 @@ export class SellersService {
       this.prisma.seller.findUnique({ where: { handle } }),
       this.referrals.isUsernameTaken(handle),
     ]);
-    if (existingPhone) throw new ConflictException("Phone already registered");
+    if (existingPhone) throw new ConflictException("PHONE_ALREADY_REGISTERED");
     if (existingHandle || handleTakenAsUsername) throw new ConflictException("Handle already taken");
   }
 

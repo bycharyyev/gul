@@ -28,11 +28,14 @@ const coreDictionaries: Record<Locale, Dictionary> = {
     "common.mbUnit": "МБ",
     "common.uploadImageButton": "Загрузить",
 
-    // ---- known API error messages, looked up by the exact English text the backend sends ----
-    "error.Phone already registered": "Этот номер телефона уже зарегистрирован",
-    "error.Invalid credentials": "Неверный телефон или пароль",
-    "error.Account blocked": "Аккаунт заблокирован",
-    "error.Current password is incorrect": "Текущий пароль неверен",
+    // ---- known API error codes, looked up by the stable code the backend sends ----
+    // These were keyed on the English sentence itself until 2026-09-11, which meant the
+    // translation broke silently whenever anyone reworded a throw -- and the mobile app,
+    // which has no such table, showed "Invalid credentials" to Russian speakers.
+    "error.PHONE_ALREADY_REGISTERED": "Этот номер телефона уже зарегистрирован",
+    "error.INVALID_CREDENTIALS": "Неверный телефон или пароль",
+    "error.ACCOUNT_BLOCKED": "Аккаунт заблокирован",
+    "error.CURRENT_PASSWORD_INCORRECT": "Текущий пароль неверен",
     "error.Неверный код": "Неверный код",
     "error.Срок действия кода истёк": "Срок действия кода истёк",
     "error.Нет активного запроса на сброс пароля": "Нет активного запроса на сброс пароля",
@@ -350,10 +353,10 @@ const coreDictionaries: Record<Locale, Dictionary> = {
     "common.mbUnit": "MB",
     "common.uploadImageButton": "Upload",
 
-    "error.Phone already registered": "This phone number is already registered",
-    "error.Invalid credentials": "Incorrect phone number or password",
-    "error.Account blocked": "This account is blocked",
-    "error.Current password is incorrect": "Current password is incorrect",
+    "error.PHONE_ALREADY_REGISTERED": "This phone number is already registered",
+    "error.INVALID_CREDENTIALS": "Incorrect phone number or password",
+    "error.ACCOUNT_BLOCKED": "This account is blocked",
+    "error.CURRENT_PASSWORD_INCORRECT": "Current password is incorrect",
     "error.Неверный код": "Wrong code",
     "error.Срок действия кода истёк": "The code has expired",
     "error.Нет активного запроса на сброс пароля": "No password reset is in progress",
@@ -665,10 +668,10 @@ const coreDictionaries: Record<Locale, Dictionary> = {
     "common.mbUnit": "MB",
     "common.uploadImageButton": "Ýükle",
 
-    "error.Phone already registered": "Bu telefon belgisi eýýäm hasaba alnan",
-    "error.Invalid credentials": "Telefon belgisi ýa-da parol nädogry",
-    "error.Account blocked": "Hasap petiklendi",
-    "error.Current password is incorrect": "Häzirki parol nädogry",
+    "error.PHONE_ALREADY_REGISTERED": "Bu telefon belgisi eýýäm hasaba alnan",
+    "error.INVALID_CREDENTIALS": "Telefon belgisi ýa-da parol nädogry",
+    "error.ACCOUNT_BLOCKED": "Hasap petiklendi",
+    "error.CURRENT_PASSWORD_INCORRECT": "Häzirki parol nädogry",
     "error.Неверный код": "Kod nädogry",
     "error.Срок действия кода истёк": "Kodyň möhleti geçdi",
     "error.Нет активного запроса на сброс пароля": "Paroly dikeltmek islegi ýok",
