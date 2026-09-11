@@ -150,8 +150,63 @@ describe("SocialFeedService safety and idempotency", () => {
 
     // p2's author is the one this viewer saves, so p2 leads a page that is otherwise p3, p2, p1.
     expect(page.items.map((i) => i.id)).toEqual(["p2", "p3", "p1"]);
-    // And the page still ends where chronology says it does.
-    expect(page.nextCursor).toBe("p1");
+    // The query asks for one more than the page; three came back for a page of three, so there is
+    // no next page and the client is not sent for one that would arrive empty.
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("serves a whole page when one author wrote all of it", async () => {
+    // The per-author cap used to decide membership and the cursor moved past what it skipped, so
+    // a feed where one seller writes everything served two posts and then declared itself over --
+    // every other post that seller had published was unreachable.
+    const at = (m: number) => new Date(Date.UTC(2026, 8, 9, 10, m));
+    const posts = [5, 4, 3, 2, 1].map((n) => ({
+      id: `p${n}`,
+      authorId: "a1",
+      publishedAt: at(n),
+      author: { id: "a1", fullName: "A", username: "a", avatarPath: null },
+      products: [],
+      likeCount: 0,
+      saveCount: 0,
+      productClickCount: 0,
+    }));
+    const prisma = {
+      socialPost: { findMany: jest.fn().mockResolvedValue(posts) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+
+    const page = await target(prisma).list(undefined, undefined, 4);
+
+    expect(page.items.map((i) => i.id)).toEqual(["p5", "p4", "p3", "p2"]);
+    // Five came back for a page of four, so a fifth post exists and the cursor points at it.
+    expect(page.nextCursor).toBe("p2");
+  });
+
+  it("keeps one author off the top of a page shared with others", async () => {
+    // Order, not membership: the third post by the same author goes last, it does not vanish.
+    const at = (m: number) => new Date(Date.UTC(2026, 8, 9, 10, m));
+    const posts = [
+      { id: "p4", authorId: "a1" },
+      { id: "p3", authorId: "a1" },
+      { id: "p2", authorId: "a1" },
+      { id: "p1", authorId: "a2" },
+    ].map((x, i) => ({
+      ...x,
+      publishedAt: at(4 - i),
+      author: { id: x.authorId, fullName: "A", username: "a", avatarPath: null },
+      products: [],
+      likeCount: 0,
+      saveCount: 0,
+      productClickCount: 0,
+    }));
+    const prisma = {
+      socialPost: { findMany: jest.fn().mockResolvedValue(posts) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+
+    const page = await target(prisma).list(undefined, undefined, 4);
+
+    expect(page.items.map((i) => i.id)).toEqual(["p4", "p3", "p1", "p2"]);
   });
 
   it("reads the viewer's history once, not once per ranking pass", async () => {

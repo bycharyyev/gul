@@ -110,13 +110,19 @@ class _PostPage extends ConsumerWidget {
             ),
           if (post.kind == SocialPostKind.video && post.mediaUrl != null)
             _FeedVideo(url: post.mediaUrl!),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.center,
-                end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Color(0xCE000000)],
-                stops: [.35, 1],
+          // IgnorePointer, because a childless DecoratedBox answers a hit test itself: this
+          // decoration covers the whole page and was quietly eating every tap meant for the
+          // video under it, which is why tap-to-pause did nothing anywhere. It darkens the
+          // bottom so the rail and the caption stay readable; it was never meant to be touched.
+          const IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.center,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Color(0xCE000000)],
+                  stops: [.35, 1],
+                ),
               ),
             ),
           ),

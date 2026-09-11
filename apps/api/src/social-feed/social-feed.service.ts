@@ -239,7 +239,10 @@ export class SocialFeedService {
             }
           : {}),
       },
-      take: safeTake * 3,
+      // One more than the page, purely to learn whether another page exists. It used to fetch
+      // three times the page because the per-author cap threw posts away and the page had to be
+      // refilled from somewhere; nothing is thrown away now.
+      take: safeTake + 1,
       orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
       include: POST_INCLUDE,
     })) as PostWithDetails[];
@@ -247,21 +250,26 @@ export class SocialFeedService {
     // `nextCursor` is a point in publication time, so if affinity were allowed to decide *which*
     // posts a page contains, the cursor would land on a post newer than others already shown and
     // the following page would serve them again. Ordering inside a page is free; membership is not.
+    const hasMore = posts.length > safeTake;
+    const selected = posts.slice(0, safeTake);
+    const boundary = selected.at(-1);
+
+    // The per-author cap used to decide membership: a third post by the same author was skipped,
+    // and the cursor moved past it regardless, so it was never served again. On this feed, where
+    // one seller writes nearly everything, that left exactly two posts and then reported the end
+    // of the feed -- every other post the seller had published was silently unreachable.
+    //
+    // The cap now decides order within the page instead. A prolific author still cannot hold the
+    // top of a page while other authors are on it, but nothing is discarded and the page keeps its
+    // length, which is the behaviour a feed with one active seller needs.
     const authorCounts = new Map<string, number>();
-    const selected: PostWithDetails[] = [];
-    // The last post examined, taken or skipped -- not the last one kept. A post dropped by the
-    // per-author cap is dropped, not deferred, and the cursor has to move past it or the next
-    // page reconsiders and re-drops it forever.
-    let boundary: PostWithDetails | undefined;
-    for (const post of posts) {
-      boundary = post;
+    const repeatRank = new Map<string, number>();
+    for (const post of selected) {
       const seen = authorCounts.get(post.authorId) ?? 0;
-      // A per-page author cap keeps a prolific seller from dominating the page.
-      if (seen >= 2) continue;
       authorCounts.set(post.authorId, seen + 1);
-      selected.push(post);
-      if (selected.length === safeTake) break;
+      repeatRank.set(post.id, seen < 2 ? 0 : 1);
     }
+    const rank = (post: PostWithDetails) => repeatRank.get(post.id) ?? 0;
     const ids = selected.map((p) => p.id);
     const interactions =
       viewer && ids.length
@@ -283,7 +291,12 @@ export class SocialFeedService {
     // One history read, not two. Both signals it feeds -- who the viewer engages with, and which
     // products they engage with -- only reorder the page that chronology already fixed, so a
     // viewer sees the same posts as everyone else, arranged to suit them.
-    let display = selected;
+    let display = [...selected].sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        Number(b.publishedAt) - Number(a.publishedAt) ||
+        b.id.localeCompare(a.id),
+    );
     if (viewer && selected.length > 1) {
       const history = await this.prisma.socialInteraction.findMany({
         where: {
@@ -322,6 +335,9 @@ export class SocialFeedService {
           Math.min(2, post.productClickCount) +
           Math.min(1, post.likeCount + post.saveCount);
         return (
+          // Ahead of affinity: a page must not open with three posts by the same author just
+          // because the viewer likes them.
+          rank(a) - rank(b) ||
           score(b) - score(a) ||
           Number(b.publishedAt) - Number(a.publishedAt) ||
           b.id.localeCompare(a.id)
@@ -345,9 +361,10 @@ export class SocialFeedService {
             }
           : undefined,
       })),
-      // The oldest post considered, not the last one displayed: display order is personalised
-      // and says nothing about where the next page should start.
-      nextCursor: selected.length === safeTake ? (boundary?.id ?? null) : null,
+      // The oldest post on this page, not the last one displayed: display order is personalised
+      // and says nothing about where the next page should start. Null unless another post exists,
+      // so the client is never sent for a page that turns out to be empty.
+      nextCursor: hasMore ? (boundary?.id ?? null) : null,
     };
   }
 
