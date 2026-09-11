@@ -244,6 +244,11 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
     }
     final strings = Strings.of(context);
     return GestureDetector(
+      // Opaque, not the default deferToChild. The only thing under the finger across most of this
+      // page is the video surface -- a Texture, which does not take part in hit testing at all --
+      // so a GestureDetector that defers to its child received nothing over the video itself and
+      // the tap-to-pause simply did not happen anywhere it mattered.
+      behavior: HitTestBehavior.opaque,
       onTap: _toggle,
       child: Stack(
         fit: StackFit.expand,
