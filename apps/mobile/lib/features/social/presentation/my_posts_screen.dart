@@ -99,6 +99,14 @@ class _MyPostCard extends ConsumerStatefulWidget {
   ConsumerState<_MyPostCard> createState() => _MyPostCardState();
 }
 
+/// The app's FilledButton theme is `Size.fromHeight(54)` -- full width -- for the primary button
+/// at the bottom of a page. In a dialog's action row that forces Material to stack the buttons
+/// one above the other, and the dialog reads as broken.
+final ButtonStyle _dialogButton = FilledButton.styleFrom(
+  minimumSize: const Size(0, 44),
+  padding: const EdgeInsets.symmetric(horizontal: 20),
+);
+
 class _MyPostCardState extends ConsumerState<_MyPostCard> {
   bool _busy = false;
 
@@ -124,6 +132,7 @@ class _MyPostCardState extends ConsumerState<_MyPostCard> {
             child: Text(strings.get('common.cancel')),
           ),
           FilledButton(
+            style: _dialogButton,
             onPressed: () =>
                 Navigator.of(dialogContext).pop(controller.text.trim()),
             child: Text(strings.get('common.save')),
@@ -155,6 +164,7 @@ class _MyPostCardState extends ConsumerState<_MyPostCard> {
             child: Text(strings.get('common.cancel')),
           ),
           FilledButton(
+            style: _dialogButton,
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(strings.get('feed.mine.delete')),
           ),
@@ -171,11 +181,17 @@ class _MyPostCardState extends ConsumerState<_MyPostCard> {
   /// One write, one reload, one message. The list is refetched rather than patched in place
   /// because both operations change the post's status on the server, and guessing the new status
   /// here is how a client ends up disagreeing with what moderation actually did.
+  ///
+  /// The reload is awaited, not fired off with `invalidate`. An edit really does move a post back
+  /// into the moderation queue, and the message says so -- so the list has to already show it as
+  /// such when the message appears. Merely invalidating left the card reading "Опубликовано"
+  /// under a toast that said the opposite, until the person pulled to refresh.
   Future<void> _run(Future<void> Function() action, String done) async {
     setState(() => _busy = true);
     try {
       await action();
-      ref.invalidate(myPostsProvider);
+      // ignore: unused_result -- the value is the list; what matters is having waited for it.
+      await ref.refresh(myPostsProvider.future);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

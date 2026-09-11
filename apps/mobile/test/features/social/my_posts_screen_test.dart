@@ -132,6 +132,9 @@ void main() {
 
     verify(() => repo.updateMine('a', body: 'Новая подпись')).called(1);
     expect(find.text('Изменения отправлены на проверку'), findsOneWidget);
+    // And the list is already showing what the server now says. On the phone it kept reading
+    // "Опубликовано" under a message announcing the opposite, until somebody pulled to refresh.
+    verify(() => repo.loadMine(cursor: any(named: 'cursor'))).called(2);
   });
 
   testWidgets('deleting asks first', (t) async {
