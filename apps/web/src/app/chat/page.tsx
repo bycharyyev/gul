@@ -53,6 +53,8 @@ export default function ChatPage() {
   const [notice, setNotice] = useState("");
   const activeRef = useRef(active);
   activeRef.current = active;
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
   const endRef = useRef<HTMLDivElement>(null);
   async function refresh() {
     setInbox(await api.chatInbox());
@@ -110,11 +112,11 @@ export default function ChatPage() {
     let alive = true;
     let running = false;
     const run = async () => {
-      if (running || document.hidden) return;
+      if (running || document.hidden || panelRef.current) return;
       running = true;
       try {
         const data = await api.chatConversation(active);
-        if (!alive) return;
+        if (!alive || panelRef.current || document.hidden) return;
         setConversation(data);
         await api.markChatRead(active);
         if (alive)
@@ -715,6 +717,11 @@ export default function ChatPage() {
                 aria-live="polite"
                 aria-relevant="additions"
               >
+                {conversation && conversation.messages.length >= 200 && (
+                  <p className="text-center text-xs text-slate-500">
+                    Показаны последние 200 сообщений.
+                  </p>
+                )}
                 {!conversation && (
                   <p className="text-center text-sm text-slate-500">
                     Загружаем сообщения…
