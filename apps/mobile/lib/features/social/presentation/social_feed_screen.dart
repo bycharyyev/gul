@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import '../../../app/providers.dart';
 import '../../../app/shell.dart';
 import '../../../core/format/money.dart';
 import '../../../core/l10n/strings.dart';
+import '../../../core/media/video_cache.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/remote_image.dart';
@@ -42,6 +45,10 @@ class SocialFeedScreen extends ConsumerWidget {
                 if (index >= feed.posts.length - 3) {
                   ref.read(socialFeedProvider.notifier).loadMore();
                 }
+                // Fetch what is about to be swiped into, never what is playing: the current video
+                // is already streaming, and downloading it again beside itself would double the
+                // data bill for no gain. By the time a finger arrives, the file is on the device.
+                _prefetchAround(feed.posts, index);
               },
               itemBuilder: (_, index) => _PostPage(post: feed.posts[index]),
             ),
@@ -71,6 +78,19 @@ class SocialFeedScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Caches the next couple of videos.
+///
+/// Two, not ten: a feed opened and abandoned after one post should not have spent someone's data
+/// on eight videos they never saw. Failures are ignored by design -- an uncached video streams.
+void _prefetchAround(List<SocialPost> posts, int index) {
+  for (var i = index + 1; i <= index + 2 && i < posts.length; i++) {
+    final post = posts[i];
+    if (post.kind != SocialPostKind.video) continue;
+    final url = post.mediaUrl;
+    if (url != null) VideoCache.instance.prefetch(url);
   }
 }
 
@@ -153,7 +173,10 @@ class _FeedVideo extends StatefulWidget {
 }
 
 class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
-  late final VideoPlayerController _controller;
+  /// Null until the cache has been asked whether it holds this video. Everything that touches it
+  /// reads it into a local first -- the answer arrives asynchronously, and a tap or a tab switch
+  /// can land before it does.
+  VideoPlayerController? _controller;
 
   /// Mirrors `_controller.value.isPlaying`, updated only when it actually flips. The controller
   /// notifies on every position tick — rebuilding the video surface dozens of times a second to
@@ -171,20 +194,42 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..setLooping(true)
-      ..addListener(_syncPlaying)
-      ..initialize()
-          .then((_) {
-            if (!mounted) return;
-            if (_onScreen) _controller.play();
-            setState(() {});
-          })
-          .catchError((_) {});
+    unawaited(_open());
+  }
+
+  /// Plays the cached file when there is one, and streams otherwise.
+  ///
+  /// The check is a single stat on a path, so the wait before the first frame is not measurable;
+  /// what it saves is the whole download, every time this video is watched again. Nothing is
+  /// downloaded here -- the feed prefetches ahead (see `_prefetchAround`), so a video reached by
+  /// swiping is usually already a file by the time this runs.
+  Future<void> _open() async {
+    final file = await VideoCache.instance.cached(widget.url);
+    if (!mounted) return;
+    final controller = file != null
+        ? VideoPlayerController.file(file)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+    unawaited(controller.setLooping(true));
+    controller.addListener(_syncPlaying);
+    try {
+      await controller.initialize();
+    } catch (_) {
+      return;
+    }
+    // Disposed while the file was opening: this widget's own dispose ran before the controller
+    // existed, so nothing else will ever let go of it.
+    if (!mounted) {
+      controller.removeListener(_syncPlaying);
+      await controller.dispose();
+      return;
+    }
+    if (_onScreen && !_pausedByUser) unawaited(controller.play());
+    setState(() {});
   }
 
   void _syncPlaying() {
-    final playing = _controller.value.isPlaying;
+    final playing = _controller?.value.isPlaying ?? false;
     if (playing == _playing || !mounted) return;
     setState(() => _playing = playing);
   }
@@ -199,10 +244,13 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
     final onScreen = TickerMode.of(context);
     if (onScreen == _onScreen) return;
     _onScreen = onScreen;
+    final controller = _controller;
     if (!onScreen) {
-      _controller.pause();
-    } else if (!_pausedByUser && _controller.value.isInitialized) {
-      _controller.play();
+      controller?.pause();
+    } else if (!_pausedByUser &&
+        controller != null &&
+        controller.value.isInitialized) {
+      controller.play();
     }
   }
 
@@ -210,36 +258,41 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
   /// backgrounded app is the version of this people notice fastest.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _controller;
+    if (controller == null) return;
     if (state == AppLifecycleState.resumed) {
-      if (_onScreen && !_pausedByUser && _controller.value.isInitialized) {
-        _controller.play();
+      if (_onScreen && !_pausedByUser && controller.value.isInitialized) {
+        controller.play();
       }
     } else {
-      _controller.pause();
+      controller.pause();
     }
   }
 
   void _toggle() {
-    if (_controller.value.isPlaying) {
+    final controller = _controller;
+    if (controller == null) return;
+    if (controller.value.isPlaying) {
       _pausedByUser = true;
-      _controller.pause();
+      controller.pause();
     } else {
       _pausedByUser = false;
-      _controller.play();
+      controller.play();
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller.removeListener(_syncPlaying);
-    _controller.dispose();
+    _controller?.removeListener(_syncPlaying);
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
       return const Center(
         child: Icon(
           Icons.play_circle_outline_rounded,
@@ -262,9 +315,9 @@ class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
           FittedBox(
             fit: BoxFit.cover,
             child: SizedBox(
-              width: _controller.value.size.width,
-              height: _controller.value.size.height,
-              child: VideoPlayer(_controller),
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
             ),
           ),
           // A paused video is otherwise indistinguishable from a still photo, and the tap that

@@ -31,6 +31,45 @@ class SocialFeedRepository {
     );
   }
 
+  /// The signed-in author's own posts -- every status, newest first.
+  ///
+  /// A separate route from the feed on purpose: what an author needs to see is exactly what the
+  /// feed exists to hide. A post still awaiting moderation, or one that was refused and the
+  /// reason, appears nowhere else.
+  Future<SocialFeedPage> loadMine({String? cursor}) async {
+    final raw = await _api.get<Map<String, dynamic>>(
+      '/social-feed/mine',
+      query: {if (cursor != null) 'cursor': cursor},
+    );
+    final items = raw['items'] as List<dynamic>? ?? const [];
+    return SocialFeedPage(
+      posts: items
+          .whereType<Map<String, dynamic>>()
+          .map(SocialPost.fromJson)
+          .toList(),
+      nextCursor: raw['nextCursor'] as String?,
+    );
+  }
+
+  /// Edits one of the author's own posts. The server sends it back to moderation, so the caller
+  /// must expect the returned post to be PENDING even if the one it replaced was published.
+  Future<SocialPost> updateMine(
+    String id, {
+    String? body,
+    List<String>? productIds,
+  }) async {
+    final json = await _api.patch<Map<String, dynamic>>(
+      '/social-feed/$id',
+      body: {
+        if (body != null) 'body': body.trim(),
+        if (productIds != null) 'productIds': productIds,
+      },
+    );
+    return SocialPost.fromJson(json);
+  }
+
+  Future<void> deleteMine(String id) => _api.delete<void>('/social-feed/$id');
+
   Future<SocialPost> create({
     required SocialPostKind kind,
     String? body,

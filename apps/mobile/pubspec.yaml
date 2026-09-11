@@ -50,6 +50,11 @@ dependencies:
   # Native playback for the full-screen commerce feed. The feed only initializes the one visible
   # video; photos and text posts pay no player cost.
   video_player: ^2.9.2
+  # Declared, not inherited: both arrive transitively through cached_network_image today, and
+  # lib/core/media/video_cache.dart imports them directly. A transitive dependency is not one we
+  # have -- it can disappear in any upgrade of the package that happens to pull it.
+  path_provider: ^2.1.4
+  crypto: ^3.0.6
 
   # Choosing an avatar from the gallery or camera.
   image_picker: ^1.1.2

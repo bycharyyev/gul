@@ -41,6 +41,13 @@ export class SocialFeedController {
   ) {
     return this.feed.list(user, cursor, take ? Number(take) : 12);
   }
+  @ApiBearerAuth() @UseGuards(JwtAuthGuard) @Get("mine") mine(
+    @CurrentUser() user: User,
+    @Query("cursor") cursor?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.feed.listMine(user.userId, cursor, take ? Number(take) : 20);
+  }
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 6, ttl: 60_000 } })

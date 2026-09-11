@@ -38,7 +38,18 @@ const PRODUCT_SELECT = {
 } as const;
 const POST_INCLUDE = {
   author: {
-    select: { id: true, fullName: true, username: true, avatarPath: true },
+    select: {
+      id: true,
+      fullName: true,
+      username: true,
+      avatarPath: true,
+      // The shop behind the author, so a post can lead somewhere. Carried on the post rather than
+      // fetched per author by the client: a feed of twelve posts would otherwise be twelve more
+      // requests, and the button would appear a moment after the post it belongs to.
+      sellerProfile: {
+        select: { handle: true, shopName: true, logoUrl: true, isEnabled: true },
+      },
+    },
   },
   products: {
     orderBy: { sortOrder: "asc" as const },
@@ -279,9 +290,6 @@ export class SocialFeedService {
     // One history read, not two. Both signals it feeds -- who the viewer engages with, and which
     // products they engage with -- only reorder the page that chronology already fixed, so a
     // viewer sees the same posts as everyone else, arranged to suit them.
-    // One history read, not two. Both signals it feeds -- who the viewer engages with, and which
-    // products they engage with -- only reorder the page that chronology already fixed, so a
-    // viewer sees the same posts as everyone else, arranged to suit them.
     const signals =
       viewer && selected.length > 1
         ? buildViewerSignals(
@@ -308,14 +316,8 @@ export class SocialFeedService {
 
     return {
       items: display.map((p) => ({
-        ...p,
-        author: {
-          ...p.author,
-          avatarUrl: p.author.avatarPath
-            ? `/api/avatar/${p.author.avatarPath}`
-            : null,
-        },
-        products: p.products.map((x) => x.product),
+        ...this.publicShape(p),
+        isMine: viewer?.userId === p.authorId,
         viewer: viewer
           ? {
               liked: byPost.get(p.id)?.has("LIKE") ?? false,
@@ -327,6 +329,88 @@ export class SocialFeedService {
       // and says nothing about where the next page should start. Null unless another post exists,
       // so the client is never sent for a page that turns out to be empty.
       nextCursor: hasMore ? (boundary?.id ?? null) : null,
+    };
+  }
+
+  /**
+   * One post as clients see it: the stored row, plus the two things only the server can resolve --
+   * where an avatar is served from, and which shop the author speaks for. Shared by the feed and
+   * by an author's own list so the two cannot drift into describing the same post differently.
+   */
+  private publicShape(p: PostWithDetails) {
+    const shop = p.author.sellerProfile;
+    return {
+      ...p,
+      author: {
+        id: p.author.id,
+        fullName: p.author.fullName,
+        username: p.author.username,
+        avatarPath: p.author.avatarPath,
+        avatarUrl: p.author.avatarPath
+          ? `/api/avatar/${p.author.avatarPath}`
+          : null,
+        // Only an open shop is offered. A disabled one still owns its posts, but a button leading
+        // to a page that refuses to load is worse than no button.
+        shop:
+          shop && shop.isEnabled
+            ? {
+                handle: shop.handle,
+                shopName: shop.shopName,
+                logoUrl: shop.logoUrl,
+              }
+            : null,
+      },
+      products: p.products.map((x) => x.product),
+    };
+  }
+
+  /**
+   * An author's own posts -- every status, newest first.
+   *
+   * Deliberately not the public feed filtered by author: what an author needs to see is exactly
+   * what the feed exists to hide. A post awaiting moderation, or one that was rejected and why,
+   * appears nowhere else, and without this an author who posted and saw nothing had no way to
+   * tell a slow queue from a refusal.
+   *
+   * `canEdit`/`canDelete` are decided here, by the same rules `updateMine`/`removeMine` enforce,
+   * so the buttons a client shows cannot drift away from what the server will actually allow.
+   */
+  async listMine(userId: string, cursor?: string, take = 20) {
+    const safeTake = Math.max(1, Math.min(take, MAX_PAGE));
+    let cursorPost: { createdAt: Date; id: string } | null = null;
+    if (cursor) {
+      cursorPost = await this.prisma.socialPost.findUnique({
+        where: { id: cursor },
+        select: { id: true, createdAt: true },
+      });
+      if (!cursorPost) throw new BadRequestException("Invalid cursor");
+    }
+    const posts = (await this.prisma.socialPost.findMany({
+      where: {
+        authorId: userId,
+        ...(cursorPost
+          ? {
+              OR: [
+                { createdAt: { lt: cursorPost.createdAt } },
+                { createdAt: cursorPost.createdAt, id: { lt: cursorPost.id } },
+              ],
+            }
+          : {}),
+      },
+      take: safeTake + 1,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: POST_INCLUDE,
+    })) as PostWithDetails[];
+    const hasMore = posts.length > safeTake;
+    const selected = posts.slice(0, safeTake);
+    return {
+      items: selected.map((p) => ({
+        ...this.publicShape(p),
+        isMine: true,
+        canEdit: p.status !== "HIDDEN",
+        canDelete: p.status === "PENDING" || p.status === "REJECTED",
+      })),
+      nextCursor: hasMore ? (selected.at(-1)?.id ?? null) : null,
     };
   }
 

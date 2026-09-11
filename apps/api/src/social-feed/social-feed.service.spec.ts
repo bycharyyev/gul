@@ -346,3 +346,120 @@ describe("SocialFeedService safety and idempotency", () => {
     );
   });
 });
+
+describe("an author's own posts", () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: "p1",
+    authorId: "u1",
+    status: "PUBLISHED",
+    createdAt: new Date("2026-09-10T10:00:00Z"),
+    publishedAt: new Date("2026-09-10T10:00:00Z"),
+    author: {
+      id: "u1",
+      fullName: "A",
+      username: "a",
+      avatarPath: null,
+      sellerProfile: null,
+    },
+    products: [],
+    ...over,
+  });
+
+  it("shows what the feed exists to hide: pending and rejected posts, with the reason", async () => {
+    // An author who published and saw nothing had no way to tell a slow moderation queue from a
+    // refusal. Their own list is the only place either is visible.
+    const prisma = {
+      socialPost: {
+        findMany: jest.fn().mockResolvedValue([
+          row({ id: "p2", status: "PENDING" }),
+          row({ id: "p3", status: "REJECTED", moderationNote: "no" }),
+        ]),
+      },
+    };
+    const page = await target(prisma).listMine("u1");
+    expect(page.items.map((i) => i.status)).toEqual(["PENDING", "REJECTED"]);
+    expect(page.items[1].moderationNote).toBe("no");
+    expect(prisma.socialPost.findMany.mock.calls[0][0].where).toEqual({
+      authorId: "u1",
+    });
+  });
+
+  it("decides the buttons by the same rules the write routes enforce", async () => {
+    // updateMine refuses a hidden post; removeMine accepts only pending or rejected. Deriving that
+    // on the client is how a button appears that the server then refuses.
+    const prisma = {
+      socialPost: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            row({ id: "a", status: "PUBLISHED" }),
+            row({ id: "b", status: "PENDING" }),
+            row({ id: "c", status: "HIDDEN" }),
+          ]),
+      },
+    };
+    const page = await target(prisma).listMine("u1");
+    expect(page.items.map((i) => [i.canEdit, i.canDelete])).toEqual([
+      [true, false],
+      [true, true],
+      [false, false],
+    ]);
+  });
+});
+
+describe("the shop behind a post", () => {
+  const withShop = (shop: unknown) => ({
+    id: "p1",
+    authorId: "u2",
+    publishedAt: new Date("2026-09-10T10:00:00Z"),
+    createdAt: new Date("2026-09-10T10:00:00Z"),
+    likeCount: 0,
+    saveCount: 0,
+    viewCount: 0,
+    commentCount: 0,
+    productClickCount: 0,
+    mediaType: "IMAGE",
+    author: {
+      id: "u2",
+      fullName: "A",
+      username: "a",
+      avatarPath: null,
+      sellerProfile: shop,
+    },
+    products: [],
+  });
+
+  it("carries the handle so a post can lead somewhere", async () => {
+    const prisma = {
+      socialPost: { findMany: jest.fn().mockResolvedValue([withShop({ handle: "altyn", shopName: "Altyn Ay", logoUrl: null, isEnabled: true })]) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const page = await target(prisma).list(undefined, undefined, 5);
+    expect(page.items[0].author.shop).toEqual({
+      handle: "altyn",
+      shopName: "Altyn Ay",
+      logoUrl: null,
+    });
+  });
+
+  it("offers no way into a shop that is closed", async () => {
+    // The posts stay; the button would lead to a page that refuses to load.
+    const prisma = {
+      socialPost: { findMany: jest.fn().mockResolvedValue([withShop({ handle: "x", shopName: "X", logoUrl: null, isEnabled: false })]) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const page = await target(prisma).list(undefined, undefined, 5);
+    expect(page.items[0].author.shop).toBeNull();
+  });
+
+  it("tells an author which posts are theirs", async () => {
+    const prisma = {
+      socialPost: { findMany: jest.fn().mockResolvedValue([withShop(null)]) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const mine = await target(prisma).list({ userId: "u2", role: "CUSTOMER" }, undefined, 5);
+    const theirs = await target(prisma).list({ userId: "u9", role: "CUSTOMER" }, undefined, 5);
+    expect(mine.items[0].isMine).toBe(true);
+    expect(theirs.items[0].isMine).toBe(false);
+  });
+});
