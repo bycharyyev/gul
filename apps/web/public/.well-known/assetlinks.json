@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "pro.gulyaly.app",
+      "sha256_cert_fingerprints": [
+        "C1:A9:E0:77:E2:FC:22:BD:C5:23:E6:2B:26:33:6C:B2:75:D1:34:75:64:D9:A3:68:A5:CA:23:F2:C1:67:AA:D5",
+        "56:C6:27:E2:6A:AF:B0:DD:93:41:64:E7:CB:4A:30:F9:11:A2:4A:12:26:12:1A:D7:FA:BB:BE:3B:AF:C9:47:CD"
+      ]
+    }
+  }
+]
