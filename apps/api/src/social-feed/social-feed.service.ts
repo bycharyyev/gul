@@ -346,9 +346,15 @@ export class SocialFeedService {
         fullName: p.author.fullName,
         username: p.author.username,
         avatarPath: p.author.avatarPath,
-        avatarUrl: p.author.avatarPath
-          ? `/api/avatar/${p.author.avatarPath}`
-          : null,
+        // An avatar stored on S3 is already a whole URL. Prefixing the local route onto it
+        // produced "/api/avatar/https://open.s3..." -- a relative path to nothing -- and every
+        // author in the feed had rendered as an empty grey circle since avatars moved to S3.
+        // auth.service.ts and avatar.service.ts have always made this distinction; this did not.
+        avatarUrl: !p.author.avatarPath
+          ? null
+          : p.author.avatarPath.startsWith("http")
+            ? p.author.avatarPath
+            : `/api/avatar/${p.author.avatarPath}`,
         // Only an open shop is offered. A disabled one still owns its posts, but a button leading
         // to a page that refuses to load is worse than no button.
         shop:

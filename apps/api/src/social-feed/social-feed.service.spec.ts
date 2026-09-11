@@ -463,3 +463,51 @@ describe("the shop behind a post", () => {
     expect(theirs.items[0].isMine).toBe(false);
   });
 });
+
+describe("author avatars in the feed", () => {
+  const author = (avatarPath: string | null) => ({
+    id: "p1",
+    authorId: "u2",
+    publishedAt: new Date("2026-09-10T10:00:00Z"),
+    createdAt: new Date("2026-09-10T10:00:00Z"),
+    likeCount: 0,
+    saveCount: 0,
+    viewCount: 0,
+    commentCount: 0,
+    productClickCount: 0,
+    mediaType: "IMAGE",
+    author: {
+      id: "u2",
+      fullName: "A",
+      username: "a",
+      avatarPath,
+      sellerProfile: null,
+    },
+    products: [],
+  });
+
+  const feedOf = (avatarPath: string | null) =>
+    target({
+      socialPost: { findMany: jest.fn().mockResolvedValue([author(avatarPath)]) },
+      socialInteraction: { findMany: jest.fn().mockResolvedValue([]) },
+    }).list(undefined, undefined, 5);
+
+  it("leaves an avatar that is already a whole URL alone", async () => {
+    // Since avatars moved to S3, avatarPath holds an absolute URL. Prefixing the local route onto
+    // it produced "/api/avatar/https://open.s3..." and every author rendered as an empty circle.
+    const page = await feedOf("https://open.s3.regru.cloud/avatars/a.jpg");
+    expect(page.items[0].author.avatarUrl).toBe(
+      "https://open.s3.regru.cloud/avatars/a.jpg",
+    );
+  });
+
+  it("still serves a locally stored avatar through the avatar route", async () => {
+    const page = await feedOf("abc.jpg");
+    expect(page.items[0].author.avatarUrl).toBe("/api/avatar/abc.jpg");
+  });
+
+  it("says null rather than inventing a URL for someone with no avatar", async () => {
+    const page = await feedOf(null);
+    expect(page.items[0].author.avatarUrl).toBeNull();
+  });
+});
