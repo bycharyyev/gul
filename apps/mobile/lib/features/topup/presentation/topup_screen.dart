@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/shell.dart';
+import '../../../core/contacts/contact_picker.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/l10n/strings.dart';
 import '../../../core/network/external_links.dart';
@@ -18,12 +19,19 @@ import 'widgets/amount_field.dart';
 import 'widgets/estimate_card.dart';
 
 class TopupScreen extends ConsumerStatefulWidget {
-  const TopupScreen({super.key, this.initialServiceId});
+  const TopupScreen({
+    super.key,
+    this.initialServiceId,
+    this.contactPicker = const ContactPicker(),
+  });
 
   static const path = '/topup';
 
   /// Set when arriving from a home tile, so the operator is already chosen.
   final String? initialServiceId;
+
+  /// Injected so a test can choose a contact without a real Contacts app.
+  final ContactPicker contactPicker;
 
   @override
   ConsumerState<TopupScreen> createState() => _TopupScreenState();
@@ -52,6 +60,28 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
     _recipient.dispose();
     _amount.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFromContacts() async {
+    final strings = Strings.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final contact = await widget.contactPicker.pick();
+      // Backing out of the picker must leave a half-typed number alone.
+      if (contact == null || !mounted) return;
+      _recipient.text = contact.phone;
+      // The cursor goes to the end, not to offset zero, so the next keystroke corrects the
+      // number rather than prefixing it.
+      _recipient.selection = TextSelection.collapsed(
+        offset: contact.phone.length,
+      );
+      setState(() {});
+    } on PlatformException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(strings.get('topup.recipient.contactsFailed'))),
+      );
+    }
   }
 
   CatalogService _resolveService(List<CatalogService> services) =>
@@ -174,6 +204,18 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
                       labelText: service.inputType == 'PHONE'
                           ? strings.get('topup.recipient.phone')
                           : strings.get('topup.recipient.account'),
+                      // Only for a phone, and only where the picker exists. A game account id is
+                      // nobody's contact, so offering the address book there is an invitation to
+                      // paste a number into a field that will reject it.
+                      suffixIcon:
+                          service.inputType == 'PHONE' &&
+                              ContactPicker.isSupported
+                          ? IconButton(
+                              icon: const Icon(Icons.contacts_outlined),
+                              tooltip: strings.get('topup.recipient.fromContacts'),
+                              onPressed: submit.busy ? null : _pickFromContacts,
+                            )
+                          : null,
                     ),
                     validator: (value) =>
                         validateRecipient(value, service, strings),

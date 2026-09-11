@@ -1,6 +1,9 @@
 package pro.gulyaly.gulyaly_mobile
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.provider.ContactsContract
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -23,6 +26,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var pending: String? = null
     private var events: EventChannel.EventSink? = null
+    private var contactResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -38,6 +42,14 @@ class MainActivity : FlutterActivity() {
                         result.success(pending)
                         pending = null
                     }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CONTACTS_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pickPhone" -> pickPhone(result)
                     else -> result.notImplemented()
                 }
             }
@@ -71,6 +83,70 @@ class MainActivity : FlutterActivity() {
         if (sink == null) pending = text else sink.success(text)
     }
 
+    /**
+     * Hands the choosing to the Contacts app and reads back only what it returns.
+     *
+     * ACTION_PICK rather than READ_CONTACTS on purpose. The permission would let us read every
+     * contact on the phone at any moment; this reads one row, the one the person tapped, through
+     * a URI the Contacts app grants us for that single result. Nothing is prompted, nothing is
+     * stored, and the app's manifest keeps its one permission -- INTERNET. It also keeps the Play
+     * data-safety declaration honest without a word added to it: we never collect contacts.
+     */
+    private fun pickPhone(result: MethodChannel.Result) {
+        // A second tap while the picker is open would otherwise strand the first Result and
+        // crash on the duplicate reply.
+        contactResult?.success(null)
+        contactResult = result
+        val intent = Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+        try {
+            startActivityForResult(intent, PICK_CONTACT)
+        } catch (_: ActivityNotFoundException) {
+            contactResult = null
+            result.error("no_picker", "No contacts app on this device", null)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_CONTACT) return
+        val reply = contactResult ?: return
+        contactResult = null
+
+        val uri = data?.data
+        // Cancelling is an ordinary outcome, not a failure: null means "chose nobody".
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            reply.success(null)
+            return
+        }
+        try {
+            contentResolver.query(
+                uri,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                if (cursor == null || !cursor.moveToFirst()) {
+                    reply.success(null)
+                    return
+                }
+                reply.success(
+                    mapOf(
+                        "phone" to cursor.getString(0),
+                        "name" to cursor.getString(1),
+                    ),
+                )
+            }
+        } catch (e: SecurityException) {
+            // The grant that came with the result can be gone by the time we read it, e.g. after
+            // the process was killed behind the picker. Nothing to recover -- say so plainly.
+            reply.error("no_access", e.message, null)
+        }
+    }
+
     private fun sharedTextOf(intent: Intent?): String? {
         if (intent == null || intent.action != Intent.ACTION_SEND) return null
         if (intent.type != "text/plain") return null
@@ -80,5 +156,7 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val METHOD_CHANNEL = "pro.gulyaly/share"
         const val EVENT_CHANNEL = "pro.gulyaly/share/events"
+        const val CONTACTS_CHANNEL = "pro.gulyaly/contacts"
+        const val PICK_CONTACT = 4711
     }
 }
