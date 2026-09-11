@@ -146,38 +146,109 @@ class _FeedVideo extends StatefulWidget {
   State<_FeedVideo> createState() => _FeedVideoState();
 }
 
-class _FeedVideoState extends State<_FeedVideo> {
+class _FeedVideoState extends State<_FeedVideo> with WidgetsBindingObserver {
   late final VideoPlayerController _controller;
+
+  /// Mirrors `_controller.value.isPlaying`, updated only when it actually flips. The controller
+  /// notifies on every position tick — rebuilding the video surface dozens of times a second to
+  /// redraw one icon would be the most expensive thing on this screen.
+  bool _playing = false;
+
+  /// Set when the person taps to pause, so returning to the tab resumes what was playing and
+  /// leaves paused what they chose to stop.
+  bool _pausedByUser = false;
+
+  /// Whether this branch of the bottom navigation is the one on screen.
+  bool _onScreen = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..setLooping(true)
+      ..addListener(_syncPlaying)
       ..initialize()
           .then((_) {
-            if (mounted) {
-              _controller.play();
-              setState(() {});
-            }
+            if (!mounted) return;
+            if (_onScreen) _controller.play();
+            setState(() {});
           })
           .catchError((_) {});
   }
 
+  void _syncPlaying() {
+    final playing = _controller.value.isPlaying;
+    if (playing == _playing || !mounted) return;
+    setState(() => _playing = playing);
+  }
+
+  /// go_router wraps every inactive branch of `StatefulShellRoute.indexedStack` in a disabled
+  /// [TickerMode], so this is the signal that the feed left the screen for another tab. Without
+  /// it the branch stays alive and the video keeps playing under Home or Chats, heard but not
+  /// seen — `dispose` never runs, because nothing was disposed.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final onScreen = TickerMode.of(context);
+    if (onScreen == _onScreen) return;
+    _onScreen = onScreen;
+    if (!onScreen) {
+      _controller.pause();
+    } else if (!_pausedByUser && _controller.value.isInitialized) {
+      _controller.play();
+    }
+  }
+
+  /// Leaving the app entirely is the same situation as leaving the tab: sound continuing out of a
+  /// backgrounded app is the version of this people notice fastest.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_onScreen && !_pausedByUser && _controller.value.isInitialized) {
+        _controller.play();
+      }
+    } else {
+      _controller.pause();
+    }
+  }
+
+  void _toggle() {
+    if (_controller.value.isPlaying) {
+      _pausedByUser = true;
+      _controller.pause();
+    } else {
+      _pausedByUser = false;
+      _controller.play();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_syncPlaying);
     _controller.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => _controller.value.isInitialized
-      ? GestureDetector(
-          onTap: () => setState(
-            () => _controller.value.isPlaying
-                ? _controller.pause()
-                : _controller.play(),
-          ),
-          child: FittedBox(
+  Widget build(BuildContext context) {
+    if (!_controller.value.isInitialized) {
+      return const Center(
+        child: Icon(
+          Icons.play_circle_outline_rounded,
+          color: Colors.white,
+          size: 58,
+        ),
+      );
+    }
+    final strings = Strings.of(context);
+    return GestureDetector(
+      onTap: _toggle,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
             fit: BoxFit.cover,
             child: SizedBox(
               width: _controller.value.size.width,
@@ -185,14 +256,32 @@ class _FeedVideoState extends State<_FeedVideo> {
               child: VideoPlayer(_controller),
             ),
           ),
-        )
-      : const Center(
-          child: Icon(
-            Icons.play_circle_outline_rounded,
-            color: Colors.white,
-            size: 58,
-          ),
-        );
+          // A paused video is otherwise indistinguishable from a still photo, and the tap that
+          // resumes it is invisible until you happen to try. The mark appears only while paused,
+          // so it never sits on top of something being watched.
+          if (!_playing)
+            Center(
+              child: Semantics(
+                button: true,
+                label: strings.get('feed.play'),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: const BoxDecoration(
+                    color: Color(0x66000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 54,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PostMeta extends StatelessWidget {
@@ -350,7 +439,9 @@ class _ActionRail extends ConsumerWidget {
         const SizedBox(height: 14),
         _RailButton(
           icon: Icons.flag_outlined,
-          label: strings.get('feed.report'),
+          // Short on purpose: the label sets the rail's width, and the rail sits over the video.
+          // The tooltip and the screen-reader label keep the full wording.
+          label: strings.get('feed.report.short'),
           tooltip: strings.get('feed.report'),
           onTap: () => _report(context, ref),
         ),
@@ -381,28 +472,42 @@ class _RailButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback onTap;
   final bool selected;
+
+  /// Wide enough for the icon button and a short word under it, and fixed so that it stays that
+  /// wide. A [Column] takes the width of its widest child, so before this the longest label --
+  /// "Пожаловаться", and longer still in Turkmen -- set the width of the whole rail and pushed
+  /// every icon away from the edge and towards the middle of the video. Translated text must not
+  /// be able to move the layout.
+  static const _width = 72.0;
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: tooltip,
-    child: Column(
-      children: [
-        IconButton.filledTonal(
-          onPressed: onTap,
-          tooltip: tooltip,
-          icon: Icon(icon, color: selected ? Colors.pinkAccent : null),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            shadows: [Shadow(blurRadius: 6)],
+    child: SizedBox(
+      width: _width,
+      child: Column(
+        children: [
+          IconButton.filledTonal(
+            onPressed: onTap,
+            tooltip: tooltip,
+            icon: Icon(icon, color: selected ? Colors.pinkAccent : null),
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              shadows: [Shadow(blurRadius: 6)],
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
