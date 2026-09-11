@@ -35,6 +35,7 @@ import '../features/topup/domain/topup_options.dart';
 import '../features/topup/presentation/topup_controller.dart';
 import '../features/chat/data/chat_repository.dart';
 import '../features/seller/data/seller_repository.dart';
+import '../features/seller/domain/my_shop.dart';
 import '../features/seller/domain/shop_profile.dart';
 import '../features/chat/domain/chat_models.dart';
 import '../features/social/data/social_feed_repository.dart';
@@ -225,6 +226,13 @@ final shopProductsProvider = FutureProvider.family<List<GalleryProduct>, String>
       .watch(galleryRepositoryProvider)
       .loadProducts(GalleryFilter(sellerId: sellerId)),
 );
+
+/// The signed-in seller's own shop -- session-bound, like the other "my ..." providers, so a
+/// second account signing in on the same device never starts from the previous seller's data.
+final myShopProvider = FutureProvider<MyShop>((ref) {
+  _sessionKey(ref);
+  return ref.watch(sellerRepositoryProvider).getMyProfile();
+});
 
 final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) => ChatRepository(ref.watch(apiClientProvider)),

@@ -24,6 +24,7 @@ import '../features/chat/presentation/group_info_screen.dart';
 import '../features/chat/presentation/join_group_screen.dart';
 import '../features/chat/presentation/new_group_screen.dart';
 import '../features/seller/presentation/become_creator_screen.dart';
+import '../features/seller/presentation/my_shop_screen.dart';
 import '../features/chat/presentation/chat_inbox_screen.dart';
 import '../features/chat/presentation/chat_room_screen.dart';
 import '../features/orders/presentation/order_detail_screen.dart';
@@ -252,6 +253,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: BecomeCreatorScreen.pathSegment,
                     builder: (_, __) => const BecomeCreatorScreen(),
+                  ),
+                  GoRoute(
+                    path: MyShopScreen.pathSegment,
+                    builder: (_, __) => const MyShopScreen(),
                   ),
                   GoRoute(
                     path: 'password',
