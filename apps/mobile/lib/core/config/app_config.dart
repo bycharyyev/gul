@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Build-time configuration.
 ///
 /// Values come from `--dart-define`, never from source, so the same code builds against dev,
@@ -33,14 +35,28 @@ class AppConfig {
   bool get verboseLogging => environment != AppEnvironment.production;
 
   static AppConfig fromEnvironment() {
-    const env = String.fromEnvironment('APP_ENV', defaultValue: 'development');
+    const env = String.fromEnvironment('APP_ENV');
     const url = String.fromEnvironment('API_BASE_URL');
     const site = String.fromEnvironment('SITE_BASE_URL');
+
+    // A release build defaults to production; only a debug or profile build defaults to
+    // development. Deliberately not one shared default, because the two get it wrong in
+    // opposite directions and only one of them is survivable: a debug build pointed at
+    // production risks touching real orders, while a *release* build pointed at development
+    // reaches `10.0.2.2` -- the emulator's view of its host -- and is simply dead on every
+    // real phone. That is a build nobody can use and nobody notices until it is in the store,
+    // and it has already happened here once.
+    //
+    // An explicit --dart-define still wins over both.
+    const fallback = kReleaseMode
+        ? AppEnvironment.production
+        : AppEnvironment.development;
 
     final environment = switch (env) {
       'production' => AppEnvironment.production,
       'staging' => AppEnvironment.staging,
-      _ => AppEnvironment.development,
+      'development' => AppEnvironment.development,
+      _ => fallback,
     };
 
     return AppConfig(

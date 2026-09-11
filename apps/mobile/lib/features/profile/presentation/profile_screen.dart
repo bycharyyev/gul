@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/shell.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/format/money.dart';
 import '../../../core/l10n/strings.dart';
@@ -108,7 +109,11 @@ class ProfileScreen extends ConsumerWidget {
               data: (data) => Column(
                 children: [
                   _EmailCard(status: data.email),
-                  if (data.referral != null) ...[
+                  // `kReferralRewardsEnabled` gates the whole reward surface, not just this
+                  // card: with it off the repository never fetches a summary, so `referral` is
+                  // already null. The flag is named here too so a reader looking for "where did
+                  // the referral card go" finds the answer at the site they are reading.
+                  if (kReferralRewardsEnabled && data.referral != null) ...[
                     const SizedBox(height: 12),
                     // The single home for referrals. It used to be split between here and a card
                     // on Home; one place means one answer to "where is my code".

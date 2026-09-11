@@ -1,3 +1,4 @@
+import '../../../core/config/feature_flags.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/catalog_service.dart';
 import '../domain/promo.dart';
@@ -51,12 +52,17 @@ class HomeRepository {
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
       slides: _livePromos(results[1], now),
       stories: _livePromos(results[2], now),
-      referralBalanceTmt: await _referralBalance(),
+      referralBalanceTmt: kReferralRewardsEnabled
+          ? await _referralBalance()
+          : null,
     );
   }
 
   /// Fails soft. The balance is a nice-to-have line on a card; losing it must not blank the whole
   /// home screen, and a seller account legitimately has none.
+  ///
+  /// Not called at all while [kReferralRewardsEnabled] is off — see that flag for why this build
+  /// must not even ask for a reward balance.
   Future<double?> _referralBalance() async {
     try {
       final data = await _api.get<Map<String, dynamic>>('/referrals/me');

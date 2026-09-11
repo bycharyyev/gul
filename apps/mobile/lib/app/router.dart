@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/config/feature_flags.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
@@ -246,10 +247,15 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: 'email',
                     builder: (_, __) => const EmailVerificationScreen(),
                   ),
-                  GoRoute(
-                    path: 'referral',
-                    builder: (_, __) => const ReferralScreen(),
-                  ),
+                  // Unregistered while the reward is off, so the screen has no address at all --
+                  // a route with no entry point is still reachable by deep link, and a reviewer
+                  // who reaches it would be looking at the feature the declaration says we do
+                  // not ship.
+                  if (kReferralRewardsEnabled)
+                    GoRoute(
+                      path: 'referral',
+                      builder: (_, __) => const ReferralScreen(),
+                    ),
                   GoRoute(
                     path: 'support',
                     builder: (_, __) => const SupportScreen(),

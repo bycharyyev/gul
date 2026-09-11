@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../../../core/config/feature_flags.dart';
 import '../../../core/network/api_client.dart';
 import '../../auth/domain/user.dart';
 import '../../home/domain/promo.dart';
@@ -13,19 +14,23 @@ class ProfileRepository {
 
   final ApiClient _api;
 
-  /// The two secondary calls the profile screen needs, both failing soft.
+  /// The secondary detail the profile screen needs, failing soft.
   ///
   /// The user object itself already lives in auth state; this is the extra detail. Neither piece
   /// is worth blanking the screen over — someone opening Profile to sign out should not be
-  /// blocked because the referral service is briefly down.
+  /// blocked because a supporting service is briefly down.
+  ///
+  /// The referral call is skipped entirely when [kReferralRewardsEnabled] is off: a build that
+  /// shows no reward must not ask the server for one either, or the request itself becomes the
+  /// evidence that contradicts the store declaration.
   Future<ProfileOverview> load() async {
     final results = await Future.wait([
       _tryGet('/account/email'),
-      _tryGet('/referrals/me'),
+      if (kReferralRewardsEnabled) _tryGet('/referrals/me'),
     ]);
 
     final email = results[0];
-    final referral = results[1];
+    final referral = kReferralRewardsEnabled ? results[1] : null;
 
     return ProfileOverview(
       email: email == null ? EmailStatus.unknown : EmailStatus.fromJson(email),
