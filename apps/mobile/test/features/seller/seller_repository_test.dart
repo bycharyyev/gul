@@ -90,28 +90,28 @@ void main() {
     expect(shop.logoUrl, isNull);
   });
 
-  test('uploads a logo through the image-only route and returns its URL', () async {
-    final dir = await Directory.systemTemp.createTemp('logo-test');
-    final file = File('${dir.path}/logo.jpg')
-      ..writeAsBytesSync([0, 1, 2, 3]);
-    addTearDown(() => dir.delete(recursive: true));
+  test(
+    'uploads a logo through the image-only route and returns its URL',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('logo-test');
+      final file = File('${dir.path}/logo.jpg')..writeAsBytesSync([0, 1, 2, 3]);
+      addTearDown(() => dir.delete(recursive: true));
 
-    when(
-      () => api.postMultipart<Map<String, dynamic>>(any(), any()),
-    ).thenAnswer((_) async => {'url': 'https://open.s3.regru.cloud/uploads/new.jpg'});
+      when(
+        () => api.postMultipart<Map<String, dynamic>>(any(), any()),
+      ).thenAnswer(
+        (_) async => {'url': 'https://open.s3.regru.cloud/uploads/new.jpg'},
+      );
 
-    final url = await repository.uploadLogo(file);
+      final url = await repository.uploadLogo(file);
 
-    expect(url, 'https://open.s3.regru.cloud/uploads/new.jpg');
-    final path =
-        verify(
-          () => api.postMultipart<Map<String, dynamic>>(
-            captureAny(),
-            any(),
-          ),
-        ).captured.single;
-    // The image route, not the social feed's media one -- a logo is never a video, and the two
-    // routes carry different size limits.
-    expect(path, '/uploads/image');
-  });
+      expect(url, 'https://open.s3.regru.cloud/uploads/new.jpg');
+      final path = verify(
+        () => api.postMultipart<Map<String, dynamic>>(captureAny(), any()),
+      ).captured.single;
+      // The image route, not the social feed's media one -- a logo is never a video, and the two
+      // routes carry different size limits.
+      expect(path, '/uploads/image');
+    },
+  );
 }

@@ -69,7 +69,9 @@ class Strings {
     // customer, which is worse than saying nothing specific — the generic text below at least
     // tells them what to do. Business messages the API writes as real sentences are unaffected:
     // they do not look like this.
-    if (server != null && server.isNotEmpty && !_looksLikeCode(server)) return server;
+    if (server != null && server.isNotEmpty && !_looksLikeCode(server)) {
+      return server;
+    }
     return switch (e.kind) {
       AppErrorKind.network => get('err.network'),
       AppErrorKind.timeout => get('err.timeout'),
@@ -287,7 +289,8 @@ class Strings {
       'shop.mine.logoRemoved': 'Логотип удалён',
       'shop.mine.logoFailed': 'Не удалось обновить логотип',
       'shop.mine.saved': 'Изменения сохранены',
-      'shop.mine.disabled': 'Магазин скрыт администратором и недоступен покупателям',
+      'shop.mine.disabled':
+          'Магазин скрыт администратором и недоступен покупателям',
       'shop.mine.viewPage': 'Открыть страницу магазина',
       'chat.newGroup': 'Новая группа',
       'chat.groupName': 'Название группы',
@@ -621,7 +624,8 @@ class Strings {
       'err.shortLink':
           'Короткая ссылка не раскрылась. Откройте товар в магазине и пришлите ссылку из адресной строки.',
       'err.invalidCredentials': 'Неверный номер или пароль.',
-      'err.accountBlocked': 'Доступ к этому аккаунту закрыт. Напишите в поддержку.',
+      'err.accountBlocked':
+          'Доступ к этому аккаунту закрыт. Напишите в поддержку.',
       'err.phoneTaken': 'На этот номер уже зарегистрирован аккаунт.',
       'err.currentPasswordWrong': 'Текущий пароль указан неверно.',
     },
@@ -809,7 +813,8 @@ class Strings {
       'shop.mine.logoRemoved': 'Logo removed',
       'shop.mine.logoFailed': 'Could not update the logo',
       'shop.mine.saved': 'Changes saved',
-      'shop.mine.disabled': 'An administrator has hidden this shop; customers cannot see it',
+      'shop.mine.disabled':
+          'An administrator has hidden this shop; customers cannot see it',
       'shop.mine.viewPage': 'Open shop page',
       'chat.newGroup': 'New group',
       'chat.groupName': 'Group name',
@@ -1328,7 +1333,8 @@ class Strings {
       'shop.mine.logoRemoved': 'Logotip pozuldy',
       'shop.mine.logoFailed': 'Logotipi täzeläp bolmady',
       'shop.mine.saved': 'Üýtgetmeler ýatda saklandy',
-      'shop.mine.disabled': 'Dükan admin tarapyndan gizlenen, alyjylar ony görmeýär',
+      'shop.mine.disabled':
+          'Dükan admin tarapyndan gizlenen, alyjylar ony görmeýär',
       'shop.mine.viewPage': 'Dükanyň sahypasyny aç',
       'chat.newGroup': 'Täze topar',
       'chat.groupName': 'Toparyň ady',

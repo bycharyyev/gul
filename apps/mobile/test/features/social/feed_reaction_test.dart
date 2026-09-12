@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gulyaly_mobile/features/social/data/social_feed_repository.dart';
 import 'package:gulyaly_mobile/features/social/domain/social_post.dart';
@@ -45,9 +44,9 @@ void main() {
     // This is the jump: the screen used to refetch the whole feed after a reaction, so the
     // PageView was rebuilt and the reader was thrown back to the first post.
     final controller = await ready();
-    when(() => repo.toggleLike(any())).thenAnswer(
-      (_) async => _post('p2', liked: true, likes: 1),
-    );
+    when(
+      () => repo.toggleLike(any()),
+    ).thenAnswer((_) async => _post('p2', liked: true, likes: 1));
 
     final before = controller.state.value!.posts.map((p) => p.id).toList();
     await controller.toggleLike(controller.state.value!.posts[1]);

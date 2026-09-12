@@ -15,7 +15,7 @@ class _Repository extends Mock implements SocialFeedRepository {}
 
 class _Gallery extends Mock implements GalleryRepository {}
 
-final _rose = GalleryProduct(
+const _rose = GalleryProduct(
   id: 'prod-1',
   name: 'Букет «Гүл»',
   priceTmt: 350,

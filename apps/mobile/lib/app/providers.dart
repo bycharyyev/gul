@@ -221,11 +221,12 @@ final shopProvider = FutureProvider.family<ShopProfile, String>(
 
 /// That shop's shelf. Separate from the profile so the header can render while it loads, and so a
 /// failure to list products does not take the whole page down with it.
-final shopProductsProvider = FutureProvider.family<List<GalleryProduct>, String>(
-  (ref, sellerId) => ref
-      .watch(galleryRepositoryProvider)
-      .loadProducts(GalleryFilter(sellerId: sellerId)),
-);
+final shopProductsProvider =
+    FutureProvider.family<List<GalleryProduct>, String>(
+      (ref, sellerId) => ref
+          .watch(galleryRepositoryProvider)
+          .loadProducts(GalleryFilter(sellerId: sellerId)),
+    );
 
 /// The signed-in seller's own shop -- session-bound, like the other "my ..." providers, so a
 /// second account signing in on the same device never starts from the previous seller's data.

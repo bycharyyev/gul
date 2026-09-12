@@ -212,7 +212,9 @@ class _TopupScreenState extends ConsumerState<TopupScreen> {
                               ContactPicker.isSupported
                           ? IconButton(
                               icon: const Icon(Icons.contacts_outlined),
-                              tooltip: strings.get('topup.recipient.fromContacts'),
+                              tooltip: strings.get(
+                                'topup.recipient.fromContacts',
+                              ),
                               onPressed: submit.busy ? null : _pickFromContacts,
                             )
                           : null,

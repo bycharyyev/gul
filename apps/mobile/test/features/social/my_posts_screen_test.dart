@@ -113,15 +113,15 @@ void main() {
     final repo = _Repository();
     when(() => repo.loadMine(cursor: any(named: 'cursor'))).thenAnswer(
       (_) async => SocialFeedPage(
-        posts: [_post(id: 'a', status: SocialPostStatus.published, canEdit: true)],
+        posts: [
+          _post(id: 'a', status: SocialPostStatus.published, canEdit: true),
+        ],
         nextCursor: null,
       ),
     );
     when(
       () => repo.updateMine(any(), body: any(named: 'body')),
-    ).thenAnswer(
-      (_) async => _post(id: 'a', status: SocialPostStatus.pending),
-    );
+    ).thenAnswer((_) async => _post(id: 'a', status: SocialPostStatus.pending));
 
     await _open(t, repo);
     await t.tap(find.text('Изменить подпись'));
@@ -141,7 +141,9 @@ void main() {
     final repo = _Repository();
     when(() => repo.loadMine(cursor: any(named: 'cursor'))).thenAnswer(
       (_) async => SocialFeedPage(
-        posts: [_post(id: 'a', status: SocialPostStatus.pending, canDelete: true)],
+        posts: [
+          _post(id: 'a', status: SocialPostStatus.pending, canDelete: true),
+        ],
         nextCursor: null,
       ),
     );

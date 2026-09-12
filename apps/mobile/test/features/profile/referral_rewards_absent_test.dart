@@ -18,9 +18,12 @@ class _Api extends Mock implements ApiClient {}
 /// re-answering the declaration, these fail — which is the point.
 void main() {
   group('referral rewards are absent from this build', () {
-    test('the flag is off, so the declaration may say "no financial features"', () {
-      expect(kReferralRewardsEnabled, isFalse);
-    });
+    test(
+      'the flag is off, so the declaration may say "no financial features"',
+      () {
+        expect(kReferralRewardsEnabled, isFalse);
+      },
+    );
 
     test('the profile never asks the server for a reward summary', () async {
       final api = _Api();

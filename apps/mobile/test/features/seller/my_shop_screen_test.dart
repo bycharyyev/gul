@@ -148,11 +148,8 @@ void main() {
     final repo = _Repository();
     when(() => repo.getMyProfile()).thenAnswer((_) async => _shop);
     when(() => repo.loadShop('altyn')).thenAnswer(
-      (_) async => const ShopProfile(
-        id: 's1',
-        handle: 'altyn',
-        shopName: 'Altyn Ay',
-      ),
+      (_) async =>
+          const ShopProfile(id: 's1', handle: 'altyn', shopName: 'Altyn Ay'),
     );
     final gallery = _Gallery();
     when(() => gallery.loadProducts(any())).thenAnswer((_) async => []);

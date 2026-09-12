@@ -52,7 +52,8 @@ class VideoCache {
 
   /// A url's file name. SHA-1 of the whole url, so two videos cannot collide onto one file and a
   /// signed url with query parameters still lands somewhere legal on every filesystem.
-  static String fileNameFor(String url) => '${sha1.convert(utf8.encode(url))}.bin';
+  static String fileNameFor(String url) =>
+      '${sha1.convert(utf8.encode(url))}.bin';
 
   /// The local file for [url], or null if it is not cached.
   ///
@@ -65,9 +66,7 @@ class VideoCache {
     try {
       if (!file.existsSync()) return null;
       if (await file.length() == 0) return null;
-      unawaited(
-        file.setLastModified(DateTime.now()).catchError((_) {}),
-      );
+      unawaited(file.setLastModified(DateTime.now()).catchError((_) {}));
       return file;
     } catch (_) {
       return null;

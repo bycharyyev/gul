@@ -20,14 +20,16 @@ class PickedContact {
 /// Android only. Elsewhere [isSupported] is false and the UI hides the button rather than
 /// offering something that cannot work.
 class ContactPicker {
-  const ContactPicker({MethodChannel channel = _defaultChannel}) : _channel = channel;
+  const ContactPicker({MethodChannel channel = _defaultChannel})
+    : _channel = channel;
 
   static const _defaultChannel = MethodChannel('pro.gulyaly/contacts');
   final MethodChannel _channel;
 
   /// Only Android implements the channel. `defaultTargetPlatform` rather than `Platform.isAndroid`
   /// so a widget test can state which platform it is testing instead of inheriting the host's.
-  static bool get isSupported => defaultTargetPlatform == TargetPlatform.android;
+  static bool get isSupported =>
+      defaultTargetPlatform == TargetPlatform.android;
 
   /// Null when the person backed out of the picker without choosing — an ordinary outcome, not
   /// an error, and the caller should leave the field exactly as it was.

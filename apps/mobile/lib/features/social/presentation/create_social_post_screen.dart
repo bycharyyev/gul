@@ -112,7 +112,9 @@ class _CreateSocialPostScreenState
     final file = File(picked.path);
     final limit = video ? _maxVideoBytes : _maxImageBytes;
     if (await file.length() > limit) {
-      _toast('${s.get('feed.fileTooLarge')} ${(limit / (1024 * 1024)).round()} МБ');
+      _toast(
+        '${s.get('feed.fileTooLarge')} ${(limit / (1024 * 1024)).round()} МБ',
+      );
       return;
     }
     setState(() {
@@ -394,11 +396,11 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     final s = Strings.of(context);
     // Searched on the server, like the catalogue: filtering a downloaded page works at five
     // products and stops working the moment the catalogue is real.
-    final products = ref.watch(galleryProductsProvider(GalleryFilter(search: _query)));
+    final products = ref.watch(
+      galleryProductsProvider(GalleryFilter(search: _query)),
+    );
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.7,
         child: Column(
@@ -416,8 +418,7 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
             ),
             Expanded(
               child: products.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, __) => Center(child: Text(s.get('err.unknown'))),
                 data: (list) => list.isEmpty
                     ? Center(child: Text(s.get('feed.composer.noProducts')))
@@ -431,9 +432,7 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                             fallbackIcon: Icons.shopping_bag_outlined,
                           ),
                           title: Text(list[i].name),
-                          subtitle: Text(
-                            Money.tmt(list[i].priceTmt, s.locale),
-                          ),
+                          subtitle: Text(Money.tmt(list[i].priceTmt, s.locale)),
                           onTap: () => Navigator.of(context).pop(list[i]),
                         ),
                       ),

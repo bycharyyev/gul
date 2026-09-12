@@ -11,7 +11,8 @@ import '../../../core/l10n/strings.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/remote_image.dart';
 import '../../../core/widgets/skeleton.dart';
-import '../../profile/presentation/widgets/form_scaffold.dart' show toAppException;
+import '../../profile/presentation/widgets/form_scaffold.dart'
+    show toAppException;
 import '../domain/my_shop.dart';
 import 'shop_screen.dart';
 
@@ -85,7 +86,9 @@ class _MyShopFormState extends ConsumerState<_MyShopForm> {
     _logoUrl = widget.initial.logoUrl;
     _shopName = TextEditingController(text: widget.initial.shopName);
     _handle = TextEditingController(text: widget.initial.handle);
-    _description = TextEditingController(text: widget.initial.description ?? '');
+    _description = TextEditingController(
+      text: widget.initial.description ?? '',
+    );
   }
 
   @override
@@ -307,7 +310,11 @@ class _LogoPickerState extends ConsumerState<_LogoPicker> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      _toast(e is AppException ? strings.error(e) : strings.get('shop.mine.logoFailed'));
+      _toast(
+        e is AppException
+            ? strings.error(e)
+            : strings.get('shop.mine.logoFailed'),
+      );
     }
   }
 
@@ -324,7 +331,11 @@ class _LogoPickerState extends ConsumerState<_LogoPicker> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      _toast(e is AppException ? strings.error(e) : strings.get('shop.mine.logoFailed'));
+      _toast(
+        e is AppException
+            ? strings.error(e)
+            : strings.get('shop.mine.logoFailed'),
+      );
     }
   }
 

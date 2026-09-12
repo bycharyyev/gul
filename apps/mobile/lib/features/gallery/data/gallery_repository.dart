@@ -14,7 +14,9 @@ class GalleryFilter {
   final String? sellerId;
 
   bool get isEmpty =>
-      categoryId == null && sellerId == null && (search == null || search!.isEmpty);
+      categoryId == null &&
+      sellerId == null &&
+      (search == null || search!.isEmpty);
 
   GalleryFilter copyWith({
     String? categoryId,

@@ -26,11 +26,10 @@ class ShopProfile {
     shopName: json['shopName'] as String? ?? '',
     description: json['description'] as String?,
     logoUrl: json['logoUrl'] as String?,
-    sections:
-        (json['storefronts'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(ShopSection.fromJson)
-            .toList(),
+    sections: (json['storefronts'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ShopSection.fromJson)
+        .toList(),
   );
 }
 
