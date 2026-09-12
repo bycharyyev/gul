@@ -1,0 +1,41 @@
+name: Diagnose api.gulyaly.pro DNS split (one-off)
+
+# api.gulyaly.pro currently resolves to two A records. This checks each one directly, from a
+# neutral network, to see whether both actually answer for the API -- if only one does, DNS
+# round-robin sends a random fraction of every client's requests to a dead end, which matches
+# reports of the app intermittently failing to reach the server.
+#
+# One-off: delete this file once the answer is in hand (see devops skill, "One-off ops workflows").
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve api.gulyaly.pro from here
+        run: |
+          echo "=== A records (this runner's resolver) ==="
+          getent ahostsv4 api.gulyaly.pro || true
+          echo
+          echo "=== dig, if available ==="
+          dig +short api.gulyaly.pro A || true
+
+      - name: Probe each answer directly over HTTPS
+        run: |
+          for ip in $(getent ahostsv4 api.gulyaly.pro | awk '{print $1}' | sort -u); do
+            echo "=== $ip ==="
+            curl -sS -m 10 -o /dev/null -w "  health/ready: %{http_code} in %{time_total}s\n" \
+              --resolve api.gulyaly.pro:443:"$ip" https://api.gulyaly.pro/api/health/ready || echo "  FAILED to connect"
+            curl -sS -m 10 -o /dev/null -w "  plain :80    : %{http_code} in %{time_total}s\n" \
+              --resolve api.gulyaly.pro:80:"$ip" http://api.gulyaly.pro/api/health/ready || echo "  FAILED to connect"
+          done
+
+      - name: Also probe the two IPs from other reports directly, in case the runner's DNS differs
+        run: |
+          for ip in 91.184.250.89 109.238.95.125; do
+            echo "=== $ip (from public DoH) ==="
+            curl -sS -m 10 -o /dev/null -w "  health/ready: %{http_code} in %{time_total}s\n" \
+              --resolve api.gulyaly.pro:443:"$ip" https://api.gulyaly.pro/api/health/ready || echo "  FAILED to connect"
+          done
