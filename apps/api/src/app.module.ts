@@ -17,6 +17,7 @@ import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { PartnerModule } from "./partner/partner.module";
 import { StoriesModule } from "./stories/stories.module";
 import { ContentPagesModule } from "./content-pages/content-pages.module";
+import { ManagedLinksModule } from "./managed-links/managed-links.module";
 import { ChatModule } from "./chat/chat.module";
 import { SupportModule } from "./support/support.module";
 import { EmailModule } from "./email/email.module";
@@ -61,6 +62,7 @@ import { SocialFeedModule } from "./social-feed/social-feed.module";
     PartnerModule,
     StoriesModule,
     ContentPagesModule,
+    ManagedLinksModule,
     SupportModule,
     ChatModule,
     EmailModule,

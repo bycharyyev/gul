@@ -38,6 +38,7 @@ import '../features/seller/data/seller_repository.dart';
 import '../features/seller/domain/my_shop.dart';
 import '../features/seller/domain/shop_profile.dart';
 import '../features/chat/domain/chat_models.dart';
+import '../features/links/data/managed_link_repository.dart';
 import '../features/social/data/social_feed_repository.dart';
 import '../features/social/domain/social_post.dart';
 import '../features/social/presentation/social_feed_controller.dart';
@@ -204,6 +205,10 @@ final galleryOrderControllerProvider =
     StateNotifierProvider<GalleryOrderController, GalleryOrderState>((ref) {
       return GalleryOrderController(ref.watch(galleryRepositoryProvider));
     });
+
+final managedLinkRepositoryProvider = Provider<ManagedLinkRepository>(
+  (ref) => ManagedLinkRepository(ref.watch(apiClientProvider)),
+);
 
 final socialFeedRepositoryProvider = Provider<SocialFeedRepository>(
   (ref) => SocialFeedRepository(ref.watch(apiClientProvider)),

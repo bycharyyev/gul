@@ -12,6 +12,7 @@ import WithdrawalsPage from "@/pages/withdrawals";
 import StoriesPage from "@/pages/stories";
 import HomeSlidesPage from "@/pages/home-slides";
 import SocialLinksPage from "@/pages/social-links";
+import ManagedLinksPage from "@/pages/managed-links";
 import ContentPagesPage from "@/pages/content-pages";
 import SupportPage from "@/pages/support";
 import MailPage from "@/pages/mail";
@@ -156,6 +157,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <SocialLinksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/managed-links"
+        element={
+          <ProtectedRoute>
+            <ManagedLinksPage />
           </ProtectedRoute>
         }
       />

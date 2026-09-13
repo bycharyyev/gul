@@ -167,3 +167,32 @@ export const adminContentPageInputSchema = z.object({
 });
 export type AdminContentPageInput = z.infer<typeof adminContentPageInputSchema>;
 
+// ---- Managed links (short, admin-editable redirects) ----
+
+export const managedLinkSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  targetUrl: z.string(),
+  label: z.string().nullable(),
+  isEnabled: z.boolean(),
+  clickCount: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ManagedLinkDto = z.infer<typeof managedLinkSchema>;
+
+export const adminManagedLinkInputSchema = z.object({
+  slug: z
+    .string()
+    .min(2)
+    .max(40)
+    .regex(/^[a-z0-9-]+$/, "slug may contain only lowercase letters, digits and hyphens"),
+  // Same reasoning as adminSocialLinkInputSchema's url field: a bare z.string().url() accepts
+  // `javascript:...`, which this renders later as a real redirect and an `<a href>` in the admin
+  // list.
+  targetUrl: z.string().url().refine((v) => /^https?:\/\//i.test(v), "URL must start with http:// or https://"),
+  label: z.string().max(120).optional(),
+  isEnabled: z.boolean().optional(),
+});
+export type AdminManagedLinkInput = z.infer<typeof adminManagedLinkInputSchema>;
+

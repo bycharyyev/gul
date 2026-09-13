@@ -13,6 +13,8 @@ export const socialCommerceDict: Record<Locale, Record<string, string>> = {
     "web.invite.notFound":
       "Ссылка не действует. Попросите новую у того, кто вас пригласил.",
     "web.invite.checking": "Проверяем ссылку…",
+    "web.shortLink.checking": "Переходим по ссылке…",
+    "web.shortLink.notFound": "Эта ссылка недействительна или больше не активна.",
     "web.nav.feed": "Лента",
     "web.feed.title": "Лента находок",
     "web.feed.subtitle":
@@ -65,6 +67,8 @@ export const socialCommerceDict: Record<Locale, Record<string, string>> = {
     "web.invite.notFound":
       "This link no longer works. Ask whoever invited you for a new one.",
     "web.invite.checking": "Checking the link…",
+    "web.shortLink.checking": "Redirecting…",
+    "web.shortLink.notFound": "This link is invalid or no longer active.",
     "web.nav.feed": "Feed",
     "web.feed.title": "Discovery feed",
     "web.feed.subtitle": "Watch, save and order right from a post.",
@@ -115,6 +119,8 @@ export const socialCommerceDict: Record<Locale, Record<string, string>> = {
     "web.invite.notFound":
       "Bu salgy işlemeýär. Sizi çagyran adamdan täzesini soraň.",
     "web.invite.checking": "Salgy barlanýar…",
+    "web.shortLink.checking": "Ugrukdyrylýar…",
+    "web.shortLink.notFound": "Bu salgy nädogry ýa-da indi işlemeýär.",
     "web.nav.feed": "Lenta",
     "web.feed.title": "Tapyndylar lentasy",
     "web.feed.subtitle": "Postlardan göni görüň, saklaň we sargyt ediň.",

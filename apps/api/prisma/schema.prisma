@@ -672,6 +672,24 @@ model ContentPage {
   createdAt DateTime @default(now())
 }
 
+/// A short, admin-editable redirect: `gulyaly.pro/l/<slug>` -> `targetUrl`. The target is not
+/// modelled as a product/promo/whatever union on purpose -- staff paste whatever URL a campaign
+/// needs, and can repoint the same shared link (on a poster, in a Telegram post) to something
+/// else later without reprinting anything.
+model ManagedLink {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  targetUrl  String
+  // Staff-facing only, e.g. "VK post, September sale" -- never shown to whoever follows the link.
+  label      String?
+  isEnabled  Boolean  @default(true)
+  clickCount Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@index([isEnabled])
+}
+
 // ---------- Support ----------
 
 enum SupportThreadStatus {

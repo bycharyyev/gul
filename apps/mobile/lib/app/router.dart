@@ -16,6 +16,7 @@ import '../features/gallery/presentation/gallery_checkout_screen.dart';
 import '../features/gallery/presentation/gallery_screen.dart';
 import '../features/gallery/presentation/product_screen.dart';
 import '../features/home/presentation/home_screen.dart';
+import '../features/links/presentation/managed_link_redirect_screen.dart';
 import '../features/marketplace/presentation/create_marketplace_order_screen.dart';
 import '../features/marketplace/presentation/marketplace_home_screen.dart';
 import '../features/marketplace/presentation/marketplace_order_detail_screen.dart';
@@ -79,6 +80,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RegisterScreen.path,
         builder: (_, __) => const RegisterScreen(),
+      ),
+      // Where an Android App Link for gulyaly.pro/l/<slug> lands -- resolved and sent on from
+      // there, never a destination of its own. Outside the shell for the same reason ShopScreen
+      // is: this is arrived at from outside the app, not one of the five tabs.
+      GoRoute(
+        path: '/l/:slug',
+        builder: (_, state) =>
+            ManagedLinkRedirectScreen(slug: state.pathParameters['slug']!),
       ),
 
       // A stateful shell, so each tab keeps its own navigation stack and scroll position.

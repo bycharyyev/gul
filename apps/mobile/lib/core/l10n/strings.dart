@@ -124,6 +124,8 @@ class Strings {
       'profile.legal.faq': 'Частые вопросы',
       'profile.legal.empty': 'Этот раздел пока не заполнен',
       'common.linkFailed': 'Не удалось открыть ссылку',
+      'link.notFound': 'Эта ссылка недействительна или больше не активна',
+      'link.backHome': 'На главную',
 
       'nav.topup': 'Пополнить',
       'nav.feed': 'Лента',
@@ -665,6 +667,8 @@ class Strings {
       'profile.legal.faq': 'FAQ',
       'profile.legal.empty': 'Nothing has been published here yet',
       'common.linkFailed': 'Could not open the link',
+      'link.notFound': 'This link is invalid or no longer active',
+      'link.backHome': 'Go home',
 
       'nav.topup': 'Top up',
       'nav.feed': 'Feed',
@@ -1203,6 +1207,8 @@ class Strings {
       'profile.legal.faq': 'Ýygy soralýan soraglar',
       'profile.legal.empty': 'Bu bölüm entek doldurylmady',
       'common.linkFailed': 'Salgylanmany açyp bolmady',
+      'link.notFound': 'Bu salgy nädogry ýa-da indi işlemeýär',
+      'link.backHome': 'Baş sahypa',
 
       'nav.topup': 'Doldur',
       'nav.feed': 'Lenta',

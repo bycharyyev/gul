@@ -91,6 +91,9 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.shopPage.chatEmpty": "Напишите продавцу, если есть вопрос по товару.",
     "web.shopPage.messagePlaceholder": "Сообщение…",
     "web.shopPage.sendAriaLabel": "Отправить",
+    "web.productPage.notFoundTitle": "Товар не найден",
+    "web.productPage.notFoundBody": "Возможно, его больше нет в продаже.",
+    "web.productPage.openInApp": "Открыть в приложении Gulyaly",
 
     // ---- web: pages/[slug]/page.tsx (CMS page chrome only -- body is DB content) ----
     "web.cmsPage.notFound": "Страница не найдена.",
@@ -264,6 +267,9 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.shopPage.chatEmpty": "Message the seller if you have a question about a product.",
     "web.shopPage.messagePlaceholder": "Message…",
     "web.shopPage.sendAriaLabel": "Send",
+    "web.productPage.notFoundTitle": "Product not found",
+    "web.productPage.notFoundBody": "It may no longer be for sale.",
+    "web.productPage.openInApp": "Open in the Gulyaly app",
 
     "web.cmsPage.notFound": "Page not found.",
 
@@ -428,6 +434,9 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.shopPage.chatEmpty": "Haryt barada soragyňyz bar bolsa, satyja ýazyň.",
     "web.shopPage.messagePlaceholder": "Habar…",
     "web.shopPage.sendAriaLabel": "Iber",
+    "web.productPage.notFoundTitle": "Haryt tapylmady",
+    "web.productPage.notFoundBody": "Ol indi satuwda bolmazlygy mümkin.",
+    "web.productPage.openInApp": "Gulyaly programmasynda aç",
 
     "web.cmsPage.notFound": "Sahypa tapylmady.",
 

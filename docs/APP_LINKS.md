@@ -23,10 +23,25 @@ lower than the cost of not being able to test the feature.
 ## This file alone does nothing
 
 It is one half of the handshake. The other half is an `<intent-filter android:autoVerify="true">`
-in `apps/mobile/android/app/src/main/AndroidManifest.xml` for `https://gulyaly.pro/i/*` and
-`/r/*`, plus routing for the incoming link. That half ships with a mobile release; this half is
-deployed first on purpose, because Android verifies the domain at install time and a missing file
-means the verification fails for every install that happened before it appeared.
+in `apps/mobile/android/app/src/main/AndroidManifest.xml`, plus in-app routing for whatever the
+link resolves to. That half ships with a mobile release; this half is deployed first on purpose,
+because Android verifies the domain at install time and a missing file means the verification
+fails for every install that happened before it appeared.
+
+**`/i/*` and `/r/*` (group invite, referral) still have no manifest entry and no in-app route** --
+this file already covers them (it verifies the whole `gulyaly.pro` domain, not specific paths),
+but claiming those paths in the manifest before the app has somewhere to send them would hand the
+OS-opened intent to a route that doesn't exist instead of letting it fall through to the browser
+pages that already handle both correctly. That's still the pending half of the original ask.
+
+**`/gallery/product/<id>` and `/l/<slug>` (a shared product, an admin-managed short link) do have
+both halves as of 2026-09-13** -- the manifest's `autoVerify` intent-filter is scoped to exactly
+those two `pathPrefix`es (not the whole host, for the reason above), and
+`ManagedLinkRedirectScreen`/`ProductScreen` are real in-app destinations for them. `/l/<slug>`
+resolves through `GET /managed-links/:slug` first: a product target opens `ProductScreen`
+in-app, anything else opens the way any other outside link does
+(`ExternalLinks`, mirroring the fallback the `/l/<slug>` web page itself uses when the app isn't
+installed at all).
 
 ## Checking it
 

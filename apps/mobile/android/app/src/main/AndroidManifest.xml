@@ -58,6 +58,22 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
+            <!-- App Links: opens gulyaly.pro/gallery/product/... and gulyaly.pro/l/... directly
+                 in the app, verified against apps/web/public/.well-known/assetlinks.json (already
+                 published; see docs/APP_LINKS.md). Deliberately not /i/* or /r/* yet, and not the
+                 whole host: this app has no in-app route for those two, so claiming them here
+                 would hand the OS-opened intent to a screen that does not exist instead of letting
+                 it fall through to the browser pages that already handle them correctly. autoVerify
+                 is what makes Android check assetlinks.json at all, rather than always asking the
+                 person which app to use. BROWSABLE is required alongside VIEW for a web link to
+                 reach an app instead of only an explicit intent. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="gulyaly.pro" android:pathPrefix="/gallery/product/"/>
+                <data android:scheme="https" android:host="gulyaly.pro" android:pathPrefix="/l/"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

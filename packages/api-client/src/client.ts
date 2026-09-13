@@ -9,6 +9,7 @@ import type {
   CreateChatRoomInput,
   AdminContentPageInput,
   AdminHomeSlideInput,
+  AdminManagedLinkInput,
   AdminServiceInput,
   AdminSocialLinkInput,
   AdminStatsDto,
@@ -67,6 +68,7 @@ import type {
   OrderDto,
   OrdersTimeseriesPoint,
   CreateSubdomainInput,
+  ManagedLinkDto,
   ManagedSubdomainDto,
   PaymentMethodDto,
   PaymentInitiationDto,
@@ -942,6 +944,38 @@ export class ApiClient {
     });
   }
 
+  // ---- Managed links (public) ----
+  resolveManagedLink(slug: string) {
+    return this.request<ManagedLinkDto>(`/managed-links/${slug}`, {
+      auth: false,
+    });
+  }
+
+  // ---- Admin: managed links ----
+  listAllManagedLinks() {
+    return this.request<ManagedLinkDto[]>("/managed-links/admin/all");
+  }
+
+  createManagedLink(input: AdminManagedLinkInput) {
+    return this.request<ManagedLinkDto>("/managed-links/admin", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateManagedLink(id: string, input: Partial<AdminManagedLinkInput>) {
+    return this.request<ManagedLinkDto>(`/managed-links/admin/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteManagedLink(id: string) {
+    return this.request<void>(`/managed-links/admin/${id}`, {
+      method: "DELETE",
+    });
+  }
+
   // ---- Order tracking (public) ----
   trackOrder(input: TrackOrderInput) {
     const qs = new URLSearchParams(input).toString();
@@ -1042,6 +1076,12 @@ export class ApiClient {
     if (options.search) qs.set("search", options.search);
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return this.request<GalleryProductDto[]>(`/gallery/products${suffix}`, {
+      auth: false,
+    });
+  }
+
+  getGalleryProduct(id: string) {
+    return this.request<GalleryProductDto>(`/gallery/products/${id}`, {
       auth: false,
     });
   }
