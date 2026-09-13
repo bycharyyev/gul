@@ -11,6 +11,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../data/gallery_repository.dart';
 import '../domain/gallery_product.dart';
+import 'barcode_scan_screen.dart';
 import 'product_screen.dart';
 import 'widgets/product_card.dart';
 
@@ -61,7 +62,20 @@ class _GalleryScreenState extends ConsumerState<GalleryScreen> {
     final products = ref.watch(galleryProductsProvider(_filter));
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.get('gallery.title'))),
+      appBar: AppBar(
+        title: Text(strings.get('gallery.title')),
+        actions: [
+          // Somebody nearby holding up a product, or a physical barcode already on the shelf --
+          // this is the other way into the same catalogue that typing into the field above is.
+          IconButton(
+            tooltip: strings.get('gallery.scan'),
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

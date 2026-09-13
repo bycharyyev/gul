@@ -93,4 +93,9 @@ class AppConfig {
   /// so a person who taps it without the app installed lands on a page that says what the group
   /// is rather than on a dead address.
   String groupInviteLink(String code) => '$siteBaseUrl/i/$code';
+
+  /// The link a product's own Share sheet puts in its QR code and its "copy link" button. Named
+  /// the same way `referralLink`/`groupInviteLink` are, for a storefront page that does not exist
+  /// yet -- the same state `/r/` and `/i/` were in before their pages shipped.
+  String productLink(String id) => '$siteBaseUrl/gallery/product/$id';
 }

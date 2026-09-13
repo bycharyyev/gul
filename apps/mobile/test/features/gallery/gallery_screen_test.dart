@@ -223,4 +223,14 @@ void main() {
     // Home routes INTERNAL_GALLERY_PRODUCT promos to this exact path.
     expect(ProductScreen.path, '/gallery/product');
   });
+
+  testWidgets('offers a way to scan a barcode straight into the catalogue', (
+    t,
+  ) async {
+    // Not pumped past the tap: the scanner screen behind this icon opens the device camera,
+    // which has no platform implementation under a widget test.
+    await pumpScreen(t);
+
+    expect(find.byTooltip('Сканировать штрих-код'), findsOneWidget);
+  });
 }

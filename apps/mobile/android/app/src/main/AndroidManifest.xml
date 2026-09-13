@@ -5,6 +5,16 @@
          here, in main, where all three build types inherit it. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- The barcode scanner (finding a product by scanning its own code, or one printed
+         elsewhere). Requested only at the moment someone opens the scanner, never at launch;
+         see barcode_scan_screen.dart. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- required="false": a phone with no camera still installs the app, it just can't use this
+         one feature, the same reasoning as the optional-hardware entries mobile_scanner itself
+         documents. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+
     <application
         android:label="Gulyaly"
         android:name="${applicationName}"

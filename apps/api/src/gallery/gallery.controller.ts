@@ -40,6 +40,11 @@ export class GalleryController {
     return this.gallery.listProducts({ categoryId, sellerId, storefrontId, search });
   }
 
+  @Get("products/:id")
+  getProduct(@Param("id") id: string) {
+    return this.gallery.getProduct(id);
+  }
+
   // ---- Customer ----
 
   @ApiBearerAuth()

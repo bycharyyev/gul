@@ -251,6 +251,18 @@ class Strings {
       'gallery.submit': 'Оформить заказ',
       'gallery.validation.required': 'Заполните это поле',
       'gallery.validation.phone': 'Проверьте номер телефона',
+      'gallery.share': 'Поделиться',
+      'gallery.sku': 'Артикул',
+      'gallery.copyLink': 'Скопировать ссылку',
+      'gallery.linkCopied': 'Ссылка скопирована',
+      'gallery.scan': 'Сканировать штрих-код',
+
+      'scan.title': 'Сканер',
+      'scan.hint': 'Наведите камеру на штрих-код товара',
+      'scan.notFound': 'Товар с этим кодом не найден',
+      'scan.permissionDenied':
+          'Нет доступа к камере. Разрешите доступ в настройках телефона.',
+      'scan.unsupported': 'Сканер недоступен на этом устройстве',
 
       'nav.home': 'Главная',
       'nav.orders': 'Заказы',
@@ -780,6 +792,18 @@ class Strings {
       'gallery.submit': 'Place order',
       'gallery.validation.required': 'Please fill this in',
       'gallery.validation.phone': 'Check the phone number',
+      'gallery.share': 'Share',
+      'gallery.sku': 'SKU',
+      'gallery.copyLink': 'Copy link',
+      'gallery.linkCopied': 'Link copied',
+      'gallery.scan': 'Scan a barcode',
+
+      'scan.title': 'Scanner',
+      'scan.hint': 'Point the camera at a product\'s barcode',
+      'scan.notFound': 'No product matches this code',
+      'scan.permissionDenied':
+          'No camera access. Allow it in your phone\'s settings.',
+      'scan.unsupported': 'Scanning is not supported on this device',
 
       'nav.home': 'Home',
       'nav.orders': 'Orders',
@@ -1305,6 +1329,18 @@ class Strings {
       'gallery.submit': 'Sargyt resmileşdir',
       'gallery.validation.required': 'Bu meýdany dolduryň',
       'gallery.validation.phone': 'Telefon belgisini barlaň',
+      'gallery.share': 'Paýlaş',
+      'gallery.sku': 'Artikul',
+      'gallery.copyLink': 'Salgyny göçür',
+      'gallery.linkCopied': 'Salgy göçürildi',
+      'gallery.scan': 'Ştrih-kody skaner et',
+
+      'scan.title': 'Skaner',
+      'scan.hint': 'Kamerany harydyň ştrih-kodyna gönükdiriň',
+      'scan.notFound': 'Bu kod boýunça haryt tapylmady',
+      'scan.permissionDenied':
+          'Kamera elýeterli däl. Telefonyň sazlamalarynda rugsat beriň.',
+      'scan.unsupported': 'Bu enjamda skaner elýeterli däl',
 
       'nav.home': 'Baş sahypa',
       'nav.orders': 'Sargytlar',

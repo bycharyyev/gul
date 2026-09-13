@@ -76,6 +76,24 @@ export class GalleryService {
     });
   }
 
+  /**
+   * One product, for a link or a scanned barcode that already names it directly -- previously
+   * this had no endpoint of its own, and a client landing on one product fetched the entire
+   * unfiltered catalogue to pick it out.
+   *
+   * Same visibility rule as the list: a disabled product or one in a disabled category doesn't
+   * exist here either, so a stale link says "gone" instead of showing something no longer for
+   * sale.
+   */
+  async getProduct(id: string) {
+    const product = await this.prisma.galleryProduct.findFirst({
+      where: { id, isEnabled: true, category: { isEnabled: true } },
+      include: PRODUCT_INCLUDE,
+    });
+    if (!product) throw new NotFoundException("Product not found");
+    return product;
+  }
+
   // ---- Customer ----
 
   async createOrder(userId: string, dto: CreateGalleryOrderDto) {

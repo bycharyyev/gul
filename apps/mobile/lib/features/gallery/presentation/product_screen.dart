@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ import '../../chat/presentation/chat_inbox_screen.dart';
 import '../../chat/presentation/chat_room_screen.dart';
 import '../domain/gallery_product.dart';
 import 'gallery_checkout_screen.dart';
+import 'widgets/product_share_sheet.dart';
 
 class ProductScreen extends ConsumerWidget {
   const ProductScreen({super.key, required this.productId});
@@ -27,9 +29,26 @@ class ProductScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = Strings.of(context);
     final product = ref.watch(galleryProductProvider(productId));
+    final loaded = product.valueOrNull;
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.get('gallery.product'))),
+      appBar: AppBar(
+        title: Text(strings.get('gallery.product')),
+        actions: [
+          // Only once there is something to share -- a skeleton or an error state has no link
+          // worth handing to anyone.
+          if (loaded != null)
+            IconButton(
+              tooltip: strings.get('gallery.share'),
+              icon: const Icon(Icons.ios_share_rounded),
+              onPressed: () => showProductShareSheet(
+                context,
+                product: loaded,
+                link: ref.read(appConfigProvider).productLink(loaded.id),
+              ),
+            ),
+        ],
+      ),
       body: AsyncView<GalleryProduct?>(
         value: product,
         onRetry: () => ref.invalidate(galleryProductProvider(productId)),
@@ -119,6 +138,41 @@ class _Detail extends StatelessWidget {
                     color: scheme.onSurfaceVariant,
                     height: 1.5,
                     fontSize: 14.5,
+                  ),
+                ),
+              ],
+              if (product.sku != null && product.sku!.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                Text(
+                  '${strings.get('gallery.sku')}: ${product.sku}',
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // The same code a scanner reads back -- printed here so a warehouse label or a
+                // second device can scan it straight off this screen, not just off a physical tag.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: BarcodeWidget(
+                      data: product.sku!,
+                      barcode: Barcode.code128(),
+                      height: 64,
+                      drawText: true,
+                      style: const TextStyle(fontSize: 11, color: Colors.black),
+                      errorBuilder: (context, error) => const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ],

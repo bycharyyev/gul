@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gulyaly_mobile/core/errors/app_exception.dart';
 import 'package:gulyaly_mobile/core/network/api_client.dart';
 import 'package:gulyaly_mobile/features/gallery/data/gallery_repository.dart';
 import 'package:gulyaly_mobile/features/orders/domain/order.dart';
@@ -149,38 +150,76 @@ void main() {
   });
 
   group('loadProduct', () {
-    test(
-      'finds one in the full list, since there is no detail endpoint',
-      () async {
-        when(
-          () => api.get<List<dynamic>>(
-            '/gallery/products',
-            query: any(named: 'query'),
-          ),
-        ).thenAnswer(
-          (_) async => [
-            _product,
-            {..._product, 'id': 'p2', 'name': 'Другой'},
-          ],
-        );
+    test('fetches the one product by id', () async {
+      when(
+        () => api.get<Map<String, dynamic>>('/gallery/products/p1'),
+      ).thenAnswer((_) async => _product);
 
-        expect((await repository.loadProduct('p2'))?.name, 'Другой');
-      },
-    );
+      expect((await repository.loadProduct('p1'))?.name, contains('роз'));
+    });
 
     test(
       'returns null for a product that is gone rather than throwing',
       () async {
         when(
-          () => api.get<List<dynamic>>(
-            '/gallery/products',
-            query: any(named: 'query'),
-          ),
-        ).thenAnswer((_) async => [_product]);
+          () => api.get<Map<String, dynamic>>('/gallery/products/missing'),
+        ).thenThrow(
+          const AppException(kind: AppErrorKind.notFound, statusCode: 404),
+        );
 
         expect(await repository.loadProduct('missing'), isNull);
       },
     );
+
+    test('does not swallow an error that is not "not found"', () async {
+      when(
+        () => api.get<Map<String, dynamic>>('/gallery/products/p1'),
+      ).thenThrow(const AppException(kind: AppErrorKind.server));
+
+      expect(() => repository.loadProduct('p1'), throwsA(isA<AppException>()));
+    });
+  });
+
+  group('findByScannedCode', () {
+    test('a code that matches a product id resolves directly', () async {
+      when(
+        () => api.get<Map<String, dynamic>>('/gallery/products/p1'),
+      ).thenAnswer((_) async => _product);
+
+      expect((await repository.findByScannedCode('p1'))?.id, 'p1');
+    });
+
+    test('falls back to an exact, case-insensitive SKU match', () async {
+      when(
+        () => api.get<Map<String, dynamic>>('/gallery/products/flw-001'),
+      ).thenThrow(
+        const AppException(kind: AppErrorKind.notFound, statusCode: 404),
+      );
+      when(
+        () => api.get<List<dynamic>>(
+          '/gallery/products',
+          query: any(named: 'query'),
+        ),
+      ).thenAnswer((_) async => [_product]);
+
+      expect((await repository.findByScannedCode('flw-001'))?.id, 'p1');
+    });
+
+    test('a code matching neither an id nor a SKU finds nothing', () async {
+      when(
+        () => api.get<Map<String, dynamic>>('/gallery/products/unknown'),
+      ).thenThrow(
+        const AppException(kind: AppErrorKind.notFound, statusCode: 404),
+      );
+      when(
+        () => api.get<List<dynamic>>(
+          '/gallery/products',
+          query: any(named: 'query'),
+        ),
+      ).thenAnswer((_) async => [_product]);
+
+      expect(await repository.findByScannedCode('unknown'), isNull);
+    });
   });
 
   group('createOrder', () {

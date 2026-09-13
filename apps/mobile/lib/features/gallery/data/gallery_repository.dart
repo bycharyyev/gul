@@ -1,3 +1,4 @@
+import '../../../core/errors/app_exception.dart';
 import '../../../core/network/api_client.dart';
 import '../../orders/domain/order.dart';
 import '../domain/gallery_product.dart';
@@ -76,14 +77,31 @@ class GalleryRepository {
         .toList();
   }
 
-  /// One product.
-  ///
-  /// There is no `GET /gallery/products/:id` (GAP 3), so this fetches the unfiltered list and
-  /// picks the row out of it. Wasteful and honest — inventing the endpoint would be worse, and
-  /// the screen normally opens from a list that already holds the object.
+  /// One product, by id. A 404 -- disabled, deleted, or never existed -- resolves to `null`
+  /// rather than throwing: the screen that calls this already treats "gone" as an ordinary empty
+  /// state, not a failure.
   Future<GalleryProduct?> loadProduct(String id) async {
-    final products = await loadProducts(const GalleryFilter());
-    return products.where((p) => p.id == id).firstOrNull;
+    try {
+      final raw = await _api.get<Map<String, dynamic>>('/gallery/products/$id');
+      return GalleryProduct.fromJson(raw);
+    } on AppException catch (e) {
+      if (e.kind == AppErrorKind.notFound) return null;
+      rethrow;
+    }
+  }
+
+  /// Resolves whatever a barcode scan decoded: first as a product id (a barcode rendered by this
+  /// app's own product page encodes exactly that), then as a SKU (a code entered or printed
+  /// elsewhere). `null` means neither matched anything a customer can see.
+  Future<GalleryProduct?> findByScannedCode(String code) async {
+    final byId = await loadProduct(code);
+    if (byId != null) return byId;
+    final bySku = await loadProducts(GalleryFilter(search: code));
+    return bySku
+        .where(
+          (p) => p.sku != null && p.sku!.toLowerCase() == code.toLowerCase(),
+        )
+        .firstOrNull;
   }
 
   /// Places the order.

@@ -64,6 +64,10 @@ void main() {
           'https://gulyaly.pro/i/ABCDEFGHJK',
         );
         expect(config.referralLink('AMAN'), 'https://gulyaly.pro/r/AMAN');
+        expect(
+          config.productLink('p1'),
+          'https://gulyaly.pro/gallery/product/p1',
+        );
       },
     );
   });
