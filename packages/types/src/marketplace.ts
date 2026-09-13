@@ -139,6 +139,16 @@ export const updateGalleryOrderStatusSchema = z.object({
 });
 export type UpdateGalleryOrderStatusInput = z.infer<typeof updateGalleryOrderStatusSchema>;
 
+/** Corrects what the buyer typed, never the product or the amount they paid for. */
+export const updateGalleryOrderDetailsSchema = z.object({
+  recipientName: z.string().min(1).max(120).optional(),
+  recipientPhone: z.string().min(3).max(32).optional(),
+  deliveryCity: z.string().min(1).max(80).optional(),
+  deliveryAddress: z.string().min(1).max(300).optional(),
+  cardMessage: z.string().max(300).optional(),
+});
+export type UpdateGalleryOrderDetailsInput = z.infer<typeof updateGalleryOrderDetailsSchema>;
+
 // ---- Sellers ----
 
 export interface SellerDto {

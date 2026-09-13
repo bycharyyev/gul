@@ -6,6 +6,7 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 import type { UpsertGalleryCategoryDto } from "./dto/upsert-gallery-category.dto";
 import type { UpsertGalleryProductDto } from "./dto/upsert-gallery-product.dto";
 import type { CreateGalleryOrderDto } from "./dto/create-gallery-order.dto";
+import type { UpdateGalleryOrderDetailsDto } from "./dto/update-gallery-order-details.dto";
 import type { UpsertStorefrontDto } from "./dto/upsert-storefront.dto";
 import { slugify, uniqueSlug } from "./storefront-slug";
 import type { GalleryOrderStatus } from "@prisma/client";
@@ -201,6 +202,41 @@ export class GalleryService {
         user: { select: { id: true, phone: true, fullName: true } },
       },
     });
+  }
+
+  /**
+   * Fixes what the buyer typed, not what they bought -- the product and amount stay exactly what
+   * was paid for. Refused once the order is DELIVERED or CANCELLED: a courier already used the
+   * address on a delivered order, and there is nothing left to correct on a cancelled one.
+   */
+  async updateOrderDetails(id: string, dto: UpdateGalleryOrderDetailsDto, adminId: string) {
+    const order = await this.prisma.galleryOrder.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException("Order not found");
+    if (order.status === "DELIVERED" || order.status === "CANCELLED") {
+      throw new BadRequestException(`Cannot edit a ${order.status.toLowerCase()} order`);
+    }
+    const updated = await this.prisma.galleryOrder.update({
+      where: { id },
+      data: {
+        recipientName: dto.recipientName,
+        recipientPhone: dto.recipientPhone,
+        deliveryCity: dto.deliveryCity,
+        deliveryAddress: dto.deliveryAddress,
+        cardMessage: dto.cardMessage,
+      },
+      include: {
+        ...ORDER_INCLUDE,
+        user: { select: { id: true, phone: true, fullName: true } },
+      },
+    });
+    this.auditLog.record(adminId, "gallery-order.edit-details", "GalleryOrder", id, {
+      recipientName: dto.recipientName,
+      recipientPhone: dto.recipientPhone,
+      deliveryCity: dto.deliveryCity,
+      deliveryAddress: dto.deliveryAddress,
+      cardMessage: dto.cardMessage,
+    });
+    return updated;
   }
 
   async updateOrderStatus(

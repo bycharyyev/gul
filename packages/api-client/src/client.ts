@@ -102,6 +102,7 @@ import type {
   TrackOrderInput,
   UpdateEmailSettingsInput,
   UpdateGalleryOrderStatusInput,
+  UpdateGalleryOrderDetailsInput,
   UpdateMeInput,
   LocaleInput,
   UpdateOrderDetailsInput,
@@ -1113,6 +1114,13 @@ export class ApiClient {
 
   updateGalleryOrderStatus(id: string, input: UpdateGalleryOrderStatusInput) {
     return this.request<void>(`/gallery/admin/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateGalleryOrderDetails(id: string, input: UpdateGalleryOrderDetailsInput) {
+    return this.request<GalleryOrderAdminDto>(`/gallery/admin/orders/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     });

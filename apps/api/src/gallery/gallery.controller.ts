@@ -6,6 +6,7 @@ import { UpsertGalleryProductDto } from "./dto/upsert-gallery-product.dto";
 import { UpsertStorefrontDto } from "./dto/upsert-storefront.dto";
 import { CreateGalleryOrderDto } from "./dto/create-gallery-order.dto";
 import { UpdateGalleryOrderStatusDto } from "./dto/update-gallery-order-status.dto";
+import { UpdateGalleryOrderDetailsDto } from "./dto/update-gallery-order-details.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -141,6 +142,18 @@ export class GalleryController {
   @Patch("admin/orders/:id/status")
   updateOrderStatus(@Param("id") id: string, @Body() dto: UpdateGalleryOrderStatusDto, @CurrentUser() user: AuthedUser) {
     return this.gallery.updateOrderStatus(id, dto.status, user.userId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Patch("admin/orders/:id")
+  updateOrderDetails(
+    @Param("id") id: string,
+    @Body() dto: UpdateGalleryOrderDetailsDto,
+    @CurrentUser() user: AuthedUser,
+  ) {
+    return this.gallery.updateOrderDetails(id, dto, user.userId);
   }
 
   // ---- Seller self-service ----
