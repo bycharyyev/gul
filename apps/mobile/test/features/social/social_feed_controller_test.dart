@@ -76,6 +76,33 @@ void main() {
     expect(controller.state.value!.reachedEnd, isTrue);
   });
 
+  test('a supplied fetcher replaces the discover feed entirely', () async {
+    // A shop's own grid must never quietly fall back to the discover feed's repository call --
+    // that would show every visitor a mix of the wrong posts.
+    var calls = 0;
+    final controller = SocialFeedController(
+      repo,
+      fetchPage: ({cursor}) async {
+        calls++;
+        return SocialFeedPage(
+          posts: [_post('shop-$calls')],
+          nextCursor: calls == 1 ? 'c1' : null,
+        );
+      },
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.state.value!.posts.map((p) => p.id), ['shop-1']);
+    verifyNever(() => repo.loadFeed());
+
+    await controller.loadMore();
+    expect(controller.state.value!.posts.map((p) => p.id), [
+      'shop-1',
+      'shop-2',
+    ]);
+    expect(calls, 2);
+  });
+
   test('keeps what is on screen when a page fails', () async {
     final controller = await loaded(
       SocialFeedPage(posts: [_post('p1')], nextCursor: 'c1'),

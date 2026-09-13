@@ -31,6 +31,23 @@ class SocialFeedRepository {
     );
   }
 
+  /// A shop's own grid, from its public profile page -- always chronological, never personalised:
+  /// every visitor to the same shop sees the same order.
+  Future<SocialFeedPage> loadShopFeed(String handle, {String? cursor}) async {
+    final raw = await _api.get<Map<String, dynamic>>(
+      '/social-feed/by-shop/$handle',
+      query: {if (cursor != null) 'cursor': cursor},
+    );
+    final items = raw['items'] as List<dynamic>? ?? const [];
+    return SocialFeedPage(
+      posts: items
+          .whereType<Map<String, dynamic>>()
+          .map(SocialPost.fromJson)
+          .toList(),
+      nextCursor: raw['nextCursor'] as String?,
+    );
+  }
+
   /// The signed-in author's own posts -- every status, newest first.
   ///
   /// A separate route from the feed on purpose: what an author needs to see is exactly what the

@@ -135,18 +135,28 @@ export class SellersService {
     // Sent with the shop rather than behind a second call: the sections are the shape of the
     // page, and a shop page that renders its products first and rearranges itself when the
     // shelves arrive is worse than one that waits.
-    const storefronts = await this.prisma.storefront.findMany({
-      where: { sellerId: seller.id, isEnabled: true },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        coverUrl: true,
-        _count: { select: { products: { where: { isEnabled: true } } } },
-      },
-    });
+    const [storefronts, productCount, postCount] = await Promise.all([
+      this.prisma.storefront.findMany({
+        where: { sellerId: seller.id, isEnabled: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          coverUrl: true,
+          _count: { select: { products: { where: { isEnabled: true } } } },
+        },
+      }),
+      this.prisma.galleryProduct.count({
+        where: { sellerId: seller.id, isEnabled: true },
+      }),
+      // Published only -- a pending or rejected post is not something a visitor to this page has
+      // ever seen, the same rule the feed itself enforces.
+      this.prisma.socialPost.count({
+        where: { authorId: seller.userId, status: "PUBLISHED" },
+      }),
+    ]);
     return {
       id: seller.id,
       handle: seller.handle,
@@ -154,6 +164,8 @@ export class SellersService {
       description: seller.description,
       logoUrl: seller.logoUrl,
       isEnabled: seller.isEnabled,
+      productCount,
+      postCount,
       storefronts: storefronts.map(({ _count, ...section }) => ({
         ...section,
         productCount: _count.products,

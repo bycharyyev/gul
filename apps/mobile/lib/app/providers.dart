@@ -228,6 +228,23 @@ final shopProductsProvider =
           .loadProducts(GalleryFilter(sellerId: sellerId)),
     );
 
+/// A shop's own grid, by handle -- public like [shopProvider], not session-bound: every visitor
+/// to the same shop sees the same posts. Reused as-is by the tapped-through single-post viewer,
+/// so opening one post never re-fetches the grid it came from.
+final shopFeedControllerProvider =
+    StateNotifierProvider.family<
+      SocialFeedController,
+      AsyncValue<SocialFeedState>,
+      String
+    >((ref, handle) {
+      final repository = ref.watch(socialFeedRepositoryProvider);
+      return SocialFeedController(
+        repository,
+        fetchPage: ({cursor}) =>
+            repository.loadShopFeed(handle, cursor: cursor),
+      );
+    });
+
 /// The signed-in seller's own shop -- session-bound, like the other "my ..." providers, so a
 /// second account signing in on the same device never starts from the previous seller's data.
 final myShopProvider = FutureProvider<MyShop>((ref) {

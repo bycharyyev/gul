@@ -9,12 +9,16 @@ import 'package:gulyaly_mobile/features/seller/domain/my_shop.dart';
 import 'package:gulyaly_mobile/features/seller/domain/shop_profile.dart';
 import 'package:gulyaly_mobile/features/seller/presentation/my_shop_screen.dart';
 import 'package:gulyaly_mobile/features/seller/presentation/shop_screen.dart';
+import 'package:gulyaly_mobile/features/social/data/social_feed_repository.dart';
+import 'package:gulyaly_mobile/features/social/domain/social_post.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _Repository extends Mock implements SellerRepository {}
 
 class _Gallery extends Mock implements GalleryRepository {}
+
+class _SocialRepo extends Mock implements SocialFeedRepository {}
 
 const _shop = MyShop(
   id: 's1',
@@ -29,6 +33,7 @@ Future<void> _open(
   WidgetTester t,
   SellerRepository repo, {
   GalleryRepository? gallery,
+  SocialFeedRepository? social,
 }) async {
   final router = GoRouter(
     initialLocation: '/',
@@ -47,6 +52,8 @@ Future<void> _open(
         sellerRepositoryProvider.overrideWithValue(repo),
         if (gallery != null)
           galleryRepositoryProvider.overrideWithValue(gallery),
+        if (social != null)
+          socialFeedRepositoryProvider.overrideWithValue(social),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -153,8 +160,14 @@ void main() {
     );
     final gallery = _Gallery();
     when(() => gallery.loadProducts(any())).thenAnswer((_) async => []);
+    final social = _SocialRepo();
+    when(
+      () => social.loadShopFeed(any(), cursor: any(named: 'cursor')),
+    ).thenAnswer(
+      (_) async => const SocialFeedPage(posts: [], nextCursor: null),
+    );
 
-    await _open(t, repo, gallery: gallery);
+    await _open(t, repo, gallery: gallery, social: social);
     await t.tap(find.text('Открыть страницу магазина'));
     await t.pumpAndSettle();
 

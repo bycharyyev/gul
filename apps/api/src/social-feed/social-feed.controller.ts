@@ -34,6 +34,14 @@ export class SocialFeedController {
   @Get() list(@Query("cursor") cursor?: string, @Query("take") take?: string) {
     return this.feed.list(undefined, cursor, take ? Number(take) : 12);
   }
+  /** A shop's own grid, newest first — no ranking, the way a profile's posts are always the shop's own order. */
+  @Get("by-shop/:handle") byShop(
+    @Param("handle") handle: string,
+    @Query("cursor") cursor?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.feed.listByShop(handle, cursor, take ? Number(take) : 24);
+  }
   @ApiBearerAuth() @UseGuards(JwtAuthGuard) @Get("for-you") mineFeed(
     @CurrentUser() user: User,
     @Query("cursor") cursor?: string,

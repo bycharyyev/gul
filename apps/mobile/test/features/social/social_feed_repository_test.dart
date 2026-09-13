@@ -63,6 +63,33 @@ void main() {
   });
 
   test(
+    'a shop feed hits its own route, by handle, not the discover feed',
+    () async {
+      when(
+        () => api.get<Map<String, dynamic>>(
+          '/social-feed/by-shop/altyn',
+          query: any(named: 'query'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'items': [_post],
+          'nextCursor': 'c2',
+        },
+      );
+      final page = await repository.loadShopFeed('altyn', cursor: 'c1');
+      final query = verify(
+        () => api.get<Map<String, dynamic>>(
+          '/social-feed/by-shop/altyn',
+          query: captureAny(named: 'query'),
+        ),
+      ).captured.single;
+      expect(query, {'cursor': 'c1'});
+      expect(page.posts.single.id, 'post-1');
+      expect(page.nextCursor, 'c2');
+    },
+  );
+
+  test(
     'creation follows the moderation contract and never accepts a client price',
     () async {
       when(

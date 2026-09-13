@@ -7,6 +7,8 @@ class ShopProfile {
     this.description,
     this.logoUrl,
     this.sections = const [],
+    this.productCount = 0,
+    this.postCount = 0,
   });
 
   final String id;
@@ -20,12 +22,19 @@ class ShopProfile {
   /// the shelves arrive is worse than one that waits.
   final List<ShopSection> sections;
 
+  /// Counted server-side so the header can say how much is here before either tab has loaded --
+  /// only what a visitor could actually see counts (enabled products, published posts).
+  final int productCount;
+  final int postCount;
+
   factory ShopProfile.fromJson(Map<String, dynamic> json) => ShopProfile(
     id: json['id'] as String? ?? '',
     handle: json['handle'] as String? ?? '',
     shopName: json['shopName'] as String? ?? '',
     description: json['description'] as String?,
     logoUrl: json['logoUrl'] as String?,
+    productCount: (json['productCount'] as num?)?.toInt() ?? 0,
+    postCount: (json['postCount'] as num?)?.toInt() ?? 0,
     sections: (json['storefronts'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(ShopSection.fromJson)

@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { SocialFeedService } from "./social-feed.service";
 import { TRUST_EPOCH } from "./auto-moderation";
 
@@ -637,5 +637,50 @@ describe("what a write returns", () => {
     expect(post.products).toEqual([
       { id: "prod-1", name: "Букет", priceTmt: "350" },
     ]);
+  });
+});
+
+describe("SocialFeedService.listByShop", () => {
+  it("refuses a handle with no shop, and a disabled one, alike", async () => {
+    const missing = { seller: { findUnique: jest.fn().mockResolvedValue(null) } };
+    await expect(target(missing).listByShop("nope")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    const disabled = {
+      seller: {
+        findUnique: jest.fn().mockResolvedValue({ userId: "u1", isEnabled: false }),
+      },
+    };
+    await expect(target(disabled).listByShop("closed")).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("shows only this author's published posts, chronologically, never another shop's", async () => {
+    const posts = [2, 1].map((n) => ({
+      id: `p${n}`,
+      authorId: "u1",
+      publishedAt: new Date(Date.UTC(2026, 8, 9, 10, n)),
+      author: { id: "u1", fullName: "A", username: "a", avatarPath: null },
+      products: [],
+    }));
+    const findMany = jest.fn().mockResolvedValue(posts);
+    const prisma = {
+      seller: {
+        findUnique: jest.fn().mockResolvedValue({ userId: "u1", isEnabled: true }),
+      },
+      socialPost: { findMany },
+    };
+
+    const page = await target(prisma).listByShop("altyn", undefined, 10);
+
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      authorId: "u1",
+      status: "PUBLISHED",
+    });
+    expect(page.items.map((p: { id: string }) => p.id)).toEqual(["p2", "p1"]);
+    expect(page.items.every((p: { isMine: boolean }) => p.isMine === false)).toBe(true);
+    expect(page.nextCursor).toBeNull();
   });
 });

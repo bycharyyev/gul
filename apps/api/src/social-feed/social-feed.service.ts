@@ -346,6 +346,53 @@ export class SocialFeedService {
   }
 
   /**
+   * A shop's own grid, from its public profile page -- every visitor sees the same order, unlike
+   * `list()`, because a profile's posts are the shop's own timeline, not a discovery feed nobody
+   * else's affinity should reorder.
+   */
+  async listByShop(handle: string, cursor?: string, take = 24) {
+    const safeTake = Math.max(1, Math.min(take, MAX_PAGE));
+    const shop = await this.prisma.seller.findUnique({
+      where: { handle },
+      select: { userId: true, isEnabled: true },
+    });
+    if (!shop || !shop.isEnabled) throw new NotFoundException("Shop not found");
+    let cursorPost: { publishedAt: Date | null; id: string } | null = null;
+    if (cursor) {
+      cursorPost = await this.prisma.socialPost.findUnique({
+        where: { id: cursor },
+        select: { id: true, publishedAt: true },
+      });
+      if (!cursorPost?.publishedAt)
+        throw new BadRequestException("Invalid cursor");
+    }
+    const cursorAt = cursorPost?.publishedAt ?? undefined;
+    const posts = (await this.prisma.socialPost.findMany({
+      where: {
+        authorId: shop.userId,
+        status: "PUBLISHED",
+        ...(cursorAt
+          ? {
+              OR: [
+                { publishedAt: { lt: cursorAt } },
+                { publishedAt: cursorAt, id: { lt: cursorPost!.id } },
+              ],
+            }
+          : {}),
+      },
+      take: safeTake + 1,
+      orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+      include: POST_INCLUDE,
+    })) as PostWithDetails[];
+    const hasMore = posts.length > safeTake;
+    const selected = posts.slice(0, safeTake);
+    return {
+      items: selected.map((p) => ({ ...this.publicShape(p), isMine: false })),
+      nextCursor: hasMore ? (selected.at(-1)?.id ?? null) : null,
+    };
+  }
+
+  /**
    * One post as clients see it: the stored row, plus the two things only the server can resolve --
    * where an avatar is served from, and which shop the author speaks for. Shared by the feed and
    * by an author's own list so the two cannot drift into describing the same post differently.

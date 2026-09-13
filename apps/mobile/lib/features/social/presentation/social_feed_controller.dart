@@ -34,17 +34,26 @@ class SocialFeedState {
   );
 }
 
+/// One page of some feed, given the cursor to continue from. The default is the discover feed;
+/// a shop's own grid plugs in [SocialFeedRepository.loadShopFeed] instead, and gets everything
+/// else -- optimistic reactions, incremental paging -- for free.
+typedef SocialFeedPageFetcher =
+    Future<SocialFeedPage> Function({String? cursor});
+
 class SocialFeedController extends StateNotifier<AsyncValue<SocialFeedState>> {
-  SocialFeedController(this._repository) : super(const AsyncValue.loading()) {
+  SocialFeedController(this._repository, {SocialFeedPageFetcher? fetchPage})
+    : super(const AsyncValue.loading()) {
+    _fetchPage = fetchPage ?? _repository.loadFeed;
     refresh();
   }
 
   final SocialFeedRepository _repository;
+  late final SocialFeedPageFetcher _fetchPage;
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     try {
-      final page = await _repository.loadFeed();
+      final page = await _fetchPage();
       state = AsyncValue.data(
         SocialFeedState(
           posts: page.posts,
@@ -119,7 +128,7 @@ class SocialFeedController extends StateNotifier<AsyncValue<SocialFeedState>> {
     if (cursor == null) return;
     state = AsyncValue.data(current.copyWith(loadingMore: true));
     try {
-      final page = await _repository.loadFeed(cursor: cursor);
+      final page = await _fetchPage(cursor: cursor);
       final latest = state.value ?? current;
       // Ids the page already holds are dropped rather than appended: a post edited between two
       // requests can legitimately come back on both, and a duplicate in a PageView is a post the
