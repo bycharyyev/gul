@@ -30,6 +30,11 @@ concurrency:
   cancel-in-progress: false
 env:
   API_PUBLIC_URL: ${{ vars.API_PUBLIC_URL }}
+  # Both optional -- unset means Analytics (apps/web/src/components/analytics.tsx) simply
+  # doesn't load that provider's script. Set via repo Settings -> Secrets and variables ->
+  # Actions -> Variables once real GA4/Metrika ids exist.
+  NEXT_PUBLIC_GA_ID: ${{ vars.NEXT_PUBLIC_GA_ID }}
+  NEXT_PUBLIC_YM_ID: ${{ vars.NEXT_PUBLIC_YM_ID }}
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -161,6 +166,8 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ env.API_PUBLIC_URL }}
             VITE_API_URL=${{ env.API_PUBLIC_URL }}
+            NEXT_PUBLIC_GA_ID=${{ env.NEXT_PUBLIC_GA_ID }}
+            NEXT_PUBLIC_YM_ID=${{ env.NEXT_PUBLIC_YM_ID }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max
           tags: |
