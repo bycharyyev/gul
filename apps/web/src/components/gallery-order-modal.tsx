@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GalleryProductDto } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
 import { useTranslation, translateError } from "@topup-hub/i18n";
 import { api, isAuthenticated } from "@/lib/api";
+import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,11 @@ export function GalleryOrderModal({ product, onClose }: { product: GalleryProduc
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  useEffect(() => {
+    trackBeginCheckout({ item_id: product.id, item_name: product.name, price: product.priceTmt }, product.priceTmt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!isAuthenticated()) {
@@ -31,13 +37,19 @@ export function GalleryOrderModal({ product, onClose }: { product: GalleryProduc
     setSubmitting(true);
     setError(null);
     try {
-      await api.createGalleryOrder({
+      const order = await api.createGalleryOrder({
         productId: product.id,
         recipientName,
         recipientPhone,
         deliveryCity,
         deliveryAddress,
         cardMessage: cardMessage || undefined,
+      });
+      trackPurchase({
+        transactionId: order.id,
+        value: order.amountTmt,
+        currency: "TMT",
+        items: [{ item_id: product.id, item_name: product.name, price: order.amountTmt }],
       });
       setDone(true);
     } catch (err) {
