@@ -8,6 +8,11 @@ RUN pnpm install --frozen-lockfile
 
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Optional: unset means Analytics (components/analytics.tsx) renders nothing for that provider.
+ARG NEXT_PUBLIC_GA_ID
+ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
+ARG NEXT_PUBLIC_YM_ID
+ENV NEXT_PUBLIC_YM_ID=$NEXT_PUBLIC_YM_ID
 RUN pnpm turbo run build --filter=@topup-hub/web...
 
 # Next "standalone" output already traces + prunes only the deps it needs.
