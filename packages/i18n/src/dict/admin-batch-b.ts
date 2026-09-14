@@ -212,6 +212,12 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.managedLinks.deleteConfirm": "Удалить эту короткую ссылку?",
     "admin.managedLinks.empty": "Коротких ссылок пока нет",
     "admin.managedLinks.saveError": "Не удалось сохранить",
+    "admin.analytics.title": "Аналитика",
+    "admin.analytics.hint": "Быстрый переход в настоящие панели аналитики — каждая ссылка открывается в новой вкладке.",
+    "admin.analytics.ga4.title": "Google Analytics",
+    "admin.analytics.ga4.subtitle": "Ресурс gulyaly (web), GA4",
+    "admin.analytics.metrika.title": "Яндекс.Метрика",
+    "admin.analytics.metrika.subtitle": "Счётчик Gulyaly, gulyaly.pro",
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Поддомены",
@@ -470,6 +476,12 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.managedLinks.deleteConfirm": "Delete this short link?",
     "admin.managedLinks.empty": "No short links yet",
     "admin.managedLinks.saveError": "Could not save",
+    "admin.analytics.title": "Analytics",
+    "admin.analytics.hint": "Quick access to the real analytics dashboards — each link opens in a new tab.",
+    "admin.analytics.ga4.title": "Google Analytics",
+    "admin.analytics.ga4.subtitle": "gulyaly (web) property, GA4",
+    "admin.analytics.metrika.title": "Yandex Metrika",
+    "admin.analytics.metrika.subtitle": "Gulyaly counter, gulyaly.pro",
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Subdomains",
@@ -726,6 +738,12 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.managedLinks.deleteConfirm": "Bu gysga salgyny pozmalymy?",
     "admin.managedLinks.empty": "Heniz gysga salgy ýok",
     "admin.managedLinks.saveError": "Ýatda saklap bolmady",
+    "admin.analytics.title": "Analitika",
+    "admin.analytics.hint": "Hakyky analitika panellerine çalt geçiş — her salgy täze bukjada açylýar.",
+    "admin.analytics.ga4.title": "Google Analytics",
+    "admin.analytics.ga4.subtitle": "gulyaly (web) resursy, GA4",
+    "admin.analytics.metrika.title": "Ýandeks.Metrika",
+    "admin.analytics.metrika.subtitle": "Gulyaly hasaplaýjysy, gulyaly.pro",
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Subdomenler",
