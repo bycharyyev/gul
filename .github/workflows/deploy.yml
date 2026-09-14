@@ -62,7 +62,14 @@ jobs:
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-outside-tests
       NODE_ENV: test
     steps:
+      # fetch-depth: 0 (full history) -- github.event.before is empty on a workflow_dispatch
+      # run (there's no "previous push" to diff from), so the fallback below needs HEAD^ to
+      # actually resolve. The default shallow (depth 1) clone has no parent commit at all, which
+      # failed this step with "fatal: ambiguous argument 'HEAD^'" the first time anyone used the
+      # manual "Run workflow" button.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 11.22.0
