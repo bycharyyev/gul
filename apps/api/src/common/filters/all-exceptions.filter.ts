@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
+import * as Sentry from "@sentry/nestjs";
 import type { Response } from "express";
 import type { RequestWithId } from "../request-context";
 
@@ -54,6 +55,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         exception.stack,
       );
     }
+
+    // Only 5xx: a validation failure or a 404 is an expected outcome of bad input, not a bug to
+    // page anyone about -- reporting those would bury the signal in noise from day one.
+    if (status >= 500) Sentry.captureException(exception);
 
     res.status(status).json({ code, message, statusCode: status, requestId: req.requestId });
   }

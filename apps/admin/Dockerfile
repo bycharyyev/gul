@@ -8,6 +8,8 @@ RUN pnpm install --frozen-lockfile
 
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_SENTRY_DSN
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 RUN pnpm turbo run build --filter=@topup-hub/admin...
 
 FROM nginx:alpine AS runtime
