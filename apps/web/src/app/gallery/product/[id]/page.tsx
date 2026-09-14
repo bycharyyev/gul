@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import type { GalleryProductDto } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
+import { trackViewItem } from "@/lib/analytics";
 import { Card } from "@/components/ui/card";
 import { GalleryOrderModal } from "@/components/gallery-order-modal";
 
@@ -24,7 +25,10 @@ export default function ProductLandingPage() {
   useEffect(() => {
     api
       .getGalleryProduct(params.id)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        trackViewItem({ item_id: p.id, item_name: p.name, price: p.priceTmt });
+      })
       .catch(() => setNotFound(true));
   }, [params.id]);
 

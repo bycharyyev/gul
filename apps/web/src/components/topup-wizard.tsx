@@ -6,6 +6,7 @@ import type { PaymentMethodDto, RateDto, ServiceDto } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
 import { useTranslation, translateError } from "@topup-hub/i18n";
 import { api, isAuthenticated } from "@/lib/api";
+import { trackBeginCheckout, trackPurchase, trackViewItem } from "@/lib/analytics";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,7 +82,15 @@ export function TopupWizard() {
     if (!serviceRates.find((r) => r.currency === currency) && serviceRates[0]) {
       setCurrency(serviceRates[0].currency);
     }
+    trackViewItem({ item_id: service.id, item_name: service.name });
     setStep("details");
+  }
+
+  function goToPayment() {
+    if (selectedService) {
+      trackBeginCheckout({ item_id: selectedService.id, item_name: selectedService.name }, subtotal, currency);
+    }
+    setStep("payment");
   }
 
   async function submitOrder() {
@@ -123,6 +132,14 @@ export function TopupWizard() {
         return;
       }
 
+      if (selectedService) {
+        trackPurchase({
+          transactionId: currentOrderId,
+          value: total,
+          currency,
+          items: [{ item_id: selectedService.id, item_name: selectedService.name, price: total }],
+        });
+      }
       setStep("done");
     } catch (e) {
       setError(e instanceof ApiError ? translateError(t, e.message) : t("web.topupWizard.orderError"));
@@ -240,7 +257,7 @@ export function TopupWizard() {
           <Button
             className="w-full"
             disabled={!recipient || amountTmt <= 0}
-            onClick={() => setStep("payment")}
+            onClick={goToPayment}
           >
             {t("web.topupWizard.continueButton")}
           </Button>

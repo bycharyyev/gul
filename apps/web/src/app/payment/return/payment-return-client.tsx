@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { OrderStatus } from "@topup-hub/types";
 import { api, isAuthenticated } from "@/lib/api";
+import { trackPurchase } from "@/lib/analytics";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +42,14 @@ export function PaymentReturnClient() {
         setStatus(next);
         if (FINISHED.has(next)) {
           window.sessionStorage.removeItem(STORAGE_KEY);
+          if (next === "PAID" || next === "PROCESSING" || next === "COMPLETED") {
+            trackPurchase({
+              transactionId: order.id,
+              value: order.amountCharged,
+              currency: order.currency,
+              items: [{ item_id: order.serviceId, item_name: order.serviceId, price: order.amountCharged }],
+            });
+          }
           setMessage(
             next === "PAID" || next === "PROCESSING" || next === "COMPLETED"
               ? "Оплата подтверждена. Заказ принят в обработку."
