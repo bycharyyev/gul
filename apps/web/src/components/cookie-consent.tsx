@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useTranslation } from "@topup-hub/i18n";
 
 const STORAGE_KEY = "gulyaly_cookie_consent";
-const CONSENT_EVENT = "gulyaly:cookie-consent";
 
 export function CookieConsent() {
   const { t } = useTranslation();
@@ -17,7 +16,6 @@ export function CookieConsent() {
 
   function accept() {
     window.localStorage.setItem(STORAGE_KEY, "accepted");
-    window.dispatchEvent(new Event(CONSENT_EVENT));
     setVisible(false);
   }
 

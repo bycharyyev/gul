@@ -1,10 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useState } from "react";
 
-const CONSENT_STORAGE_KEY = "gulyaly_cookie_consent";
-const CONSENT_EVENT = "gulyaly:cookie-consent";
 // Baked in at build time via Docker build-args (see Dockerfile + deploy.yml), same pattern as
 // NEXT_PUBLIC_API_URL -- not secrets, but also not committed, since they're specific to whichever
 // GA4 property / Yandex Metrika counter this deployment actually reports to.
@@ -12,20 +9,6 @@ const GOOGLE_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID;
 const YANDEX_METRIKA_ID = process.env.NEXT_PUBLIC_YM_ID;
 
 export function Analytics() {
-  const [hasConsent, setHasConsent] = useState(false);
-
-  useEffect(() => {
-    const syncConsent = () => {
-      setHasConsent(window.localStorage.getItem(CONSENT_STORAGE_KEY) === "accepted");
-    };
-
-    syncConsent();
-    window.addEventListener(CONSENT_EVENT, syncConsent);
-    return () => window.removeEventListener(CONSENT_EVENT, syncConsent);
-  }, []);
-
-  if (!hasConsent) return null;
-
   return (
     <>
       {GOOGLE_MEASUREMENT_ID && (
