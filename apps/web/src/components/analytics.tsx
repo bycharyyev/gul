@@ -58,9 +58,11 @@ export function Analytics() {
 
             ym(${YANDEX_METRIKA_ID}, 'init', {
               ssr: true,
-              webvisor: false,
+              webvisor: true,
               clickmap: true,
               ecommerce: 'dataLayer',
+              referrer: document.referrer,
+              url: location.href,
               accurateTrackBounce: true,
               trackLinks: true
             });
