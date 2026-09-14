@@ -13,6 +13,8 @@ ARG NEXT_PUBLIC_GA_ID
 ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 ARG NEXT_PUBLIC_YM_ID
 ENV NEXT_PUBLIC_YM_ID=$NEXT_PUBLIC_YM_ID
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 RUN pnpm turbo run build --filter=@topup-hub/web...
 
 # Next "standalone" output already traces + prunes only the deps it needs.

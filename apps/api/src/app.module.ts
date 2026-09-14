@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { SentryModule } from "@sentry/nestjs/setup";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
@@ -42,6 +43,9 @@ import { SocialFeedModule } from "./social-feed/social-feed.module";
 
 @Module({
   imports: [
+    // Must be the first import: it registers the interceptor that attaches request/response
+    // context to whatever instrument.ts already initialized (see main.ts's first line).
+    SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     // 120 was chosen for one browser. It is keyed by IP, and behind carrier-grade NAT an IP is
     // a neighbourhood -- so the ceiling was shared by everyone on the same operator. Raised to

@@ -5,6 +5,7 @@ import { SiteHeader, BottomNav } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { CookieConsent } from "@/components/cookie-consent";
 import { Analytics } from "@/components/analytics";
+import { SentryInit } from "@/components/sentry-init";
 import { Providers } from "@/components/providers";
 
 const manrope = Manrope({ subsets: ["latin", "cyrillic"], variable: "--font-sans" });
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={manrope.variable}>
       <body className="flex min-h-screen flex-col font-sans">
+        <SentryInit />
         <Analytics />
         <Providers>
           <SiteHeader />

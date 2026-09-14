@@ -35,6 +35,9 @@ env:
   # Actions -> Variables once real GA4/Metrika ids exist.
   NEXT_PUBLIC_GA_ID: ${{ vars.NEXT_PUBLIC_GA_ID }}
   NEXT_PUBLIC_YM_ID: ${{ vars.NEXT_PUBLIC_YM_ID }}
+  # Optional. Same DSN goes to all three apps (see each app's Analytics setup for why one Sentry
+  # project is enough here -- issues are told apart by the "app" tag each SDK init sets).
+  SENTRY_DSN: ${{ vars.SENTRY_DSN }}
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -175,6 +178,8 @@ jobs:
             VITE_API_URL=${{ env.API_PUBLIC_URL }}
             NEXT_PUBLIC_GA_ID=${{ env.NEXT_PUBLIC_GA_ID }}
             NEXT_PUBLIC_YM_ID=${{ env.NEXT_PUBLIC_YM_ID }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ env.SENTRY_DSN }}
+            VITE_SENTRY_DSN=${{ env.SENTRY_DSN }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max
           tags: |
@@ -284,6 +289,11 @@ jobs:
             [ -z "$PREV_TAG" ] && PREV_TAG="latest"
 
             grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
+            # api reads this straight from the environment at runtime (env_file: .env in
+            # docker-compose.prod.yml) -- unlike the web/admin DSNs above, it is never baked into
+            # an image, so this is the one place it needs writing.
+            sed -i "/^SENTRY_DSN=/d" .env
+            echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
 
             set_tag() {
               sed -i "/^IMAGE_TAG=/d" .env
@@ -467,6 +477,8 @@ jobs:
             }
             set_image_tag "${{ github.sha }}"
             grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
+            sed -i "/^SENTRY_DSN=/d" .env
+            echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
             for attempt in 1 2 3; do
               docker compose pull && break
               echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2

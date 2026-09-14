@@ -27,6 +27,7 @@
     "@nestjs/swagger": "^8.1.0",
     "@nestjs/throttler": "^6.3.0",
     "@prisma/client": "^6.1.0",
+    "@sentry/nestjs": "^10.74.0",
     "@topup-hub/types": "workspace:*",
     "argon2": "^0.41.1",
     "bullmq": "^5.34.6",
