@@ -948,4 +948,22 @@ export class ChatService {
     await this.prisma.chatRoom.delete({ where: { id } });
     return { deleted: true };
   }
+
+  async requestVerification(roomId: string, userId: string, note: string) {
+    const room = await this.prisma.chatRoom.findUnique({ where: { id: roomId }, select: { createdById: true, kind: true } });
+    if (!room) throw new NotFoundException("CHAT_ROOM_NOT_FOUND");
+    if (room.createdById !== userId) throw new ForbiddenException("CHAT_VERIFICATION_OWNER_ONLY");
+    return this.prisma.chatVerification.upsert({ where: { roomId }, update: { status: "PENDING", note: note.trim(), reviewedById: null }, create: { roomId, note: note.trim() } });
+  }
+
+  async verificationRequests() {
+    return this.prisma.chatVerification.findMany({ orderBy: { createdAt: "asc" }, include: { room: { select: { id: true, title: true, kind: true, createdById: true, sellerId: true } } } });
+  }
+
+  async reviewVerification(id: string, reviewerId: string, status: "APPROVED" | "REJECTED", note?: string) {
+    await this.assertPublisher(reviewerId);
+    const item = await this.prisma.chatVerification.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException("CHAT_VERIFICATION_NOT_FOUND");
+    return this.prisma.chatVerification.update({ where: { id }, data: { status, note: note?.trim() || item.note, reviewedById: reviewerId } });
+  }
 }

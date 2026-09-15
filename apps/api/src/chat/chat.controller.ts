@@ -8,6 +8,7 @@ import {
   CreateChatRoomDto,
   CreateGroupDto,
   CreateOfficialChannelDto,
+  ChatVerificationRequestDto, ReviewChatVerificationDto,
   SendChatMessageDto,
 } from "./dto/chat.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -218,5 +219,22 @@ export class ChatController {
   @Delete("admin/rooms/:id")
   deleteRoom(@Param("id") id: string) {
     return this.chat.adminDeleteRoom(id);
+  }
+
+  @Post("rooms/:id/verification")
+  requestVerification(@Param("id") id: string, @Body() dto: ChatVerificationRequestDto, @CurrentUser() user: AuthedUser) {
+    return this.chat.requestVerification(id, user.userId, dto.note);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Get("admin/verifications")
+  verificationRequests() { return this.chat.verificationRequests(); }
+
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Post("admin/verifications/:id/review")
+  reviewVerification(@Param("id") id: string, @Body() dto: ReviewChatVerificationDto, @CurrentUser() user: AuthedUser) {
+    return this.chat.reviewVerification(id, user.userId, dto.status, dto.note);
   }
 }

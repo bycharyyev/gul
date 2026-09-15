@@ -27,3 +27,12 @@ export class CreateChannelDto {
 export class CreateGroupDto {
   @IsString() @Length(1, 120) title!: string;
 }
+
+export class ChatVerificationRequestDto {
+  @IsString() @Length(1, 500) note!: string;
+}
+
+export class ReviewChatVerificationDto {
+  @IsIn(["APPROVED", "REJECTED"]) status!: "APPROVED" | "REJECTED";
+  @IsOptional() @IsString() @Length(0, 500) note?: string;
+}
