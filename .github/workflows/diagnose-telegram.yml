@@ -1,0 +1,14 @@
+name: Diagnose admin bot webhook state
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check @gulyalybot getMe + webhook info
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}/getMe"
+          echo ""
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}/getWebhookInfo"
