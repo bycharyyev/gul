@@ -68,6 +68,9 @@ importers:
         specifier: ^2.6.0
         version: 2.6.1
     devDependencies:
+      '@sentry/vite-plugin':
+        specifier: ^5.4.0
+        version: 5.4.0(rollup@4.62.4)(supports-color@8.1.1)(webpack@5.97.1(esbuild@0.28.2)(postcss@8.5.26)(uglify-js@3.19.3))
       '@topup-hub/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -1921,6 +1924,10 @@ packages:
   '@sentry/vercel-edge@10.74.0':
     resolution: {integrity: sha512-+OyiwnvJtqznbUBZcVAM7PYwyTSoxaglVvQABVbfcsrM9XbY/dYu6mk5wQB6L9FRErlmOQ5YwSsPccMyMYYDxw==}
     engines: {node: '>=18'}
+
+  '@sentry/vite-plugin@5.4.0':
+    resolution: {integrity: sha512-fFJgCxs5hDyAm9BbZJ+LbA+LK2tjX5OoD0v0ARU4StR6KQmGUduoPs69yJ9AfqZ0om3Rlp5JDliiwFcNkasORA==}
+    engines: {node: '>= 18'}
 
   '@sentry/webpack-plugin@5.4.0':
     resolution: {integrity: sha512-J3a0BvUZ75Qxy+v/Ap3Hx4ZEcSjlPHZ/jDtxdRhXQCyNeEb8xq0uUBTI9VLtGk2eNeNucOxOEJ5ngqdNjnEH/A==}
@@ -6549,6 +6556,15 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@sentry/core': 10.74.0
+
+  '@sentry/vite-plugin@5.4.0(rollup@4.62.4)(supports-color@8.1.1)(webpack@5.97.1(esbuild@0.28.2)(postcss@8.5.26)(uglify-js@3.19.3))':
+    dependencies:
+      '@sentry/bundler-plugins': 10.74.0(rollup@4.62.4)(supports-color@8.1.1)(webpack@5.97.1(esbuild@0.28.2)(postcss@8.5.26)(uglify-js@3.19.3))
+    transitivePeerDependencies:
+      - encoding
+      - rollup
+      - supports-color
+      - webpack
 
   '@sentry/webpack-plugin@5.4.0(rollup@4.62.4)(supports-color@8.1.1)(webpack@5.97.1(esbuild@0.28.2)(postcss@8.5.26)(uglify-js@3.19.3))':
     dependencies:

@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1.7
+# ^ needed for the --mount=type=secret,env=... form below (Sentry's build-time auth token must
+# never land in an image layer or its history -- a build ARG/ENV would do exactly that).
 # Build context is the monorepo root (needs access to packages/*).
 FROM node:22-bookworm-slim AS build
 RUN corepack enable
@@ -10,7 +13,8 @@ ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 ARG VITE_SENTRY_DSN
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
-RUN pnpm turbo run build --filter=@topup-hub/admin...
+RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
+    pnpm turbo run build --filter=@topup-hub/admin...
 
 FROM nginx:alpine AS runtime
 COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
