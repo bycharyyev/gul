@@ -310,7 +310,7 @@ jobs:
             echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
             # Primary only, deliberately not mirrored into deploy-secondary below: both nodes run
             # the api container active/active against the same DB, so if the secondary also had
-            # this token, SentryAlertsService's cron would fire on both and every issue would be
+            # this token, the Sentry-alerts cron job would fire on both and every issue would be
             # posted to Telegram twice. Leaving it unset on the secondary is what keeps this a
             # single sender -- do not "fix" that by copying these two lines down there.
             sed -i "/^SENTRY_ALERT_TOKEN=/d" .env
