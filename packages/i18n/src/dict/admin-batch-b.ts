@@ -226,8 +226,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.notifications.disconnect": "Отключить",
     "admin.notifications.connectTelegram": "Подключить Telegram",
     "admin.notifications.preparingLink": "Готовим ссылку…",
-    "admin.notifications.botNotOpenedHint": "Если бот не открылся сам —",
-    "admin.notifications.clickHere": "нажмите здесь",
+    "admin.notifications.openTelegram": "Открыть Telegram",
     "admin.notifications.connectError": "Не удалось подключить",
     "admin.notifications.disconnectError": "Не удалось отключить",
 
@@ -502,8 +501,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.notifications.disconnect": "Disconnect",
     "admin.notifications.connectTelegram": "Connect Telegram",
     "admin.notifications.preparingLink": "Preparing link…",
-    "admin.notifications.botNotOpenedHint": "If the bot didn't open on its own —",
-    "admin.notifications.clickHere": "click here",
+    "admin.notifications.openTelegram": "Open Telegram",
     "admin.notifications.connectError": "Could not connect",
     "admin.notifications.disconnectError": "Could not disconnect",
 
@@ -776,8 +774,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.notifications.disconnect": "Aýyrmak",
     "admin.notifications.connectTelegram": "Telegram birikdir",
     "admin.notifications.preparingLink": "Salgy taýýarlanýar…",
-    "admin.notifications.botNotOpenedHint": "Bot özi açylmadysa —",
-    "admin.notifications.clickHere": "şu ýere basyň",
+    "admin.notifications.openTelegram": "Telegram'y açyň",
     "admin.notifications.connectError": "Birikdirip bolmady",
     "admin.notifications.disconnectError": "Aýryp bolmady",
 

@@ -157,7 +157,7 @@ function TelegramCard() {
     <Card className="p-5">
       <h2 className="mb-1 text-sm font-semibold uppercase text-slate-500">{t("sellerCabinet.shop.telegramBotTitle")}</h2>
       <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-        {t("sellerCabinet.shop.telegramBotDescription", { bot: status.botUsername ?? "sellergulyalybot" })}
+        {t("sellerCabinet.shop.telegramBotDescription", { bot: status.botUsername ?? "gulyalybot" })}
       </p>
 
       {status.linked ? (
@@ -175,13 +175,14 @@ function TelegramCard() {
             {busy ? t("sellerCabinet.shop.preparingLink") : t("sellerCabinet.shop.connectTelegram")}
           </Button>
           {deepLink && (
-            <p className="text-xs text-slate-400">
-              {t("sellerCabinet.shop.botNotOpenedHint")}
-              <a href={deepLink} target="_blank" rel="noreferrer" className="text-brand-600 underline dark:text-brand-300">
-                {t("sellerCabinet.shop.clickHere")}
-              </a>
-              .
-            </p>
+            <a
+              href={deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 dark:bg-surface-dark dark:text-brand-200 dark:ring-brand-800"
+            >
+              {t("sellerCabinet.shop.openTelegram")}
+            </a>
           )}
         </div>
       )}
