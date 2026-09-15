@@ -7,13 +7,13 @@ import { TopupProcessor } from "./topup.processor";
 import { StuckOrdersProcessor } from "./stuck-orders.processor";
 import { EmailModule } from "../email/email.module";
 import { ReferralsModule } from "../referrals/referrals.module";
-import { TelegramBotModule } from "../telegram-bot/telegram-bot.module";
+import { AdminTelegramBotModule } from "../admin-telegram-bot/admin-telegram-bot.module";
 import { OPERATOR_GATEWAY } from "./operator-gateway.interface";
 import { UnconfiguredOperatorGateway } from "./unconfigured-operator.gateway";
 import { selectOperatorGateway } from "./operator-gateway.provider";
 
 @Module({
-  imports: [EmailModule, ReferralsModule, TelegramBotModule],
+  imports: [EmailModule, ReferralsModule, AdminTelegramBotModule],
   controllers: [OrdersController, OrderTrackingController],
   providers: [
     OrdersService,

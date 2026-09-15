@@ -12,7 +12,7 @@ import { EmailOutboxService } from "../email/email-outbox.service";
 import { EmailService } from "../email/email.service";
 import { ReferralsService } from "../referrals/referrals.service";
 import { AuditLogService } from "../audit-log/audit-log.service";
-import { TelegramBotService } from "../telegram-bot/telegram-bot.service";
+import { AdminTelegramBotService } from "../admin-telegram-bot/admin-telegram-bot.service";
 import type { CreateOrderDto } from "./dto/create-order.dto";
 import type { OperatorGateway, OperatorTopupResult } from "./operator-gateway.interface";
 import type { OrderStatus } from "@prisma/client";
@@ -38,7 +38,7 @@ export class OrdersService {
     private email: EmailService,
     private referrals: ReferralsService,
     private auditLog: AuditLogService,
-    private telegramBot: TelegramBotService,
+    private adminTelegramBot: AdminTelegramBotService,
   ) {}
 
   async create(attribution: { userId?: string; apiKeyId?: string }, dto: CreateOrderDto) {
@@ -106,7 +106,7 @@ export class OrdersService {
       return created;
     });
 
-    void this.telegramBot.notifyAdmin(
+    void this.adminTelegramBot.notifyAdmin(
       [
         "💳 Новый заказ (пополнение)",
         `${service.name} · ${order.amountCharged} ${order.currency}`,

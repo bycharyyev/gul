@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { TelegramBotService } from "../telegram-bot/telegram-bot.service";
+import { AdminTelegramBotService } from "../admin-telegram-bot/admin-telegram-bot.service";
 import { EmailService } from "../email/email.service";
 import { AuditLogService } from "../audit-log/audit-log.service";
 import type { UpsertGalleryCategoryDto } from "./dto/upsert-gallery-category.dto";
@@ -30,6 +31,7 @@ export class GalleryService {
   constructor(
     private prisma: PrismaService,
     private telegramBot: TelegramBotService,
+    private adminTelegramBot: AdminTelegramBotService,
     private email: EmailService,
     private auditLog: AuditLogService,
     private ledger: SellerLedgerService,
@@ -139,7 +141,7 @@ export class GalleryService {
       });
     }
 
-    void this.telegramBot.notifyAdmin(
+    void this.adminTelegramBot.notifyAdmin(
       [
         "🛍️ Новый заказ (галерея)",
         `${product.name} (Арт. ${product.sku}) · ${order.amountTmt} TMT`,

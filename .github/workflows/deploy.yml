@@ -39,15 +39,23 @@ env:
   # project is enough here -- issues are told apart by the "app" tag each SDK init sets).
   SENTRY_DSN: ${{ vars.SENTRY_DSN }}
   # Optional -- SentryAlertsService polls Sentry every 15 minutes and posts new issues to this
-  # chat via the seller bot. Separate, narrowly-scoped token from SENTRY_AUTH_TOKEN above (that
-  # one only uploads source maps; this one only reads issues). ADMIN_TELEGRAM_CHAT_ID starts
-  # unset until someone messages the bot /chatid -- both are simply absent from .env until set.
+  # chat via the admin bot (@gulyalybot). Separate, narrowly-scoped token from SENTRY_AUTH_TOKEN
+  # above (that one only uploads source maps; this one only reads issues). ADMIN_TELEGRAM_CHAT_ID
+  # starts unset until someone links a chat from the admin panel -- both are simply absent from
+  # .env until set.
   SENTRY_ALERT_TOKEN: ${{ secrets.SENTRY_ALERT_TOKEN }}
-  # The Telegram username TELEGRAM_BOT_TOKEN actually authenticates as -- unlike the two above,
-  # this one goes to BOTH nodes (it only ever builds a t.me/<username> link, no active/active
-  # polling concern at all).
-  TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
   ADMIN_TELEGRAM_CHAT_ID: ${{ vars.ADMIN_TELEGRAM_CHAT_ID }}
+  # The Telegram username TELEGRAM_BOT_TOKEN (the seller bot, @sellergulyalybot) actually
+  # authenticates as -- unlike the two below, this one goes to BOTH nodes (it only ever builds a
+  # t.me/<username> link, no active/active polling concern at all).
+  TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
+  # A second, dedicated bot (@gulyalybot) for platform-ops notifications only -- new orders,
+  # Sentry alerts -- kept deliberately separate from the seller bot above. They were briefly one
+  # bot distinguished by a code prefix; that mixed the two up once already (see
+  # AdminTelegramBotService's own comment for the full story). TELEGRAM_ADMIN_BOT_USERNAME goes to
+  # both nodes for the same reason as TELEGRAM_BOT_USERNAME above.
+  TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}
+  TELEGRAM_ADMIN_BOT_USERNAME: ${{ vars.TELEGRAM_ADMIN_BOT_USERNAME }}
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -329,6 +337,16 @@ jobs:
             # one live consumer per bot token, so only one of the two active/active nodes may
             # ever set this to "true" -- see TELEGRAM_BOT_POLLING in apps/api/.env.example.
             grep -q "^TELEGRAM_BOT_POLLING=" .env || echo "TELEGRAM_BOT_POLLING=true" >> .env
+            # @gulyalybot, the admin/ops bot -- separate token, separate polling gate, same
+            # primary-only reasoning as TELEGRAM_BOT_TOKEN/TELEGRAM_BOT_POLLING above (one live
+            # getUpdates consumer per bot token, not per node).
+            sed -i "/^TELEGRAM_ADMIN_BOT_TOKEN=/d" .env
+            echo "TELEGRAM_ADMIN_BOT_TOKEN=${{ env.TELEGRAM_ADMIN_BOT_TOKEN }}" >> .env
+            grep -q "^TELEGRAM_ADMIN_BOT_POLLING=" .env || echo "TELEGRAM_ADMIN_BOT_POLLING=true" >> .env
+            # Both nodes, like TELEGRAM_BOT_USERNAME above -- only ever builds a t.me/<username>
+            # deep link, no polling concern.
+            sed -i "/^TELEGRAM_ADMIN_BOT_USERNAME=/d" .env
+            echo "TELEGRAM_ADMIN_BOT_USERNAME=${{ env.TELEGRAM_ADMIN_BOT_USERNAME }}" >> .env
 
             set_tag() {
               sed -i "/^IMAGE_TAG=/d" .env
@@ -516,6 +534,8 @@ jobs:
             echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
             sed -i "/^TELEGRAM_BOT_USERNAME=/d" .env
             echo "TELEGRAM_BOT_USERNAME=${{ env.TELEGRAM_BOT_USERNAME }}" >> .env
+            sed -i "/^TELEGRAM_ADMIN_BOT_USERNAME=/d" .env
+            echo "TELEGRAM_ADMIN_BOT_USERNAME=${{ env.TELEGRAM_ADMIN_BOT_USERNAME }}" >> .env
             for attempt in 1 2 3; do
               docker compose pull && break
               echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2
