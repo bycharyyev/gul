@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { openTelegramDeepLink } from "@/lib/open-telegram";
 
 export default function SellerShopPage() {
   const { t } = useTranslation();
@@ -129,7 +130,7 @@ function TelegramCard() {
     try {
       const res = await api.generateMySellerTelegramLinkCode();
       setDeepLink(res.deepLink);
-      if (res.deepLink) window.open(res.deepLink, "_blank");
+      if (res.deepLink) openTelegramDeepLink(res.deepLink);
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("sellerCabinet.shop.connectError"));
     } finally {
@@ -179,6 +180,10 @@ function TelegramCard() {
               href={deepLink}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                openTelegramDeepLink(deepLink);
+              }}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 dark:bg-surface-dark dark:text-brand-200 dark:ring-brand-800"
             >
               {t("sellerCabinet.shop.openTelegram")}
