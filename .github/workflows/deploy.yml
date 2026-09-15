@@ -38,6 +38,12 @@ env:
   # Optional. Same DSN goes to all three apps (see each app's Analytics setup for why one Sentry
   # project is enough here -- issues are told apart by the "app" tag each SDK init sets).
   SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+  # Optional -- SentryAlertsService polls Sentry every 15 minutes and posts new issues to this
+  # chat via the seller bot. Separate, narrowly-scoped token from SENTRY_AUTH_TOKEN above (that
+  # one only uploads source maps; this one only reads issues). ADMIN_TELEGRAM_CHAT_ID starts
+  # unset until someone messages the bot /chatid -- both are simply absent from .env until set.
+  SENTRY_ALERT_TOKEN: ${{ secrets.SENTRY_ALERT_TOKEN }}
+  ADMIN_TELEGRAM_CHAT_ID: ${{ vars.ADMIN_TELEGRAM_CHAT_ID }}
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -302,6 +308,15 @@ jobs:
             # an image, so this is the one place it needs writing.
             sed -i "/^SENTRY_DSN=/d" .env
             echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
+            # Primary only, deliberately not mirrored into deploy-secondary below: both nodes run
+            # the api container active/active against the same DB, so if the secondary also had
+            # this token, SentryAlertsService's cron would fire on both and every issue would be
+            # posted to Telegram twice. Leaving it unset on the secondary is what keeps this a
+            # single sender -- do not "fix" that by copying these two lines down there.
+            sed -i "/^SENTRY_ALERT_TOKEN=/d" .env
+            echo "SENTRY_ALERT_TOKEN=${{ env.SENTRY_ALERT_TOKEN }}" >> .env
+            sed -i "/^ADMIN_TELEGRAM_CHAT_ID=/d" .env
+            echo "ADMIN_TELEGRAM_CHAT_ID=${{ env.ADMIN_TELEGRAM_CHAT_ID }}" >> .env
 
             set_tag() {
               sed -i "/^IMAGE_TAG=/d" .env
