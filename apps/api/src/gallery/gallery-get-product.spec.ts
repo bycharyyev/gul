@@ -2,7 +2,7 @@ import { NotFoundException } from "@nestjs/common";
 import { GalleryService } from "./gallery.service";
 
 function target(prisma: Record<string, unknown>) {
-  return new GalleryService(prisma as never, {} as never, {} as never, { record: jest.fn() } as never, {} as never);
+  return new GalleryService(prisma as never, {} as never, {} as never, {} as never, { record: jest.fn() } as never, {} as never);
 }
 
 describe("GalleryService.getProduct", () => {

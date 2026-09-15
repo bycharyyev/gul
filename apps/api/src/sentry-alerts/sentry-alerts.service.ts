@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { TelegramBotService } from "../telegram-bot/telegram-bot.service";
+import { AdminTelegramBotService } from "../admin-telegram-bot/admin-telegram-bot.service";
 
 interface SentryIssue {
   id: string;
@@ -25,7 +25,7 @@ export class SentryAlertsService {
   // issues that are new from here on, not replay every already-unresolved issue on every deploy.
   private lastCheckedAt = new Date();
 
-  constructor(private telegramBot: TelegramBotService) {}
+  constructor(private adminTelegramBot: AdminTelegramBotService) {}
 
   // Polling, not a Sentry webhook: a plain outgoing-webhook alert action is gated to Sentry's
   // paid plans, while this project search API works on any plan. Dedup is a `firstSeen` watermark
@@ -80,7 +80,7 @@ export class SentryAlertsService {
       ]
         .filter(Boolean)
         .join("\n");
-      await this.telegramBot.notifyAdmin(text);
+      await this.adminTelegramBot.notifyAdmin(text);
     }
   }
 }

@@ -18,7 +18,7 @@ export class PlatformSettingsService {
     const row = await this.ensureRow();
     return {
       linked: Boolean(row.adminTelegramChatId),
-      botUsername: process.env.TELEGRAM_BOT_USERNAME ?? null,
+      botUsername: process.env.TELEGRAM_ADMIN_BOT_USERNAME ?? null,
     };
   }
 
@@ -30,7 +30,7 @@ export class PlatformSettingsService {
       data: { adminTelegramLinkCode: code },
     });
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+    const botUsername = process.env.TELEGRAM_ADMIN_BOT_USERNAME;
     return {
       code,
       deepLink: botUsername ? `https://t.me/${botUsername}?start=${code}` : null,

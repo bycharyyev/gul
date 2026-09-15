@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
-import { TelegramBotModule } from "../telegram-bot/telegram-bot.module";
+import { AdminTelegramBotModule } from "../admin-telegram-bot/admin-telegram-bot.module";
 import { SentryAlertsService } from "./sentry-alerts.service";
 
 @Module({
-  imports: [TelegramBotModule],
+  imports: [AdminTelegramBotModule],
   providers: [SentryAlertsService],
 })
 export class SentryAlertsModule {}
