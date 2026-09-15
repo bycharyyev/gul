@@ -19,26 +19,17 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
             cd /opt/gul
-            echo "--- PRIMARY: docker compose ps ---"
-            docker compose ps
-            echo "--- PRIMARY: api container started-at ---"
-            docker inspect -f "{{.State.StartedAt}} {{.Name}}" $(docker compose ps -q api)
-            echo "--- PRIMARY: api container config-hash label ---"
-            docker inspect -f "{{ index .Config.Labels \"com.docker.compose.config-hash\" }}" $(docker compose ps -q api)
-            echo "--- PRIMARY: docker compose config resolved env for api (TELEGRAM only) ---"
-            docker compose config 2>/dev/null | awk "/^  api:/,/^  [a-z]/" | grep -i telegram
-            echo "--- PRIMARY: IMAGE_TAG in .env ---"
-            grep "^IMAGE_TAG=" .env
+            echo "--- PRIMARY: how many TELEGRAM_BOT_USERNAME lines in .env (count only, no content) ---"
+            grep -c "^TELEGRAM_BOT_USERNAME=" .env
+            echo "--- PRIMARY: container env var NAMES only (no values), telegram-related ---"
+            docker compose exec -T api sh -c "env | cut -d= -f1 | grep -i telegram" < /dev/null || echo "ZERO telegram-related var NAMES in container"
+            echo "--- PRIMARY: docker compose version ---"
+            docker compose version
           '
 
       - name: Check secondary env
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
-            cd /opt/gul-secondary
-            echo "--- SECONDARY: docker compose ps ---"
-            docker compose -f docker-compose.secondary.yml ps
-            echo "--- SECONDARY: api container started-at ---"
-            docker inspect -f "{{.State.StartedAt}} {{.Name}}" $(docker compose -f docker-compose.secondary.yml ps -q api)
-            echo "--- SECONDARY: IMAGE_TAG in .env ---"
-            grep "^IMAGE_TAG=" .env
+            echo "--- SECONDARY: /opt/gul-secondary listing ---"
+            ls -la /opt/gul-secondary
           '
