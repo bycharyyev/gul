@@ -34,7 +34,7 @@ function Attachment({ message, mine }: { message: ChatMessageDto; mine: boolean 
         <img
           src={message.attachmentUrl}
           alt={message.attachmentName ?? "Вложение"}
-          className="max-h-72 w-auto rounded-xl object-cover"
+          className="max-h-60 w-auto rounded-2xl object-cover"
         />
       </a>
     );
@@ -45,7 +45,7 @@ function Attachment({ message, mine }: { message: ChatMessageDto; mine: boolean 
         src={message.attachmentUrl}
         controls
         preload="metadata"
-        className="mt-1 max-h-72 w-full rounded-xl"
+        className="mt-1 max-h-60 w-full rounded-2xl"
       />
     );
   }
@@ -883,7 +883,7 @@ export default function ChatPage() {
                   )}
               </header>
               <div
-                className="flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-4 dark:bg-white/[0.02]"
+                className="flex-1 space-y-3 overflow-y-auto bg-gradient-to-br from-brand-50/70 via-white to-accent-50/60 p-4 dark:from-brand-950/40 dark:via-slate-950 dark:to-accent-950/30"
                 aria-live="polite"
                 aria-relevant="additions"
               >
@@ -916,10 +916,13 @@ export default function ChatPage() {
                     >
                       <article
                         className={cn(
-                          "max-w-[90%] rounded-2xl px-4 py-2.5 sm:max-w-[75%]",
+                          // Outgoing is a solid gradient chip, incoming is frosted glass over the
+                          // gradient behind it. The incoming surface stops at /80 -- any more
+                          // transparent and the text drops below 4.5:1 on a busy background.
+                          "max-w-[90%] rounded-2xl px-4 py-2.5 shadow-sm sm:max-w-[75%]",
                           mine
-                            ? "bg-brand-600 text-white"
-                            : "border border-slate-100 bg-white dark:border-white/10 dark:bg-slate-900",
+                            ? "bg-gradient-to-br from-brand-600 to-accent-500 text-white"
+                            : "border border-white/60 bg-white/80 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/70",
                         )}
                       >
                         {!mine && conversation.room.kind === "GROUP" && (

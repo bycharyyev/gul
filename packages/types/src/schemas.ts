@@ -433,7 +433,17 @@ export interface TrackedOrderDto {
 // ---- Support chat ----
 
 export const sendSupportMessageSchema = z.object({
-  body: z.string().min(1).max(2000),
+  // min(0): a message may be nothing but its attachment. The API refuses a body that is blank
+  // with nothing attached.
+  body: z.string().min(0).max(2000),
+  attachment: z
+    .object({
+      url: z.string().min(1).max(2000),
+      name: z.string().min(1).max(120),
+      mimeType: z.string().min(1).max(120),
+      size: z.number().int().min(1),
+    })
+    .optional(),
 });
 export type SendSupportMessageInput = z.infer<typeof sendSupportMessageSchema>;
 
@@ -442,7 +452,12 @@ export interface SupportMessageDto {
   threadId: string;
   senderRole: SupportSenderRole;
   authorId: string | null;
+  /** Empty when the message is nothing but its attachment. */
   body: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentMime?: string | null;
+  attachmentSize?: number | null;
   createdAt: string;
 }
 

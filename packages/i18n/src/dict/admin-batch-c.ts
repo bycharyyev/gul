@@ -15,6 +15,9 @@ export const adminBatchCDict: Record<Locale, Record<string, string>> = {
     "admin.support.noMessages": "Сообщений пока нет",
     "admin.support.replyPlaceholder": "Ответить клиенту…",
     "admin.support.send": "Отправить",
+    "admin.support.attachHint": "Фото, видео или документ, до 30 МБ",
+    "admin.support.attachRemove": "Убрать",
+    "admin.support.attachTooLarge": "Файл больше 30 МБ. Выберите файл поменьше.",
 
     // ---- admin: mail ----
     "admin.mail.kind.orderCreated": "Заказ создан",
@@ -371,6 +374,9 @@ export const adminBatchCDict: Record<Locale, Record<string, string>> = {
     "admin.support.noMessages": "No messages yet",
     "admin.support.replyPlaceholder": "Reply to customer…",
     "admin.support.send": "Send",
+    "admin.support.attachHint": "Photo, video or document, up to 30MB",
+    "admin.support.attachRemove": "Remove",
+    "admin.support.attachTooLarge": "That file is over 30MB. Choose a smaller one.",
 
     // ---- admin: mail ----
     "admin.mail.kind.orderCreated": "Order created",
@@ -727,6 +733,9 @@ export const adminBatchCDict: Record<Locale, Record<string, string>> = {
     "admin.support.noMessages": "Heniz habar ýok",
     "admin.support.replyPlaceholder": "Müşderä jogap ýaz…",
     "admin.support.send": "Ugrat",
+    "admin.support.attachHint": "Surat, wideo ýa-da resminama, 30 MB çenli",
+    "admin.support.attachRemove": "Aýyrmak",
+    "admin.support.attachTooLarge": "Faýl 30 MB-dan uly. Kiçirägini saýlaň.",
 
     // ---- admin: mail ----
     "admin.mail.kind.orderCreated": "Sargyt döredildi",

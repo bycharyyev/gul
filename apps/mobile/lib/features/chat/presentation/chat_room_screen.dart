@@ -159,7 +159,16 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     final isGroup = view.valueOrNull?.kind == ChatKind.group;
 
     return Scaffold(
+      // The conversation sits on a soft gradient rather than a flat surface: the glass treatment
+      // below only reads as glass when there is something coloured behind it to blur.
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: false,
       appBar: AppBar(
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surface.withValues(alpha: 0.72),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -187,7 +196,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
             ),
         ],
       ),
-      body: Column(
+      body: _GlassBackdrop(
+        child: Column(
         children: [
           if (view.valueOrNull?.officialCategory ==
               ChatOfficialCategory.security)
@@ -242,8 +252,23 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                       ),
                     ),
                   )
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                : Container(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                    decoration: BoxDecoration(
+                      // The composer is the one surface that genuinely blurs what scrolls under
+                      // it -- a single fixed bar, not one filter per message, so the list stays
+                      // cheap to scroll.
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.78),
+                      border: Border(
+                        top: BorderSide(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outlineVariant.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -303,6 +328,23 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                             decoration: InputDecoration(
                               hintText: strings.get('chat.inputHint'),
                               counterText: '',
+                              filled: true,
+                              fillColor: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.7),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                         ),
@@ -327,7 +369,39 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                   ),
           ),
         ],
+        ),
       ),
+    );
+  }
+}
+
+/// The soft gradient the conversation sits on.
+///
+/// Glass needs something behind it: frosted surfaces over a flat grey read as plain grey boxes.
+/// Built from the theme's own colours rather than fixed values so it follows light and dark mode
+/// and the brand palette instead of pinning one look.
+class _GlassBackdrop extends StatelessWidget {
+  const _GlassBackdrop({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.35),
+            scheme.surface,
+            scheme.tertiaryContainer.withValues(alpha: 0.28),
+          ],
+          stops: const [0, 0.55, 1],
+        ),
+      ),
+      child: child,
     );
   }
 }
@@ -351,15 +425,35 @@ class _Bubble extends StatelessWidget {
           maxWidth: MediaQuery.sizeOf(context).width * 0.78,
         ),
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        padding: const EdgeInsets.fromLTRB(13, 9, 13, 7),
         decoration: BoxDecoration(
-          color: mine ? scheme.primary : scheme.surfaceContainerHighest,
+          // Two materials, one language: an outgoing message is a solid gradient chip, an
+          // incoming one is frosted glass over the gradient behind it. Opacity stops at 0.82 --
+          // below that the text loses its 4.5:1 against whatever colour happens to sit behind.
+          gradient: mine
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [scheme.primary, scheme.tertiary],
+                )
+              : null,
+          color: mine ? null : scheme.surface.withValues(alpha: 0.82),
+          border: mine
+              ? null
+              : Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(14),
-            topRight: const Radius.circular(14),
-            bottomLeft: Radius.circular(mine ? 14 : 4),
-            bottomRight: Radius.circular(mine ? 4 : 14),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 6),
+            bottomRight: Radius.circular(mine ? 6 : 18),
           ),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.shadow.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,12 +524,16 @@ class _AttachmentView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (attachment.isImage) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Image.network(
-          attachment.url,
-          fit: BoxFit.cover,
-          // A broken or still-loading picture must not collapse the bubble to nothing.
-          errorBuilder: (_, _, _) => _FileRow(attachment: attachment, mine: mine),
+        borderRadius: BorderRadius.circular(14),
+        // Capped, or a tall photo fills the screen and pushes the conversation out of view.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220),
+          child: Image.network(
+            attachment.url,
+            fit: BoxFit.cover,
+            // A broken or still-loading picture must not collapse the bubble to nothing.
+            errorBuilder: (_, _, _) => _FileRow(attachment: attachment, mine: mine),
+          ),
         ),
       );
     }
