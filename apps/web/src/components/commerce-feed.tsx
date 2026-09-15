@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookmarkSimple,
@@ -13,6 +13,8 @@ import {
   Plus,
   ShareNetwork,
   ShoppingBagOpen,
+  SpeakerHigh,
+  SpeakerSlash,
   Sparkle,
 } from "@phosphor-icons/react/dist/ssr";
 import { useTranslation } from "@topup-hub/i18n";
@@ -112,6 +114,85 @@ function ActionButton({
   );
 }
 
+const AUTO_SCROLL_STORAGE_KEY = "gulyaly_feed_autoscroll";
+
+/**
+ * Visibility-driven playback: this is what a card-based feed needs instead of native <video
+ * controls> (the previous behaviour -- nothing played until the user pressed play by hand, and
+ * nothing paused when it scrolled out of view, so two or three videos could end up playing over
+ * each other at once). Each instance decides for itself from its own IntersectionObserver entry,
+ * so with cards stacked vertically only the one mostly on screen is ever playing -- no shared
+ * "currently active video" state needed.
+ *
+ * Muted by default because browsers refuse unmuted autoplay outright; the speaker button is the
+ * only tap target, matching how Instagram/Facebook feed video already works instead of inventing
+ * a new gesture.
+ */
+function FeedVideo({
+  src,
+  poster,
+  autoScroll,
+  onEnded,
+}: {
+  src: string;
+  poster?: string;
+  autoScroll: boolean;
+  onEnded: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry && entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+          void video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+      },
+      { threshold: [0, 0.6, 1] },
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="relative aspect-[4/5] bg-[#102d3e]">
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        playsInline
+        muted={muted}
+        // With autoScroll on, looping would mean the video never fires "ended" and the feed
+        // never advances -- so autoScroll and loop are mutually exclusive on purpose, not two
+        // independent options.
+        loop={!autoScroll}
+        onEnded={autoScroll ? onEnded : undefined}
+        preload="metadata"
+        poster={poster}
+      >
+        <source src={src} type="video/mp4" />
+      </video>
+      <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-[10px] font-bold text-white">
+        <PlayCircle size={14} weight="fill" />
+        video
+      </span>
+      <button
+        type="button"
+        onClick={() => setMuted((value) => !value)}
+        aria-label={muted ? "Включить звук" : "Выключить звук"}
+        className="absolute bottom-3 right-3 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white transition hover:bg-black/60"
+      >
+        {muted ? <SpeakerSlash size={17} weight="fill" /> : <SpeakerHigh size={17} weight="fill" />}
+      </button>
+    </div>
+  );
+}
+
 export function CommerceFeed() {
   const { t } = useTranslation();
   const [liked, setLiked] = useState<Set<string>>(() => new Set());
@@ -135,6 +216,38 @@ export function CommerceFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Defaults to on; a first-time visitor never saved a preference yet, and "advances on its own"
+  // is the behaviour that was actually asked for -- the toggle is for turning it off, not opting
+  // in from a cold start.
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(AUTO_SCROLL_STORAGE_KEY);
+      if (stored !== null) setAutoScroll(stored === "1");
+    } catch {
+      // Private browsing / storage disabled -- keep the in-memory default.
+    }
+  }, []);
+
+  function toggleAutoScroll() {
+    setAutoScroll((value) => {
+      const next = !value;
+      try {
+        window.localStorage.setItem(AUTO_SCROLL_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // Nothing to persist to; the toggle still works for the rest of this visit.
+      }
+      return next;
+    });
+  }
+
+  function scrollToNextPost(currentId: string) {
+    const index = posts.findIndex((post) => post.id === currentId);
+    const next = index >= 0 ? posts[index + 1] : undefined;
+    if (!next) return;
+    document.getElementById(next.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function rememberFlags(nextPosts: FeedPost[]) {
     setLiked((current) => {
@@ -304,13 +417,33 @@ export function CommerceFeed() {
               {t("web.feed.subtitle")}
             </p>
           </div>
-          <button
-            onClick={() => setShowComposer((v) => !v)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#0d4661] px-4 py-2.5 text-sm font-bold text-white shadow-[0_10px_30px_-16px_#0d4661] transition hover:bg-[#0c5a7a] focus:outline-none focus:ring-2 focus:ring-cyan-400"
-          >
-            <Plus size={18} weight="bold" />
-            {t("web.feed.create")}
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <button
+              onClick={() => setShowComposer((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-full bg-[#0d4661] px-4 py-2.5 text-sm font-bold text-white shadow-[0_10px_30px_-16px_#0d4661] transition hover:bg-[#0c5a7a] focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            >
+              <Plus size={18} weight="bold" />
+              {t("web.feed.create")}
+            </button>
+            <div
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300"
+              title={t("web.feed.autoScrollHint")}
+            >
+              {t("web.feed.autoScroll")}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoScroll}
+                aria-label={t("web.feed.autoScroll")}
+                onClick={toggleAutoScroll}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${autoScroll ? "bg-cyan-600" : "bg-slate-300 dark:bg-white/15"}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${autoScroll ? "translate-x-[18px]" : "translate-x-0.5"}`}
+                />
+              </button>
+            </div>
+          </div>
         </div>
 
         {showComposer && (
@@ -511,21 +644,12 @@ export function CommerceFeed() {
                   />
                 )}
                 {post.media?.type === "video" && (
-                  <div className="relative aspect-[4/5] bg-[#102d3e]">
-                    <video
-                      className="h-full w-full object-cover"
-                      controls
-                      playsInline
-                      preload="metadata"
-                      poster={post.media.poster}
-                    >
-                      <source src={post.media.url} type="video/mp4" />
-                    </video>
-                    <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-[10px] font-bold text-white">
-                      <PlayCircle size={14} weight="fill" />
-                      video
-                    </span>
-                  </div>
+                  <FeedVideo
+                    src={post.media.url}
+                    poster={post.media.poster}
+                    autoScroll={autoScroll}
+                    onEnded={() => scrollToNextPost(post.id)}
+                  />
                 )}
                 {post.product && (
                   <div className="relative mx-3 my-3 overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-r from-white to-cyan-50 p-2.5 dark:border-cyan-100/10 dark:from-[#102a3a] dark:to-[#0b2130]">
