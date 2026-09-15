@@ -42,6 +42,7 @@ model User {
   supportMessages    SupportMessage[]
   chatRoomsCreated   ChatRoom[]        @relation("ChatRoomCreator")
   chatMemberships    ChatMember[]
+  chatVerificationReviews ChatVerification[] @relation("ChatVerificationReviewer")
   chatMessages       ChatMessage[]     @relation("ChatMessageAuthor")
   emailLogs          EmailLog[]
   emailVerifications EmailVerification[]
@@ -783,8 +784,28 @@ model ChatRoom {
 
   members  ChatMember[]
   messages ChatMessage[]
+  verification ChatVerification?
 
   @@index([lastMessageAt])
+}
+
+enum ChatVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ChatVerification {
+  id        String @id @default(cuid())
+  roomId    String @unique
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  status    ChatVerificationStatus @default(PENDING)
+  note      String? @db.VarChar(500)
+  reviewedById String?
+  reviewedBy User? @relation("ChatVerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
 }
 
 model ChatMember {
