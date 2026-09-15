@@ -1,0 +1,38 @@
+name: Diagnose platform Telegram connect
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check primary env and logs
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            echo "--- PRIMARY: TELEGRAM_BOT_USERNAME in .env ---"
+            grep "^TELEGRAM_BOT_USERNAME=" /opt/gul/.env || echo "NOT SET"
+            echo "--- PRIMARY: container env ---"
+            cd /opt/gul && docker compose exec -T api env 2>/dev/null | grep TELEGRAM_BOT_USERNAME < /dev/null || echo "NOT SET IN CONTAINER"
+            echo "--- PRIMARY: recent api logs mentioning platform-settings/telegram ---"
+            docker compose logs --since 2h api 2>&1 | grep -i "platform-settings\|telegram" | tail -60
+            echo "--- PRIMARY: nginx access log for platform-settings ---"
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "grep -i platform-settings /var/log/nginx/*access*.log 2>/dev/null | tail -30 || echo none"
+          '
+
+      - name: Check secondary env
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            echo "--- SECONDARY: TELEGRAM_BOT_USERNAME in .env ---"
+            grep "^TELEGRAM_BOT_USERNAME=" /opt/gul-secondary/.env || echo "NOT SET"
+            echo "--- SECONDARY: container env ---"
+            cd /opt/gul-secondary && docker compose -f docker-compose.secondary.yml exec -T api env 2>/dev/null | grep TELEGRAM_BOT_USERNAME < /dev/null || echo "NOT SET IN CONTAINER"
+          '
