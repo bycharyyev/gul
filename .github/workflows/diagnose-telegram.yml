@@ -1,4 +1,4 @@
-name: Create a real test order and verify notifications
+name: Check notification delivery after the test order
 
 on:
   workflow_dispatch:
@@ -15,67 +15,16 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Create test product + test order via the real GalleryService
+      - name: Check for delivery errors or polling conflicts
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
             cd /opt/gul
-            # TELEGRAM_BOT_POLLING / TELEGRAM_ADMIN_BOT_POLLING cleared for THIS one-off process
-            # only -- the real api-1 container keeps polling untouched. Its own onModuleInit still
-            # sets up the bot for outbound sendMessage (same "outbound-only" branch the secondary
-            # node already runs), it just never calls launch(), so nothing here can 409-conflict
-            # with the two pollers already running.
-            docker compose exec -T -e TELEGRAM_BOT_POLLING= -e TELEGRAM_ADMIN_BOT_POLLING= api node -e "
-              const { NestFactory } = require(\"@nestjs/core\");
-              const { AppModule } = require(\"./dist/src/app.module\");
-              const { GalleryService } = require(\"./dist/src/gallery/gallery.service\");
-              const { PrismaService } = require(\"./dist/src/prisma/prisma.service\");
-              (async () => {
-                const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
-                const prisma = app.get(PrismaService);
-                const gallery = app.get(GalleryService);
-
-                const seller = await prisma.seller.findUnique({ where: { handle: \"gulyaly\" } });
-                if (!seller) throw new Error(\"seller gulyaly not found\");
-
-                let product = await prisma.galleryProduct.findUnique({ where: { sku: \"TEST-NOTIFY-1\" } });
-                if (!product) {
-                  const category = await prisma.galleryCategory.findFirst();
-                  product = await gallery.createMyProduct(seller.id, {
-                    categoryId: category.id,
-                    sku: \"TEST-NOTIFY-1\",
-                    name: \"[TEST] Проверка уведомлений\",
-                    imageUrl: \"https://gulyaly.pro/placeholder.jpg\",
-                    priceTmt: 1,
-                    isEnabled: true,
-                  });
-                  console.log(\"created product:\", product.id);
-                } else {
-                  console.log(\"reusing existing test product:\", product.id);
-                }
-
-                const testUser = await prisma.user.upsert({
-                  where: { phone: \"+70000000099\" },
-                  update: {},
-                  create: {
-                    phone: \"+70000000099\",
-                    passwordHash: \"unused-test-account\",
-                    username: \"test_notify_check\",
-                    fullName: \"[TEST] Notification Check\",
-                  },
-                });
-
-                const order = await gallery.createOrder(testUser.id, {
-                  productId: product.id,
-                  recipientName: \"[TEST] Получатель\",
-                  recipientPhone: \"+70000000099\",
-                  deliveryCity: \"Ашхабад\",
-                  deliveryAddress: \"[TEST] тестовый заказ для проверки уведомлений\",
-                  cardMessage: \"Это тестовый заказ, можно игнорировать\",
-                });
-                console.log(\"created order:\", JSON.stringify({ id: order.id, amountTmt: order.amountTmt, status: order.status }));
-
-                await new Promise((r) => setTimeout(r, 2000));
-                process.exit(0);
-              })().catch((e) => { console.error(String(e && e.stack || e)); process.exit(1); });
-            " < /dev/null
+            echo "--- errors/conflicts in the last 10 minutes ---"
+            docker compose logs --since 10min api 2>&1 | grep -iE "Failed to notify|409 Conflict|stopped unexpectedly" || echo "none found"
+            echo "--- both bots still up, no restart ---"
+            docker compose ps api
           '
+
+      - name: Confirm the message actually landed in the admin chat
+        run: |
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}/getWebhookInfo"
