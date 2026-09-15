@@ -1,0 +1,38 @@
+name: Diagnose admin Telegram connect
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check primary state
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            echo "--- PlatformSettings row (booleans only, no secret values) ---"
+            docker compose exec -T api node -e "
+              const { PrismaClient } = require(\"@prisma/client\");
+              const p = new PrismaClient();
+              p.platformSettings.findUnique({ where: { id: \"singleton\" } }).then(row => {
+                console.log(JSON.stringify({
+                  found: !!row,
+                  hasChatId: !!(row && row.adminTelegramChatId),
+                  hasPendingCode: !!(row && row.adminTelegramLinkCode),
+                  updatedAt: row && row.updatedAt,
+                }));
+                process.exit(0);
+              }).catch(e => { console.error(String(e)); process.exit(1); });
+            " < /dev/null
+            echo "--- Recent api logs: platform-settings + telegram bot activity (last 1h) ---"
+            docker compose logs --since 1h api 2>&1 | grep -iE "platform-settings|TelegramBotService|admin_" | tail -80
+          '
