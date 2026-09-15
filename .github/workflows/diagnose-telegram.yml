@@ -1,0 +1,30 @@
+name: Diagnose bot polling health
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check bot polling + token sanity
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            echo "--- bot started / polling log lines (last 3h) ---"
+            docker compose logs --since 3h api 2>&1 | grep -iE "TelegramBotService|409 Conflict|getUpdates" | tail -40
+            echo "--- getMe via bot token (confirms token validity + which bot it is) ---"
+            TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" .env | cut -d= -f2-)
+            curl -s "https://api.telegram.org/bot${TOKEN}/getMe"
+            echo ""
+            echo "--- getWebhookInfo (must show no webhook set, or polling conflicts) ---"
+            curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+          '
