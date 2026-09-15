@@ -882,6 +882,7 @@ export class ChatService {
         createdBy: { select: { id: true, fullName: true, username: true } },
         seller: { select: { id: true, shopName: true } },
         _count: { select: { members: true, messages: true } },
+        verification: { select: { id: true, status: true, note: true } },
       },
     });
     return rooms.map(({ inviteCode, ...room }) => ({ ...room, hasInvite: !!inviteCode }));
