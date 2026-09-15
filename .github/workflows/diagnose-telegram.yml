@@ -1,4 +1,4 @@
-name: Diagnose admin Telegram connect 2
+name: Quick health check
 
 on:
   workflow_dispatch:
@@ -15,27 +15,16 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Check primary state
+      - name: Check disk and postgres
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
             cd /opt/gul
-            echo "--- PlatformSettings row (booleans + code length only, no secret values) ---"
-            docker compose exec -T api node -e "
-              const { PrismaClient } = require(\"@prisma/client\");
-              const p = new PrismaClient();
-              p.platformSettings.findUnique({ where: { id: \"singleton\" } }).then(row => {
-                console.log(JSON.stringify({
-                  found: !!row,
-                  hasChatId: !!(row && row.adminTelegramChatId),
-                  hasPendingCode: !!(row && row.adminTelegramLinkCode),
-                  codeLen: row && row.adminTelegramLinkCode ? row.adminTelegramLinkCode.length : 0,
-                  updatedAt: row && row.updatedAt,
-                }));
-                process.exit(0);
-              }).catch(e => { console.error(String(e)); process.exit(1); });
-            " < /dev/null
-            echo "--- api process uptime / restart count ---"
-            docker compose ps api
-            echo "--- api logs last 30min: platform-settings, telegram, errors/warnings ---"
-            docker compose logs --since 30m api 2>&1 | grep -iE "platform-settings|telegram|error|warn|exception" | tail -150
+            echo "--- disk ---"
+            df -h /
+            echo "--- containers ---"
+            docker compose ps
+            echo "--- postgres logs last 15min ---"
+            docker compose logs --since 15m postgres 2>&1 | tail -40
+            echo "--- api logs mentioning database/unreachable last 15min ---"
+            docker compose logs --since 15m api 2>&1 | grep -iE "database|unreachable|ECONNREFUSED|timeout" | tail -40
           '
