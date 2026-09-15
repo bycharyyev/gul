@@ -69,7 +69,7 @@ function TelegramCard() {
     <Card className="max-w-xl p-5">
       <h2 className="mb-1 text-sm font-semibold uppercase text-slate-500">{t("admin.notifications.telegramTitle")}</h2>
       <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-        {t("admin.notifications.telegramDescription", { bot: status.botUsername ?? "gulyalybot" })}
+        {t("admin.notifications.telegramDescription", { bot: status.botUsername ?? "sellergulyalybot" })}
       </p>
 
       {status.linked ? (
