@@ -19,12 +19,12 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
             cd /opt/gul
-            echo "--- bot started / polling log lines (last 3h) ---"
-            docker compose logs --since 3h api 2>&1 | grep -iE "TelegramBotService|409 Conflict|getUpdates" | tail -40
-            echo "--- getMe via bot token (confirms token validity + which bot it is) ---"
-            TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" .env | cut -d= -f2-)
-            curl -s "https://api.telegram.org/bot${TOKEN}/getMe"
-            echo ""
-            echo "--- getWebhookInfo (must show no webhook set, or polling conflicts) ---"
-            curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo"
+            echo "--- how many TELEGRAM_BOT_TOKEN lines in .env ---"
+            grep -c "^TELEGRAM_BOT_TOKEN=" .env
+            echo "--- token length as seen from the .env file (no value printed) ---"
+            grep "^TELEGRAM_BOT_TOKEN=" .env | awk -F= "{print length(\$0)-length(\$1)-1}"
+            echo "--- token length as seen INSIDE the running container (no value printed) ---"
+            docker compose exec -T api sh -c "echo -n \"\$TELEGRAM_BOT_TOKEN\" | wc -c" < /dev/null
+            echo "--- getMe using the container'"'"'s own env var (this is the one that matters) ---"
+            docker compose exec -T api node -e "fetch(\`https://api.telegram.org/bot\${process.env.TELEGRAM_BOT_TOKEN}/getMe\`).then(r=>r.text()).then(console.log)" < /dev/null
           '
