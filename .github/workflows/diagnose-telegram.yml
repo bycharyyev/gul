@@ -18,21 +18,27 @@ jobs:
       - name: Check primary env and logs
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
-            echo "--- PRIMARY: TELEGRAM_BOT_USERNAME in .env ---"
-            grep "^TELEGRAM_BOT_USERNAME=" /opt/gul/.env || echo "NOT SET"
-            echo "--- PRIMARY: container env ---"
-            cd /opt/gul && docker compose exec -T api env 2>/dev/null | grep TELEGRAM_BOT_USERNAME < /dev/null || echo "NOT SET IN CONTAINER"
-            echo "--- PRIMARY: recent api logs mentioning platform-settings/telegram ---"
-            docker compose logs --since 2h api 2>&1 | grep -i "platform-settings\|telegram" | tail -60
-            echo "--- PRIMARY: nginx access log for platform-settings ---"
-            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "grep -i platform-settings /var/log/nginx/*access*.log 2>/dev/null | tail -30 || echo none"
+            cd /opt/gul
+            echo "--- PRIMARY: docker compose ps ---"
+            docker compose ps
+            echo "--- PRIMARY: api container started-at ---"
+            docker inspect -f "{{.State.StartedAt}} {{.Name}}" $(docker compose ps -q api)
+            echo "--- PRIMARY: api container config-hash label ---"
+            docker inspect -f "{{ index .Config.Labels \"com.docker.compose.config-hash\" }}" $(docker compose ps -q api)
+            echo "--- PRIMARY: docker compose config resolved env for api (TELEGRAM only) ---"
+            docker compose config 2>/dev/null | awk "/^  api:/,/^  [a-z]/" | grep -i telegram
+            echo "--- PRIMARY: IMAGE_TAG in .env ---"
+            grep "^IMAGE_TAG=" .env
           '
 
       - name: Check secondary env
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
-            echo "--- SECONDARY: TELEGRAM_BOT_USERNAME in .env ---"
-            grep "^TELEGRAM_BOT_USERNAME=" /opt/gul-secondary/.env || echo "NOT SET"
-            echo "--- SECONDARY: container env ---"
-            cd /opt/gul-secondary && docker compose -f docker-compose.secondary.yml exec -T api env 2>/dev/null | grep TELEGRAM_BOT_USERNAME < /dev/null || echo "NOT SET IN CONTAINER"
+            cd /opt/gul-secondary
+            echo "--- SECONDARY: docker compose ps ---"
+            docker compose -f docker-compose.secondary.yml ps
+            echo "--- SECONDARY: api container started-at ---"
+            docker inspect -f "{{.State.StartedAt}} {{.Name}}" $(docker compose -f docker-compose.secondary.yml ps -q api)
+            echo "--- SECONDARY: IMAGE_TAG in .env ---"
+            grep "^IMAGE_TAG=" .env
           '
