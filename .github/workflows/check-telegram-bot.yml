@@ -1,0 +1,30 @@
+name: Check Telegram bot logs (one-off)
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts
+      - name: Primary -- telegram-related api log lines
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            echo "=== TELEGRAM_BOT_TOKEN key present? ==="
+            grep -oE "^TELEGRAM_BOT_TOKEN=" /opt/gul/.env || echo "NOT SET"
+            echo "=== api logs (telegram-related, last 300 lines) ==="
+            cd /opt/gul && docker compose logs api --tail=300 2>&1 | grep -i "telegram\|409\|conflict" || echo "no matching lines"
+          ' < /dev/null
+      - name: Secondary -- telegram-related api log lines
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            echo "=== TELEGRAM_BOT_TOKEN key present? ==="
+            grep -oE "^TELEGRAM_BOT_TOKEN=" /opt/gul-secondary/.env || echo "NOT SET"
+            echo "=== api logs (telegram-related, last 300 lines) ==="
+            cd /opt/gul-secondary && docker compose logs api --tail=300 2>&1 | grep -i "telegram\|409\|conflict" || echo "no matching lines"
+          ' < /dev/null
