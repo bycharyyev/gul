@@ -1,6 +1,3 @@
-# syntax=docker/dockerfile:1.7
-# ^ needed for the --mount=type=secret,env=... form below (Sentry's build-time auth token must
-# never land in an image layer or its history -- a build ARG/ENV would do exactly that).
 # Build context is the monorepo root (needs access to packages/*).
 FROM node:22-bookworm-slim AS build
 RUN corepack enable
@@ -18,7 +15,12 @@ ARG NEXT_PUBLIC_YM_ID
 ENV NEXT_PUBLIC_YM_ID=$NEXT_PUBLIC_YM_ID
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
-RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
+# --mount=type=secret,env=... isn't supported by every buildx version (failed on the GitHub
+# runner with "unexpected key 'env'") -- the portable form mounts the secret as a FILE at
+# /run/secrets/<id> and this exports it into the shell's own env for that one RUN layer, so it
+# still never becomes an ARG/ENV and never lands in an image layer or `docker history`.
+RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN \
+    export SENTRY_AUTH_TOKEN="$(cat /run/secrets/SENTRY_AUTH_TOKEN)" && \
     pnpm turbo run build --filter=@topup-hub/web...
 
 # Next "standalone" output already traces + prunes only the deps it needs.
