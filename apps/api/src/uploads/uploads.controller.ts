@@ -17,8 +17,10 @@ import type { Response } from "express";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { UploadsService } from "./uploads.service";
 import {
+  ALLOWED_UPLOAD_ATTACHMENT_MIME_TYPES,
   ALLOWED_UPLOAD_IMAGE_MIME_TYPES,
   ALLOWED_UPLOAD_MEDIA_MIME_TYPES,
+  MAX_UPLOAD_ATTACHMENT_SIZE_BYTES,
   MAX_UPLOAD_IMAGE_SIZE_BYTES,
   MAX_UPLOAD_MEDIA_SIZE_BYTES,
 } from "./uploads.constants";
@@ -68,6 +70,28 @@ export class UploadsController {
   uploadMedia(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException("No file provided");
     return this.uploads.uploadMedia(file);
+  }
+
+  /** Chat attachments -- photos, video and documents up to 30MB, sent inside a conversation. */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("attachment")
+  @ApiConsumes("multipart/form-data")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      limits: { fileSize: MAX_UPLOAD_ATTACHMENT_SIZE_BYTES },
+      fileFilter: (_req, file, cb) => {
+        if (!ALLOWED_UPLOAD_ATTACHMENT_MIME_TYPES[file.mimetype]) {
+          cb(new BadRequestException("Unsupported file type"), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadAttachment(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException("No file provided");
+    return this.uploads.uploadAttachment(file);
   }
 
   // Local-disk-fallback serving only (no S3 configured) -- public, mirrors avatar's serve route.

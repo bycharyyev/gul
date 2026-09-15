@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
 
 /** One row of the customer's inbox, whichever kind of conversation produced it. */
 export type InboxEntry = {
@@ -13,7 +15,15 @@ export type InboxEntry = {
   id: string;
   kind: "GROUP" | "CHANNEL" | "SELLER" | "SUPPORT";
   officialCategory?: string | null;
+  /**
+   * The blue tick. Earned two ways, and they are not the same thing: platform support and the
+   * platform's own announcement channels are ours by construction, while a shop's channel earns
+   * it by passing moderation (ChatVerification). Both render identically to the reader, because
+   * from their side the claim is the same one -- this row is who it says it is.
+   */
+  isVerified?: boolean;
   title: string;
+  imageUrl?: string | null;
   lastMessage: string | null;
   lastMessageAt: Date;
   unreadCount: number;
@@ -54,6 +64,25 @@ function cleanBody(value: string): string {
   return body;
 }
 
+
+/**
+ * What the inbox row shows under the title. A message that is only an attachment has no body, and
+ * rendering its empty string would make the row look like nothing was ever said.
+ */
+function previewOf(
+  message: { body: string; attachmentName?: string | null } | undefined,
+): string | null {
+  if (!message) return null;
+  if (message.body?.trim()) return message.body;
+  return message.attachmentName ? "\u{1F4CE} " + message.attachmentName : null;
+}
+
+/** Same rules as cleanBody, except that empty is allowed -- for a message carrying an attachment. */
+function cleanOptionalBody(value: string): string {
+  if (!value?.trim()) return "";
+  return cleanBody(value);
+}
+
 /**
  * Conversations, as the customer sees them.
  *
@@ -64,7 +93,10 @@ function cleanBody(value: string): string {
  */
 @Injectable()
 export class ChatService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storage: StorageService,
+  ) {}
 
   /** The shop this account owns, if it owns one. Null for everybody else. */
   private async myShopId(userId: string): Promise<string | null> {
@@ -84,6 +116,7 @@ export class ChatService {
           room: {
             include: {
               messages: { orderBy: { createdAt: "desc" }, take: 1 },
+              verification: { select: { status: true } },
             },
           },
         },
@@ -153,8 +186,11 @@ export class ChatService {
         id: `room:${member.roomId}`,
         kind: member.room.kind as "GROUP" | "CHANNEL",
         officialCategory: member.room.officialCategory,
+        isVerified:
+          !!member.room.officialCategory || member.room.verification?.status === "APPROVED",
         title: member.room.title,
-        lastMessage: member.room.messages[0]?.body ?? null,
+        imageUrl: member.room.imageUrl,
+        lastMessage: previewOf(member.room.messages[0]),
         lastMessageAt: member.room.lastMessageAt,
         unreadCount: unreadByRoom.get(member.roomId) ?? 0,
       })),
@@ -168,8 +204,11 @@ export class ChatService {
         return {
           id: `thread:${thread.id}`,
           kind: (thread.sellerId ? "SELLER" : "SUPPORT") as "SELLER" | "SUPPORT",
+          // Platform support is us, so it is verified by construction. A conversation with a shop
+          // is not: that shop is a third party, and a tick there would vouch for them.
+          isVerified: !thread.sellerId,
           title: mine ? (thread.seller?.shopName ?? "") : customerName,
-          lastMessage: thread.messages[0]?.body ?? null,
+          lastMessage: previewOf(thread.messages[0]),
           lastMessageAt: thread.lastMessageAt,
           unreadCount: unreadByThread.get(thread.id) ?? 0,
         };
@@ -250,6 +289,7 @@ export class ChatService {
         id: true,
         kind: true,
         title: true,
+        imageUrl: true,
         createdById: true,
         inviteCode: true,
         members: {
@@ -266,6 +306,7 @@ export class ChatService {
     return {
       id: room.id,
       title: room.title,
+      imageUrl: room.imageUrl,
       isOwner: room.createdById === userId,
       // Every member can invite. This is a group somebody made for their own people, and a link
       // only the founder may send would make them the bottleneck on their own friends joining.
@@ -278,6 +319,36 @@ export class ChatService {
         joinedAt: member.joinedAt,
       })),
     };
+  }
+
+  /**
+   * Sets or clears a room's picture. Whoever created the room may change it -- a group belongs to
+   * the person who made it and a shop channel to that shop -- and staff may change any of them,
+   * which is what the admin console uses to fix a picture somebody should not have chosen.
+   *
+   * The URL is checked the same way a chat attachment is: it must point at our own upload store,
+   * or a room picture could be any address on the internet, fetched by every member's client.
+   */
+  async setRoomImage(roomId: string, userId: string, imageUrl: string | null) {
+    const room = await this.prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { id: true, createdById: true },
+    });
+    if (!room) throw new NotFoundException("CHAT_ROOM_NOT_FOUND");
+    if (room.createdById !== userId) await this.assertPublisher(userId);
+
+    const url = imageUrl?.trim() || null;
+    if (url) {
+      const base = this.storage.publicBase;
+      const trusted = url.startsWith("/api/uploads/") || (!!base && url.startsWith(`${base}/uploads/`));
+      if (!trusted) throw new BadRequestException("CHAT_ROOM_IMAGE_INVALID");
+    }
+
+    return this.prisma.chatRoom.update({
+      where: { id: roomId },
+      data: { imageUrl: url },
+      select: { id: true, title: true, imageUrl: true },
+    });
   }
 
   /** Replaces the code, so a link that reached the wrong person stops working. Owner only. */
@@ -433,6 +504,7 @@ export class ChatService {
     return channels.map((channel) => ({
       id: channel.id,
       title: channel.title,
+      imageUrl: channel.imageUrl,
       officialCategory: channel.officialCategory,
       description: channel.description,
       shopName: channel.seller?.shopName ?? null,
@@ -478,7 +550,7 @@ export class ChatService {
     await this.assertMember(roomId, userId);
     const room = await this.prisma.chatRoom.findUniqueOrThrow({
       where: { id: roomId },
-      select: { id: true, title: true, kind: true, createdById: true, officialCategory: true },
+      select: { id: true, title: true, kind: true, imageUrl: true, createdById: true, officialCategory: true },
     });
     const messages = await this.prisma.chatMessage.findMany({
       where: { roomId },
@@ -489,6 +561,10 @@ export class ChatService {
         body: true,
         createdAt: true,
         authorId: true,
+        attachmentUrl: true,
+        attachmentName: true,
+        attachmentMime: true,
+        attachmentSize: true,
         author: { select: { id: true, fullName: true, username: true, avatarPath: true } },
       },
     });
@@ -496,12 +572,12 @@ export class ChatService {
     // `send` -- this only saves somebody typing a message that would be refused.
     const canPost = !room.officialCategory && (room.kind !== "CHANNEL" || room.createdById === userId);
     return {
-      room: { id: room.id, title: room.title, kind: room.kind, officialCategory: room.officialCategory, canPost },
+      room: { id: room.id, title: room.title, kind: room.kind, imageUrl: room.imageUrl, officialCategory: room.officialCategory, canPost },
       messages: messages.reverse(),
     };
   }
 
-  async send(roomId: string, userId: string, body: string) {
+  async send(roomId: string, userId: string, body: string, attachment?: ChatAttachmentInput | null) {
     await this.assertMember(roomId, userId);
     const room = await this.prisma.chatRoom.findUniqueOrThrow({
       where: { id: roomId },
@@ -512,10 +588,12 @@ export class ChatService {
     if (room.officialCategory || (room.kind === "CHANNEL" && room.createdById !== userId)) {
       throw new ForbiddenException("CHAT_CHANNEL_READ_ONLY");
     }
-    const clean = cleanBody(body);
+    const columns = validateAttachment(attachment, this.storage.publicBase);
+    // A photo sent without a caption is a message; a blank one with nothing attached is not.
+    const clean = columns.attachmentUrl ? cleanOptionalBody(body) : cleanBody(body);
     const [message] = await this.prisma.$transaction([
       this.prisma.chatMessage.create({
-        data: { roomId, authorId: userId, body: clean },
+        data: { roomId, authorId: userId, body: clean, ...columns },
       }),
       // Kept in step with the message inside the same transaction: an inbox ordered by a
       // lastMessageAt that lagged behind would put a live conversation below a dead one.
@@ -628,9 +706,15 @@ export class ChatService {
     };
   }
 
-  async sendToThread(threadId: string, userId: string, body: string) {
+  async sendToThread(
+    threadId: string,
+    userId: string,
+    body: string,
+    attachment?: ChatAttachmentInput | null,
+  ) {
     const { asShop } = await this.ownedThread(threadId, userId);
-    const clean = cleanBody(body);
+    const columns = validateAttachment(attachment, this.storage.publicBase);
+    const clean = columns.attachmentUrl ? cleanOptionalBody(body) : cleanBody(body);
     const [message] = await this.prisma.$transaction([
       this.prisma.supportMessage.create({
         data: {
@@ -640,6 +724,7 @@ export class ChatService {
           senderRole: asShop ? "SELLER" : "CUSTOMER",
           authorId: userId,
           body: clean,
+          ...columns,
           // Own messages are read by definition, on whichever side wrote them.
           readByCustomer: !asShop,
           readByStaff: asShop,

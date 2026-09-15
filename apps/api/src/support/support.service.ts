@@ -1,6 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
 import type { SupportThreadStatus } from "@prisma/client";
+
+/** A message may be text, or a file, or both -- but not neither. */
+function assertNotBlank(body: string, attachmentUrl: string | null) {
+  if (!body?.trim() && !attachmentUrl) throw new BadRequestException("SUPPORT_MESSAGE_EMPTY");
+}
 
 const THREAD_INCLUDE = {
   user: { select: { id: true, phone: true, fullName: true } },
@@ -8,7 +15,10 @@ const THREAD_INCLUDE = {
 
 @Injectable()
 export class SupportService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storage: StorageService,
+  ) {}
 
   private async getOrCreateThread(userId: string, sellerId: string | null) {
     const existing = await this.prisma.supportThread.findFirst({
@@ -34,10 +44,17 @@ export class SupportService {
     return { thread, messages };
   }
 
-  async sendCustomerMessage(userId: string, body: string, sellerId: string | null = null) {
+  async sendCustomerMessage(
+    userId: string,
+    body: string,
+    sellerId: string | null = null,
+    attachment?: ChatAttachmentInput | null,
+  ) {
     const thread = await this.getOrCreateThread(userId, sellerId);
+    const columns = validateAttachment(attachment, this.storage.publicBase);
+    assertNotBlank(body, columns.attachmentUrl);
     const message = await this.prisma.supportMessage.create({
-      data: { threadId: thread.id, senderRole: "CUSTOMER", authorId: userId, body },
+      data: { threadId: thread.id, senderRole: "CUSTOMER", authorId: userId, body: body.trim(), ...columns },
     });
     await this.prisma.supportThread.update({
       where: { id: thread.id },
@@ -64,10 +81,10 @@ export class SupportService {
     return { thread, messages };
   }
 
-  async sendStaffMessage(threadId: string, authorId: string, body: string) {
+  async sendStaffMessage(threadId: string, authorId: string, body: string, attachment?: ChatAttachmentInput | null) {
     const thread = await this.prisma.supportThread.findFirst({ where: { id: threadId, sellerId: null } });
     if (!thread) throw new NotFoundException("Thread not found");
-    return this.postReply(threadId, "STAFF", authorId, body);
+    return this.postReply(threadId, "STAFF", authorId, body, attachment);
   }
 
   async setThreadStatus(id: string, status: SupportThreadStatus) {
@@ -94,10 +111,16 @@ export class SupportService {
     return { thread, messages };
   }
 
-  async sendSellerMessage(sellerId: string, threadId: string, authorId: string, body: string) {
+  async sendSellerMessage(
+    sellerId: string,
+    threadId: string,
+    authorId: string,
+    body: string,
+    attachment?: ChatAttachmentInput | null,
+  ) {
     const thread = await this.prisma.supportThread.findFirst({ where: { id: threadId, sellerId } });
     if (!thread) throw new ForbiddenException("Not your conversation");
-    return this.postReply(threadId, "SELLER", authorId, body);
+    return this.postReply(threadId, "SELLER", authorId, body, attachment);
   }
 
   async getUnreadCountForSeller(sellerId: string) {
@@ -131,9 +154,17 @@ export class SupportService {
     return messages;
   }
 
-  private async postReply(threadId: string, senderRole: "STAFF" | "SELLER", authorId: string, body: string) {
+  private async postReply(
+    threadId: string,
+    senderRole: "STAFF" | "SELLER",
+    authorId: string,
+    body: string,
+    attachment?: ChatAttachmentInput | null,
+  ) {
+    const columns = validateAttachment(attachment, this.storage.publicBase);
+    assertNotBlank(body, columns.attachmentUrl);
     const message = await this.prisma.supportMessage.create({
-      data: { threadId, senderRole, authorId, body },
+      data: { threadId, senderRole, authorId, body: body.trim(), ...columns },
     });
     await this.prisma.supportThread.update({
       where: { id: threadId },

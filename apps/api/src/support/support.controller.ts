@@ -30,7 +30,7 @@ export class SupportController {
 
   @Post("thread/messages")
   sendMessage(@Body() dto: SendMessageDto, @CurrentUser() user: AuthedUser) {
-    return this.support.sendCustomerMessage(user.userId, dto.body);
+    return this.support.sendCustomerMessage(user.userId, dto.body, null, dto.attachment);
   }
 
   // ---- Customer: chat with a specific seller ----
@@ -46,7 +46,7 @@ export class SupportController {
     @Body() dto: SendMessageDto,
     @CurrentUser() user: AuthedUser,
   ) {
-    return this.support.sendCustomerMessage(user.userId, dto.body, sellerId);
+    return this.support.sendCustomerMessage(user.userId, dto.body, sellerId, dto.attachment);
   }
 
   // ---- Staff: platform support inbox ----
@@ -69,7 +69,7 @@ export class SupportController {
   @Roles("ADMIN", "MANAGER", "SUPPORT")
   @Post("admin/threads/:id/messages")
   staffReply(@Param("id") id: string, @Body() dto: SendMessageDto, @CurrentUser() user: AuthedUser) {
-    return this.support.sendStaffMessage(id, user.userId, dto.body);
+    return this.support.sendStaffMessage(id, user.userId, dto.body, dto.attachment);
   }
 
   @UseGuards(RolesGuard)
@@ -110,6 +110,6 @@ export class SupportController {
   @Post("seller-inbox/threads/:id/messages")
   async sellerReply(@Param("id") id: string, @Body() dto: SendMessageDto, @CurrentUser() user: AuthedUser) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
-    return this.support.sendSellerMessage(sellerId, id, user.userId, dto.body);
+    return this.support.sendSellerMessage(sellerId, id, user.userId, dto.body, dto.attachment);
   }
 }

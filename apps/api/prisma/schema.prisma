@@ -741,7 +741,12 @@ model SupportMessage {
   senderRole     SupportSenderRole
   authorId       String?
   author         User?             @relation(fields: [authorId], references: [id])
+  /// Empty when the message is nothing but its attachment -- see ChatMessage.body.
   body           String
+  attachmentUrl  String?
+  attachmentName String?           @db.VarChar(120)
+  attachmentMime String?           @db.VarChar(120)
+  attachmentSize Int?
   readByStaff    Boolean           @default(false)
   readByCustomer Boolean           @default(false)
   createdAt      DateTime          @default(now())
@@ -782,6 +787,9 @@ model ChatRoom {
   /// Shown to somebody deciding whether to subscribe. Channels only; a group's members were
   /// added by a person who already told them what it is.
   description   String?      @db.VarChar(500)
+  /// The room's picture, as an uploads URL. Optional: a room without one falls back to the
+  /// initial-letter avatar every client already draws, so this is never required to have a chat.
+  imageUrl      String?
   createdById   String
   createdBy     User         @relation("ChatRoomCreator", fields: [createdById], references: [id])
   /// The shop a channel speaks for, when a creator made it. Null for a platform group.
@@ -842,7 +850,16 @@ model ChatMessage {
   room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   authorId  String
   author    User     @relation("ChatMessageAuthor", fields: [authorId], references: [id])
+  /// Empty when the message is nothing but its attachment -- a photo sent without a caption is a
+  /// message, so the "must not be blank" rule is body-or-attachment, not body alone.
   body      String   @db.VarChar(2000)
+  /// A photo, video or document sent with the message. Stored the same way as every other upload
+  /// (public object store, uuid filename); name/mime/size are kept so the bubble can be drawn
+  /// before anybody downloads it.
+  attachmentUrl  String?
+  attachmentName String? @db.VarChar(120)
+  attachmentMime String? @db.VarChar(120)
+  attachmentSize Int?
   createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])

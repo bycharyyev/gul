@@ -6,7 +6,7 @@ import {
 import { ChatService } from "./chat.service";
 
 function target(prisma: Record<string, unknown>) {
-  return new ChatService(prisma as never);
+  return new ChatService(prisma as never, { publicBase: "https://open.s3.regru.cloud" } as never);
 }
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 8, 9, 12, minutes));
@@ -167,6 +167,51 @@ describe("ChatService", () => {
       await expect(target(sendPrisma()).send("r1", "u1", body)).rejects.toBeInstanceOf(
         BadRequestException,
       );
+    });
+
+    const attachment = {
+      url: "https://open.s3.regru.cloud/uploads/8a1f.jpg",
+      name: "смета.pdf",
+      mimeType: "application/pdf",
+      size: 2048,
+    };
+
+    it("accepts a message that is nothing but its attachment", async () => {
+      // A photo sent without a caption is a message. The blank-body rule is body-or-attachment.
+      const prisma = sendPrisma();
+      await target(prisma).send("r1", "u1", "", attachment);
+
+      expect(prisma.chatMessage.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            body: "",
+            attachmentUrl: attachment.url,
+            attachmentName: "смета.pdf",
+            attachmentMime: "application/pdf",
+            attachmentSize: 2048,
+          }),
+        }),
+      );
+    });
+
+    it("refuses an attachment hosted somewhere other than our own store", async () => {
+      // Otherwise a message could carry any address on the internet and every reader's client
+      // would fetch it.
+      await expect(
+        target(sendPrisma()).send("r1", "u1", "", { ...attachment, url: "https://evil.example/x.pdf" }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("refuses a type the upload endpoint would not have accepted", async () => {
+      await expect(
+        target(sendPrisma()).send("r1", "u1", "", { ...attachment, mimeType: "application/x-msdownload" }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("refuses an attachment over the 30MB ceiling", async () => {
+      await expect(
+        target(sendPrisma()).send("r1", "u1", "", { ...attachment, size: 31 * 1024 * 1024 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

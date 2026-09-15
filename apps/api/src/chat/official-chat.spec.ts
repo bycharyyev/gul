@@ -14,7 +14,7 @@ function setup(role = "MANAGER") {
     chatMessage: { create: jest.fn().mockResolvedValue({ id: "message" }), findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
   };
-  return { prisma, service: new ChatService(prisma as never) };
+  return { prisma, service: new ChatService(prisma as never, { publicBase: "https://open.s3.regru.cloud" } as never) };
 }
 
 describe("Official chat channels", () => {

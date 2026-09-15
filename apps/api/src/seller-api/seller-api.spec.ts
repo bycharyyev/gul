@@ -4,7 +4,7 @@ import { ApiKeysService } from "../api-keys/api-keys.service";
 import { ShopKeyGuard } from "./shop-key.guard";
 import { SHOP_SCOPES } from "../partner/api-key-scopes";
 
-const chatFor = (prisma: Record<string, unknown>) => new ChatService(prisma as never);
+const chatFor = (prisma: Record<string, unknown>) => new ChatService(prisma as never, { publicBase: "https://open.s3.regru.cloud" } as never);
 const keysFor = (prisma: Record<string, unknown>, quota: Record<string, unknown> = { forget: jest.fn() }) =>
   new ApiKeysService(prisma as never, quota as never);
 

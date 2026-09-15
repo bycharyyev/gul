@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { ChatService } from "./chat.service";
@@ -10,6 +10,7 @@ import {
   CreateOfficialChannelDto,
   ChatVerificationRequestDto, ReviewChatVerificationDto,
   SendChatMessageDto,
+  SetChatRoomImageDto,
 } from "./dto/chat.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -54,7 +55,17 @@ export class ChatController {
     @Body() dto: SendChatMessageDto,
     @CurrentUser() user: AuthedUser,
   ) {
-    return this.chat.send(id, user.userId, dto.body);
+    return this.chat.send(id, user.userId, dto.body, dto.attachment);
+  }
+
+  /** The room's picture. Its creator may change it; staff may change anybody's. */
+  @Patch("rooms/:id/image")
+  setRoomImage(
+    @Param("id") id: string,
+    @Body() dto: SetChatRoomImageDto,
+    @CurrentUser() user: AuthedUser,
+  ) {
+    return this.chat.setRoomImage(id, user.userId, dto.imageUrl ?? null);
   }
 
   @Post("rooms/:id/read")
@@ -154,7 +165,7 @@ export class ChatController {
     @Body() dto: SendChatMessageDto,
     @CurrentUser() user: AuthedUser,
   ) {
-    return this.chat.sendToThread(id, user.userId, dto.body);
+    return this.chat.sendToThread(id, user.userId, dto.body, dto.attachment);
   }
 
   @Post("threads/:id/read")
