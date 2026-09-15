@@ -10,6 +10,7 @@ interface SentryIssue {
   level: string;
   count: string;
   permalink: string;
+  firstSeen: string;
 }
 
 function escapeHtml(s: string) {
@@ -20,13 +21,23 @@ function escapeHtml(s: string) {
 export class SentryAlertsService {
   private readonly logger = new Logger(SentryAlertsService.name);
 
+  // Set at boot, not the epoch: a fresh deploy restarts this service, and it should only report
+  // issues that are new from here on, not replay every already-unresolved issue on every deploy.
+  private lastCheckedAt = new Date();
+
   constructor(private telegramBot: TelegramBotService) {}
 
   // Polling, not a Sentry webhook: a plain outgoing-webhook alert action is gated to Sentry's
-  // paid plans, while this project search API works on any plan. `age:-20m` against a 15-minute
-  // interval gives a 5-minute overlap margin without ever re-reporting the same issue twice --
-  // `age` is time-since-first-seen, so an issue that's still unresolved 20 minutes later has
-  // already aged out of the window and won't resurface here.
+  // paid plans, while this project search API works on any plan. Dedup is a `firstSeen` watermark
+  // in memory, not a fixed `age:-Nm` window -- a window has to be at least as wide as the 15-minute
+  // poll interval to guarantee catching an issue at all, but anything wider than the interval
+  // re-matches that same issue on the *next* tick too (this previously used age:-20m, which is
+  // exactly that: an issue first seen with <5 minutes left before a tick got caught by that tick
+  // and, still within the 20-minute window, by the one after it -- confirmed in production as two
+  // identical Telegram alerts 15 minutes apart for one single-occurrence issue). Comparing
+  // `firstSeen` against a watermark that only advances after a successful fetch has no such
+  // window to tune: a failed fetch leaves the watermark alone so the next tick still covers the
+  // gap, and a successful one reports each issue exactly once no matter how ticks line up.
   @Cron("*/15 * * * *")
   async checkForNewIssues() {
     const token = process.env.SENTRY_ALERT_TOKEN;
@@ -34,10 +45,15 @@ export class SentryAlertsService {
     const org = process.env.SENTRY_ALERT_ORG ?? "gulyaly";
     const project = process.env.SENTRY_ALERT_PROJECT ?? "gul";
 
+    const since = this.lastCheckedAt;
+    const checkedAt = new Date();
+
     let issues: SentryIssue[];
     try {
+      // age:-1h is just a generous upper bound so Sentry doesn't hand back its entire unresolved
+      // backlog -- the actual cutoff is the firstSeen/since comparison below.
       const res = await fetch(
-        `https://sentry.io/api/0/projects/${org}/${project}/issues/?query=${encodeURIComponent("is:unresolved age:-20m")}&sort=new&limit=25`,
+        `https://sentry.io/api/0/projects/${org}/${project}/issues/?query=${encodeURIComponent("is:unresolved age:-1h")}&sort=new&limit=25`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) {
@@ -50,7 +66,10 @@ export class SentryAlertsService {
       return;
     }
 
+    this.lastCheckedAt = checkedAt;
+
     for (const issue of issues) {
+      if (new Date(issue.firstSeen) <= since) continue;
       const levelEmoji = issue.level === "fatal" || issue.level === "error" ? "🔴" : "🟠";
       const text = [
         `${levelEmoji} <b>Новая ошибка на проде</b>`,
