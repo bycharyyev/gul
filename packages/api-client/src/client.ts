@@ -5,6 +5,7 @@ import type {
   ChatMessageDto,
   ChatChannelDto,
   ChatGroupInfoDto,
+  ChatAttachmentInput,
   ChatRoomAdminDto,
   ChatVerificationRequestAdminDto,
   CreateChatRoomInput,
@@ -1544,6 +1545,17 @@ export class ApiClient {
     );
   }
 
+  /** Chat attachments: photo, video or document, up to 30MB. Upload first, then send the
+   *  message with what comes back. */
+  uploadChatAttachment(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return this.request<ChatAttachmentInput>("/uploads/attachment", {
+      method: "POST",
+      body: form,
+    });
+  }
+
   // ---- Social commerce feed ----
   listSocialFeed(cursor?: string, take = 12) {
     const qs = new URLSearchParams({ take: String(take) });
@@ -1633,10 +1645,17 @@ export class ApiClient {
       `${this.chatConversationPath(conversationId)}/messages`,
     );
   }
-  sendChatMessage(conversationId: string, body: string) {
+  sendChatMessage(conversationId: string, body: string, attachment?: ChatAttachmentInput) {
     return this.request<ChatMessageDto>(
       `${this.chatConversationPath(conversationId)}/messages`,
-      { method: "POST", body: JSON.stringify({ body }) },
+      { method: "POST", body: JSON.stringify({ body, attachment }) },
+    );
+  }
+  /** The room's picture. Null clears it. Its creator may set it; staff may set anybody's. */
+  setChatRoomImage(roomId: string, imageUrl: string | null) {
+    return this.request<{ id: string; title: string; imageUrl: string | null }>(
+      `/chat/rooms/${encodeURIComponent(roomId)}/image`,
+      { method: "PATCH", body: JSON.stringify({ imageUrl }) },
     );
   }
   markChatRead(conversationId: string) {

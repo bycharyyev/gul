@@ -54,14 +54,33 @@ export interface ChatInboxEntryDto {
   id: string;
   kind: "GROUP" | "CHANNEL" | "SELLER" | "SUPPORT";
   title: string;
+  /** The room's picture, if it has one; clients fall back to an initial-letter avatar. */
+  imageUrl?: string | null;
+  /** Platform support and official channels always; a shop channel once moderation approves it. */
+  isVerified?: boolean;
   lastMessage: string | null;
   lastMessageAt: string;
   unreadCount: number;
   officialCategory?: ChatOfficialCategory | null;
 }
+/** A file being sent with a message: a photo, a video or a document, up to 30MB. This is the
+ *  request shape -- what comes back on a message is the flat attachment* fields below, which is
+ *  how the columns are stored. */
+export interface ChatAttachmentInput {
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface ChatMessageDto {
   id: string;
+  /** Empty when the message is nothing but its attachment. */
   body: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentMime?: string | null;
+  attachmentSize?: number | null;
   createdAt: string;
   authorId: string | null;
   senderRole?: string;
@@ -77,6 +96,7 @@ export interface ChatConversationDto {
     id: string;
     title: string;
     kind: "GROUP" | "CHANNEL" | "THREAD";
+    imageUrl?: string | null;
     canPost: boolean;
     officialCategory?: ChatOfficialCategory | null;
   };
@@ -85,6 +105,7 @@ export interface ChatConversationDto {
 export interface ChatChannelDto {
   id: string;
   title: string;
+  imageUrl?: string | null;
   description: string | null;
   shopName: string | null;
   subscriberCount: number;
@@ -95,6 +116,7 @@ export interface ChatChannelDto {
 export interface ChatGroupInfoDto {
   id: string;
   title: string;
+  imageUrl?: string | null;
   isOwner: boolean;
   inviteCode: string | null;
   members: {
