@@ -402,11 +402,21 @@ export class ChatService {
     });
   }
 
-  /** Channels somebody could subscribe to, most recently active first. */
+  /**
+   * Channels somebody could subscribe to, most recently active first.
+   *
+   * A seller channel stays out of this list until an admin approves its verification request --
+   * official channels (staff-created, never go through the request flow) are exempt. A channel
+   * with no verification row at all reads the same as PENDING: unreviewed, not yet trusted enough
+   * to hand to every buyer browsing channels.
+   */
   async listChannels(userId: string) {
     const [channels, mine] = await Promise.all([
       this.prisma.chatRoom.findMany({
-        where: { kind: "CHANNEL" },
+        where: {
+          kind: "CHANNEL",
+          OR: [{ officialCategory: { not: null } }, { verification: { status: "APPROVED" } }],
+        },
         orderBy: [{ officialCategory: { sort: "asc", nulls: "last" } }, { lastMessageAt: "desc" }],
         take: 100,
         include: {
@@ -965,6 +975,10 @@ export class ChatService {
     await this.assertPublisher(reviewerId);
     const item = await this.prisma.chatVerification.findUnique({ where: { id } });
     if (!item) throw new NotFoundException("CHAT_VERIFICATION_NOT_FOUND");
-    return this.prisma.chatVerification.update({ where: { id }, data: { status, note: note?.trim() || item.note, reviewedById: reviewerId } });
+    return this.prisma.chatVerification.update({
+      where: { id },
+      data: { status, note: note?.trim() || item.note, reviewedById: reviewerId },
+      include: { room: { select: { id: true, title: true, kind: true, createdById: true, sellerId: true } } },
+    });
   }
 }

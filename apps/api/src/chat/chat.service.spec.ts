@@ -251,6 +251,64 @@ describe("ChatService", () => {
         }),
       );
     });
+
+    it("only queries channels that are official or verification-approved", async () => {
+      // A seller channel with no verification row reads the same as PENDING -- unreviewed, not
+      // shown to buyers browsing channels. Only an explicit APPROVED, or a staff-made official
+      // channel, gets in.
+      const findMany = jest.fn().mockResolvedValue([]);
+      const prisma = {
+        chatRoom: { findMany },
+        chatMember: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+
+      await target(prisma).listChannels("u1");
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            kind: "CHANNEL",
+            OR: [{ officialCategory: { not: null } }, { verification: { status: "APPROVED" } }],
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("chat verification", () => {
+    it("lets only the room's own creator request verification", async () => {
+      const prisma = {
+        chatRoom: { findUnique: jest.fn().mockResolvedValue({ createdById: "owner", kind: "CHANNEL" }) },
+      };
+      await expect(
+        target(prisma).requestVerification("c1", "someone-else", "проверьте пожалуйста"),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it("upserts a fresh PENDING request, clearing any previous review", async () => {
+      const upsert = jest.fn().mockResolvedValue({ id: "v1" });
+      const prisma = {
+        chatRoom: { findUnique: jest.fn().mockResolvedValue({ createdById: "owner", kind: "CHANNEL" }) },
+        chatVerification: { upsert },
+      };
+
+      await target(prisma).requestVerification("c1", "owner", "  вот наш магазин  ");
+
+      expect(upsert).toHaveBeenCalledWith({
+        where: { roomId: "c1" },
+        update: { status: "PENDING", note: "вот наш магазин", reviewedById: null },
+        create: { roomId: "c1", note: "вот наш магазин" },
+      });
+    });
+
+    it("refuses a non-staff reviewer", async () => {
+      const prisma = {
+        user: { findUnique: jest.fn().mockResolvedValue({ role: "CUSTOMER" }) },
+      };
+      await expect(
+        target(prisma).reviewVerification("v1", "u1", "APPROVED"),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   describe("the shop side of a thread", () => {

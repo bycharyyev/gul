@@ -29,6 +29,21 @@ export interface ChatRoomAdminDto {
   _count: { members: number; messages: number };
 }
 
+/** One verification request as the admin moderation queue sees it. */
+export interface ChatVerificationRequestAdminDto {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  note: string | null;
+  createdAt: string;
+  room: {
+    id: string;
+    title: string;
+    kind: "GROUP" | "CHANNEL";
+    createdById: string;
+    sellerId: string | null;
+  };
+}
+
 export interface CreateChatRoomInput {
   title: string;
   memberIds: string[];
