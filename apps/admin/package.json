@@ -14,8 +14,8 @@
     "@topup-hub/api-client": "workspace:*",
     "@topup-hub/i18n": "workspace:*",
     "@topup-hub/types": "workspace:*",
-    "class-variance-authority": "^0.7.1",
     "@sentry/react": "^10.74.0",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
     "react": "^19.0.0",
@@ -25,6 +25,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.0",
     "@topup-hub/config": "workspace:*",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",

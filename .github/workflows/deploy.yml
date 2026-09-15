@@ -171,6 +171,12 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
+          # Buildx secret mount, not a build-arg: a build-arg lands in `docker history` forever,
+          # which is exactly wrong for a token that can write to the Sentry project. Only
+          # web/admin's Dockerfiles actually mount it (RUN --mount=type=secret,id=...); api's
+          # ignores it, same as an unused build-arg would be.
+          secrets: |
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
           # The `env` context isn't available inside `strategy.matrix` (that's why the previous
           # attempt at this failed the whole workflow's schema validation before any job even
           # started) so both possible build args are passed unconditionally here instead --
