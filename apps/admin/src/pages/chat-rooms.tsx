@@ -9,7 +9,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import type { ChatRoomAdminDto } from "@topup-hub/types";
+import type { ChatRoomAdminDto, ChatVerificationRequestAdminDto } from "@topup-hub/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,7 @@ export default function ChatRoomsPage() {
   const [newMembers, setNewMembers] = useState("");
   const [removeId, setRemoveId] = useState("");
   const [kind, setKind] = useState<"ALL" | "GROUP" | "CHANNEL">("ALL");
-  const [verification, setVerification] = useState<any[]>([]);
+  const [verification, setVerification] = useState<ChatVerificationRequestAdminDto[]>([]);
 
   async function load() {
     setLoading(true);
@@ -54,12 +54,19 @@ export default function ChatRoomsPage() {
 
   useEffect(() => {
     void load();
-    void api.listChatVerificationRequests().then(setVerification).catch(() => undefined);
+    void api
+      .listChatVerificationRequests()
+      .then((items) => setVerification(items.filter((item) => item.status === "PENDING")))
+      .catch(() => undefined);
   }, []);
 
   async function reviewVerification(id: string, status: "APPROVED" | "REJECTED") {
     await api.reviewChatVerification(id, status);
-    setVerification((items) => items.map((item) => item.id === id ? { ...item, status } : item));
+    // Approved/rejected requests drop out of the queue rather than sit here with a badge --
+    // this card is a to-do list, not a history log. `load()` refreshes the room list itself so
+    // an approved channel's badge (via ChatRoomAdminDto.verification) shows up immediately.
+    setVerification((items) => items.filter((item) => item.id !== id));
+    void load();
   }
 
   /** Ids pasted as a list: one per line, or separated by commas or spaces. */
@@ -145,13 +152,30 @@ export default function ChatRoomsPage() {
 
       <OfficialChannels rooms={rooms} onChanged={load} />
 
-      {verification.length > 0 && <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">Заявки на верификацию</h2>
-        {verification.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-          <div><p className="font-medium">{item.room.title}</p><p className="text-sm text-slate-500">{item.note || "Без комментария"}</p></div>
-          <div className="flex items-center gap-2"><span className="text-xs font-semibold">{item.status}</span>{item.status === "PENDING" && <><Button size="sm" onClick={() => void reviewVerification(item.id, "APPROVED")}>Одобрить</Button><Button size="sm" variant="secondary" onClick={() => void reviewVerification(item.id, "REJECTED")}>Отклонить</Button></>}</div>
-        </div>)}
-      </Card>}
+      {verification.length > 0 && (
+        <Card className="space-y-3 p-4">
+          <h2 className="font-semibold">Заявки на верификацию</h2>
+          <p className="text-xs text-slate-500">
+            Канал не виден покупателям в списке каналов, пока заявку не одобрят.
+          </p>
+          {verification.map((item) => (
+            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+              <div>
+                <p className="font-medium">{item.room.title}</p>
+                <p className="text-sm text-slate-500">{item.note || "Без комментария"}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => void reviewVerification(item.id, "APPROVED")}>
+                  Одобрить
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => void reviewVerification(item.id, "REJECTED")}>
+                  Отклонить
+                </Button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">

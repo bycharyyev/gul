@@ -6,6 +6,7 @@ import type {
   ChatChannelDto,
   ChatGroupInfoDto,
   ChatRoomAdminDto,
+  ChatVerificationRequestAdminDto,
   CreateChatRoomInput,
   AdminContentPageInput,
   AdminHomeSlideInput,
@@ -1754,9 +1755,14 @@ export class ApiClient {
       method: "DELETE",
     });
   }
-  listChatVerificationRequests() { return this.request<any[]>("/chat/admin/verifications"); }
+  listChatVerificationRequests() {
+    return this.request<ChatVerificationRequestAdminDto[]>("/chat/admin/verifications");
+  }
   reviewChatVerification(id: string, status: "APPROVED" | "REJECTED", note?: string) {
-    return this.request(`/chat/admin/verifications/${encodeURIComponent(id)}/review`, { method: "POST", body: JSON.stringify({ status, note }) });
+    return this.request<ChatVerificationRequestAdminDto>(
+      `/chat/admin/verifications/${encodeURIComponent(id)}/review`,
+      { method: "POST", body: JSON.stringify({ status, note }) },
+    );
   }
 
   moderateSocialPost(id: string, input: ModerateSocialPostInput) {
