@@ -134,6 +134,23 @@ export default function ChatRoomsPage() {
   const channels = rooms.filter((room) => room.kind === "CHANNEL");
   const visible = kind === "ALL" ? rooms : rooms.filter((room) => room.kind === kind);
 
+  /**
+   * Toggling the same stat card back to "ALL" (rather than staying stuck on it) matches how the
+   * filter buttons below already behave -- clicking "Группы" twice shouldn't require reaching for
+   * the "Все" button instead.
+   */
+  function selectKind(value: "GROUP" | "CHANNEL") {
+    setKind((current) => (current === value ? "ALL" : value));
+    document.getElementById("room-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function statCardClass(active: boolean) {
+    return [
+      "rounded-xl2 border bg-white p-4 text-left shadow-sm transition-colors",
+      active ? "border-brand-400 ring-1 ring-brand-400" : "border-slate-200 hover:border-brand-200 hover:bg-brand-50/40",
+    ].join(" ");
+  }
+
   function personName(room: ChatRoomAdminDto) {
     const person = room.createdBy;
     if (!person) return room.createdById;
@@ -178,18 +195,26 @@ export default function ChatRoomsPage() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
+        <button
+          type="button"
+          onClick={() => selectKind("GROUP")}
+          className={statCardClass(kind === "GROUP")}
+        >
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <MessageSquare className="h-4 w-4" /> Групп
           </div>
           <p className="mt-2 text-2xl font-bold">{groups.length}</p>
-        </Card>
-        <Card className="p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => selectKind("CHANNEL")}
+          className={statCardClass(kind === "CHANNEL")}
+        >
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <Megaphone className="h-4 w-4" /> Каналов
           </div>
           <p className="mt-2 text-2xl font-bold">{channels.length}</p>
-        </Card>
+        </button>
         <Card className="p-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <Users className="h-4 w-4" /> Участников
@@ -204,7 +229,7 @@ export default function ChatRoomsPage() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div id="room-list" className="flex flex-wrap gap-2">
         {(
           [
             ["ALL", `Все · ${rooms.length}`],
