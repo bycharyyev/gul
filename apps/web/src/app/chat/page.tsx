@@ -3,13 +3,72 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
+  ChatAttachmentInput,
   ChatChannelDto,
   ChatConversationDto,
   ChatGroupInfoDto,
   ChatInboxEntryDto,
+  ChatMessageDto,
 } from "@topup-hub/types";
 import { api, isAuthenticated } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+/** Mirrors MAX_UPLOAD_ATTACHMENT_SIZE_BYTES on the API -- checked here only to fail fast with a
+ *  readable message instead of uploading 30MB to be refused. */
+const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024;
+
+function formatBytes(size: number): string {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
+  return `${Math.max(1, Math.round(size / 1024))} КБ`;
+}
+
+/** A sent attachment, drawn inside the bubble: pictures inline, everything else as a file row. */
+function Attachment({ message, mine }: { message: ChatMessageDto; mine: boolean }) {
+  if (!message.attachmentUrl) return null;
+  const isImage = (message.attachmentMime ?? "").startsWith("image/");
+  const isVideo = (message.attachmentMime ?? "").startsWith("video/");
+  if (isImage) {
+    return (
+      <a href={message.attachmentUrl} target="_blank" rel="noreferrer" className="mt-1 block">
+        {/* eslint-disable-next-line @next/next/no-img-element -- user upload, arbitrary host/size */}
+        <img
+          src={message.attachmentUrl}
+          alt={message.attachmentName ?? "Вложение"}
+          className="max-h-72 w-auto rounded-xl object-cover"
+        />
+      </a>
+    );
+  }
+  if (isVideo) {
+    return (
+      <video
+        src={message.attachmentUrl}
+        controls
+        preload="metadata"
+        className="mt-1 max-h-72 w-full rounded-xl"
+      />
+    );
+  }
+  return (
+    <a
+      href={message.attachmentUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-sm underline",
+        mine ? "bg-white/15" : "bg-slate-100 dark:bg-white/10",
+      )}
+    >
+      <span aria-hidden>📎</span>
+      <span className="min-w-0 flex-1 truncate">{message.attachmentName ?? "Файл"}</span>
+      {message.attachmentSize ? (
+        <span className={cn("shrink-0 text-xs", mine ? "text-white/70" : "text-slate-500")}>
+          {formatBytes(message.attachmentSize)}
+        </span>
+      ) : null}
+    </a>
+  );
+}
 
 const categories = {
   NEWS: "Новости сервиса",
@@ -42,6 +101,10 @@ export default function ChatPage() {
   const [channels, setChannels] = useState<ChatChannelDto[]>([]);
   const [group, setGroup] = useState<ChatGroupInfoDto | null>(null);
   const [input, setInput] = useState("");
+  // One pending attachment at a time, per conversation: picked, uploaded, then sent with the
+  // next message. Kept per id so switching conversations does not carry somebody's file along.
+  const [attachments, setAttachments] = useState<Record<string, ChatAttachmentInput>>({});
+  const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<Awaited<
     ReturnType<typeof api.chatInvitePreview>
   > | null>(null);
@@ -167,15 +230,21 @@ export default function ChatPage() {
   }
   async function send() {
     const id = active;
-    const body = id ? drafts[id]?.trim() : "";
-    if (!id || !body || sending || !conversation?.room.canPost) return;
+    const body = id ? (drafts[id]?.trim() ?? "") : "";
+    const attachment = id ? attachments[id] : undefined;
+    // A file on its own is a message; an empty box with nothing attached is not.
+    if (!id || (!body && !attachment) || sending || !conversation?.room.canPost) return;
     setSending(true);
     setError("");
     try {
-      const message = await api.sendChatMessage(id, body);
+      const message = await api.sendChatMessage(id, body, attachment);
       setDrafts((old) =>
         old[id]?.trim() === body ? { ...old, [id]: "" } : old,
       );
+      setAttachments((old) => {
+        const { [id]: _sent, ...rest } = old;
+        return rest;
+      });
       if (activeRef.current === id)
         setConversation((old) =>
           old
@@ -195,8 +264,28 @@ export default function ChatPage() {
       setSending(false);
     }
   }
+  async function pickAttachment(file: File | undefined) {
+    const id = active;
+    if (!file || !id) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setError("Файл больше 30 МБ. Выберите файл поменьше.");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    try {
+      const uploaded = await api.uploadChatAttachment(file);
+      setAttachments((old) => ({ ...old, [id]: uploaded }));
+    } catch {
+      setError("Не удалось загрузить файл. Попробуйте ещё раз.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const selected = inbox.find((row) => row.id === active);
   const draft = active ? (drafts[active] ?? "") : "";
+  const pendingAttachment = active ? attachments[active] : undefined;
   const visible = inbox.filter(
     (row) =>
       titleOf(row).toLocaleLowerCase().includes(search.toLocaleLowerCase()) &&
@@ -319,26 +408,45 @@ export default function ChatPage() {
                     active === row.id && "bg-brand-50 dark:bg-brand-950",
                   )}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-semibold",
-                      row.officialCategory
-                        ? "bg-teal-100 text-teal-800"
-                        : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
-                    )}
-                  >
-                    {row.officialCategory
-                      ? "✓"
-                      : row.kind === "SUPPORT"
-                        ? "?"
-                        : titleOf(row).slice(0, 1).toUpperCase()}
-                  </span>
+                  {row.imageUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element -- user upload, arbitrary host */
+                    <img
+                      src={row.imageUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-11 w-11 shrink-0 rounded-2xl object-cover"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-semibold",
+                        row.officialCategory
+                          ? "bg-teal-100 text-teal-800"
+                          : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+                      )}
+                    >
+                      {row.officialCategory
+                        ? "✓"
+                        : row.kind === "SUPPORT"
+                          ? "?"
+                          : titleOf(row).slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="truncate text-sm font-semibold">
                         {titleOf(row)}
                       </span>
+                      {row.isVerified && (
+                        <span
+                          title="Проверенный чат"
+                          aria-label="Проверенный чат"
+                          className="shrink-0 text-sm leading-none text-sky-500"
+                        >
+                          ✓
+                        </span>
+                      )}
                       {row.unreadCount > 0 && (
                         <span
                           aria-label={`${row.unreadCount} непрочитанных`}
@@ -565,6 +673,68 @@ export default function ChatPage() {
                   </p>
                   {inviteLink && (
                     <div className="rounded-xl bg-slate-50 p-4 dark:bg-white/5">
+                      {group.isOwner && (
+                        <label className="mb-3 block text-xs text-slate-500">
+                          Фото группы
+                          <span className="mt-2 flex items-center gap-3">
+                            {group.imageUrl ? (
+                              /* eslint-disable-next-line @next/next/no-img-element -- user upload */
+                              <img
+                                src={group.imageUrl}
+                                alt=""
+                                className="h-14 w-14 rounded-2xl object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-lg font-semibold text-slate-600 dark:bg-white/10">
+                                {group.title.slice(0, 1).toUpperCase()}
+                              </span>
+                            )}
+                            <span className={cn(button, "cursor-pointer border border-slate-200 dark:border-white/15")}>
+                              {uploading ? "Загрузка…" : "Изменить"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploading || busy}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  e.target.value = "";
+                                  if (!file) return;
+                                  void action(async () => {
+                                    setUploading(true);
+                                    try {
+                                      const { url } = await api.uploadImage(file);
+                                      const updated = await api.setChatRoomImage(group.id, url);
+                                      setGroup((old) => (old ? { ...old, imageUrl: updated.imageUrl } : old));
+                                      setNotice("Фото обновлено.");
+                                      void refresh().catch(() => {});
+                                    } finally {
+                                      setUploading(false);
+                                    }
+                                  });
+                                }}
+                              />
+                            </span>
+                            {group.imageUrl && (
+                              <button
+                                type="button"
+                                disabled={busy || uploading}
+                                className={button}
+                                onClick={() =>
+                                  void action(async () => {
+                                    await api.setChatRoomImage(group.id, null);
+                                    setGroup((old) => (old ? { ...old, imageUrl: null } : old));
+                                    setNotice("Фото убрано.");
+                                    void refresh().catch(() => {});
+                                  })
+                                }
+                              >
+                                Убрать
+                              </button>
+                            )}
+                          </span>
+                        </label>
+                      )}
                       <label className="text-xs text-slate-500">
                         Ссылка для приглашения
                         <input
@@ -759,9 +929,12 @@ export default function ChatPage() {
                               "Участник"}
                           </p>
                         )}
-                        <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">
-                          {message.body}
-                        </p>
+                        {message.body && (
+                          <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">
+                            {message.body}
+                          </p>
+                        )}
+                        <Attachment message={message} mine={mine} />
                         <time
                           dateTime={message.createdAt}
                           title={new Date(message.createdAt).toLocaleString(
@@ -785,12 +958,34 @@ export default function ChatPage() {
               </div>
               {conversation?.room.canPost ? (
                 <form
-                  className="flex items-end gap-2 border-t border-slate-200 p-3 dark:border-white/10"
+                  className="flex flex-wrap items-end gap-2 border-t border-slate-200 p-3 dark:border-white/10"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void send();
                   }}
                 >
+                  {pendingAttachment && (
+                    <div className="flex w-full items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm dark:bg-white/10">
+                      <span aria-hidden>📎</span>
+                      <span className="min-w-0 flex-1 truncate">{pendingAttachment.name}</span>
+                      <span className="shrink-0 text-xs text-slate-500">
+                        {formatBytes(pendingAttachment.size)}
+                      </span>
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs text-slate-500 underline"
+                        onClick={() =>
+                          setAttachments((old) => {
+                            if (!active) return old;
+                            const { [active]: _removed, ...rest } = old;
+                            return rest;
+                          })
+                        }
+                      >
+                        Убрать
+                      </button>
+                    </div>
+                  )}
                   <label className="min-w-0 flex-1">
                     <span className="sr-only">Сообщение</span>
                     <textarea
@@ -817,8 +1012,24 @@ export default function ChatPage() {
                       }}
                     />
                   </label>
+                  <label
+                    className={cn(button, "shrink-0 cursor-pointer border border-slate-200 dark:border-white/15")}
+                    title="Фото, видео или документ, до 30 МБ"
+                  >
+                    {uploading ? "…" : "📎"}
+                    <span className="sr-only">Прикрепить файл</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={uploading || sending}
+                      onChange={(e) => {
+                        void pickAttachment(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
                   <button
-                    disabled={sending || !draft.trim()}
+                    disabled={sending || uploading || (!draft.trim() && !pendingAttachment)}
                     className={primary}
                   >
                     {sending ? "Отправка…" : "Отправить"}
