@@ -42,6 +42,7 @@ import { CargoModule } from "./cargo/cargo.module";
 import { SellerLedgerModule } from "./seller-ledger/seller-ledger.module";
 import { SocialFeedModule } from "./social-feed/social-feed.module";
 import { SentryAlertsModule } from "./sentry-alerts/sentry-alerts.module";
+import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { SentryAlertsModule } from "./sentry-alerts/sentry-alerts.module";
     CargoModule,
     SocialFeedModule,
     SentryAlertsModule,
+    PlatformSettingsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

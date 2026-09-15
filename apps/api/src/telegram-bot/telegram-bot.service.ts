@@ -69,14 +69,20 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Sends free-form text to the platform owner's own chat (ADMIN_TELEGRAM_CHAT_ID) -- distinct
-   * from notifySeller below, which looks up a chat by Seller.telegramChatId. Used for ops alerts
-   * (new Sentry issues) that have nothing to do with any one shop. Never throws — a notification
-   * failure must not break whatever triggered it.
+   * Sends free-form text to the platform owner's own chat -- distinct from notifySeller below,
+   * which looks up a chat by Seller.telegramChatId. Used for ops alerts (new Sentry issues, new
+   * orders) that have nothing to do with any one shop. Never throws — a notification failure
+   * must not break whatever triggered it.
+   *
+   * PlatformSettings.adminTelegramChatId (set via the admin panel's own "Connect Telegram", same
+   * flow a seller uses) takes priority; ADMIN_TELEGRAM_CHAT_ID is only the bootstrap fallback
+   * from before that existed, kept so an already-working setup doesn't go dark on deploy.
    */
   async notifyAdmin(text: string) {
-    const chatId = process.env.ADMIN_TELEGRAM_CHAT_ID;
-    if (!this.bot || !chatId) return;
+    if (!this.bot) return;
+    const settings = await this.prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const chatId = settings?.adminTelegramChatId ?? process.env.ADMIN_TELEGRAM_CHAT_ID;
+    if (!chatId) return;
     try {
       await this.bot.telegram.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
     } catch (err) {
@@ -125,6 +131,21 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
     bot.start(async (ctx) => {
       const code = ctx.startPayload?.trim();
       const chatId = String(ctx.chat.id);
+
+      // A distinct prefix, not a second lookup against the same code -- an admin link code and
+      // a seller's are both plain random hex, so without one namespace collision is possible in
+      // principle and this is the only thing that tells the two flows apart at /start time.
+      if (code?.startsWith("admin_")) {
+        const settings = await this.prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+        if (settings?.adminTelegramLinkCode !== code) {
+          return ctx.reply("Код недействителен или уже использован. Сгенерируйте новую ссылку в админ-панели.");
+        }
+        await this.prisma.platformSettings.update({
+          where: { id: "singleton" },
+          data: { adminTelegramChatId: chatId, adminTelegramLinkCode: null },
+        });
+        return ctx.reply("✅ Этот чат подключён к уведомлениям платформы (заказы, ошибки в Sentry).");
+      }
 
       const alreadyLinked = await this.prisma.seller.findUnique({ where: { telegramChatId: chatId } });
       if (alreadyLinked) {

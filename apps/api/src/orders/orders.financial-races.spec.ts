@@ -9,6 +9,7 @@ function serviceWith(prisma: Record<string, unknown>, referrals: Record<string, 
     {} as never,
     referrals as never,
     {} as never,
+    { notifyAdmin: jest.fn() } as never,
   );
 }
 

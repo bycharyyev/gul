@@ -6,7 +6,7 @@ describe("OrdersService detail authorization", () => {
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue({ id: "o1", userId: "customer1" }) },
     };
-    const service = new OrdersService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    const service = new OrdersService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
     return service;
   }
 
