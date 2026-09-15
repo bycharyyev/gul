@@ -34,4 +34,23 @@ jobs:
             " < /dev/null
             echo "--- admin bot + platform-settings + order notify activity (last 30min) ---"
             docker compose logs --since 30min api 2>&1 | grep -iE "AdminTelegramBotService|platform-settings|Failed to notify admin" | tail -60
+            echo "--- sending a real test notification to the linked admin chat ---"
+            # Plain HTTP call, not a second AdminTelegramBotService instance -- bootstrapping the
+            # whole Nest app here would call onModuleInit again and launch a second getUpdates
+            # poller for the same bot token, 409-conflicting with the one already running.
+            docker compose exec -T api node -e "
+              const { PrismaClient } = require(\"@prisma/client\");
+              const p = new PrismaClient();
+              p.platformSettings.findUnique({ where: { id: \"singleton\" } }).then(async (row) => {
+                const chatId = row && row.adminTelegramChatId;
+                if (!chatId) { console.log(\"no chat id set\"); process.exit(0); }
+                const res = await fetch(\`https://api.telegram.org/bot\${process.env.TELEGRAM_ADMIN_BOT_TOKEN}/sendMessage\`, {
+                  method: \"POST\",
+                  headers: { \"content-type\": \"application/json\" },
+                  body: JSON.stringify({ chat_id: chatId, text: \"✅ Тест: разделение ботов работает. Сюда будут приходить заказы и алерты Sentry.\" }),
+                });
+                console.log(JSON.stringify(await res.json()));
+                process.exit(0);
+              }).catch((e) => { console.error(String(e)); process.exit(1); });
+            " < /dev/null
           '
