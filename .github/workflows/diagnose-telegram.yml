@@ -36,6 +36,8 @@ jobs:
                   });
                   console.log(\"products for\", s.handle, JSON.stringify(products));
                 }
+                const categories = await p.galleryCategory.findMany({ select: { id: true, name: true, slug: true }, take: 5 });
+                console.log(\"categories:\", JSON.stringify(categories));
                 process.exit(0);
               })().catch((e) => { console.error(String(e)); process.exit(1); });
             " < /dev/null
