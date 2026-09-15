@@ -1,0 +1,42 @@
+name: Check gulyaly seller/products
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check seller + products
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            docker compose exec -T api node -e "
+              const { PrismaClient } = require(\"@prisma/client\");
+              const p = new PrismaClient();
+              (async () => {
+                const sellers = await p.seller.findMany({
+                  where: { handle: { contains: \"gulyaly\", mode: \"insensitive\" } },
+                  select: { id: true, handle: true, shopName: true, isEnabled: true },
+                });
+                console.log(\"sellers:\", JSON.stringify(sellers));
+                for (const s of sellers) {
+                  const products = await p.galleryProduct.findMany({
+                    where: { sellerId: s.id },
+                    select: { id: true, sku: true, name: true, priceTmt: true, isEnabled: true },
+                    take: 5,
+                  });
+                  console.log(\"products for\", s.handle, JSON.stringify(products));
+                }
+                process.exit(0);
+              })().catch((e) => { console.error(String(e)); process.exit(1); });
+            " < /dev/null
+          '
