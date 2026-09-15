@@ -1,5 +1,6 @@
 /** A group room or channel as the admin console sees it. */
 export interface ChatRoomAdminDto {
+  verification?: { id: string; status: "PENDING" | "APPROVED" | "REJECTED"; note: string | null } | null;
   officialCategory?: ChatOfficialCategory | null;
   id: string;
   /**

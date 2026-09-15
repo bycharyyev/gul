@@ -1754,6 +1754,10 @@ export class ApiClient {
       method: "DELETE",
     });
   }
+  listChatVerificationRequests() { return this.request<any[]>("/chat/admin/verifications"); }
+  reviewChatVerification(id: string, status: "APPROVED" | "REJECTED", note?: string) {
+    return this.request(`/chat/admin/verifications/${encodeURIComponent(id)}/review`, { method: "POST", body: JSON.stringify({ status, note }) });
+  }
 
   moderateSocialPost(id: string, input: ModerateSocialPostInput) {
     return this.request<SocialFeedPostDto>(`/social-feed/admin/posts/${id}`, {

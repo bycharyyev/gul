@@ -38,6 +38,7 @@ export default function ChatRoomsPage() {
   const [newMembers, setNewMembers] = useState("");
   const [removeId, setRemoveId] = useState("");
   const [kind, setKind] = useState<"ALL" | "GROUP" | "CHANNEL">("ALL");
+  const [verification, setVerification] = useState<any[]>([]);
 
   async function load() {
     setLoading(true);
@@ -53,7 +54,13 @@ export default function ChatRoomsPage() {
 
   useEffect(() => {
     void load();
+    void api.listChatVerificationRequests().then(setVerification).catch(() => undefined);
   }, []);
+
+  async function reviewVerification(id: string, status: "APPROVED" | "REJECTED") {
+    await api.reviewChatVerification(id, status);
+    setVerification((items) => items.map((item) => item.id === id ? { ...item, status } : item));
+  }
 
   /** Ids pasted as a list: one per line, or separated by commas or spaces. */
   function parseIds(value: string): string[] {
@@ -137,6 +144,14 @@ export default function ChatRoomsPage() {
       </div>
 
       <OfficialChannels rooms={rooms} onChanged={load} />
+
+      {verification.length > 0 && <Card className="space-y-3 p-4">
+        <h2 className="font-semibold">Заявки на верификацию</h2>
+        {verification.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+          <div><p className="font-medium">{item.room.title}</p><p className="text-sm text-slate-500">{item.note || "Без комментария"}</p></div>
+          <div className="flex items-center gap-2"><span className="text-xs font-semibold">{item.status}</span>{item.status === "PENDING" && <><Button size="sm" onClick={() => void reviewVerification(item.id, "APPROVED")}>Одобрить</Button><Button size="sm" variant="secondary" onClick={() => void reviewVerification(item.id, "REJECTED")}>Отклонить</Button></>}</div>
+        </div>)}
+      </Card>}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">
