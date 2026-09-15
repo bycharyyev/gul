@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { SentryModule } from "@sentry/nestjs/setup";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { RequestIdMiddleware, RequestLoggingInterceptor } from "./common/request-context";
@@ -40,6 +41,7 @@ import { SubdomainsModule } from "./subdomains/subdomains.module";
 import { CargoModule } from "./cargo/cargo.module";
 import { SellerLedgerModule } from "./seller-ledger/seller-ledger.module";
 import { SocialFeedModule } from "./social-feed/social-feed.module";
+import { SentryAlertsModule } from "./sentry-alerts/sentry-alerts.module";
 
 @Module({
   imports: [
@@ -47,6 +49,7 @@ import { SocialFeedModule } from "./social-feed/social-feed.module";
     // context to whatever instrument.ts already initialized (see main.ts's first line).
     SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     // 120 was chosen for one browser. It is keyed by IP, and behind carrier-grade NAT an IP is
     // a neighbourhood -- so the ceiling was shared by everyone on the same operator. Raised to
     // a figure a single abusive client still reaches and a shared address does not.
@@ -89,6 +92,7 @@ import { SocialFeedModule } from "./social-feed/social-feed.module";
     SubdomainsModule,
     CargoModule,
     SocialFeedModule,
+    SentryAlertsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

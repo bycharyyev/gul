@@ -54,6 +54,22 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
     this.bot?.stop("shutdown");
   }
 
+  /**
+   * Sends free-form text to the platform owner's own chat (ADMIN_TELEGRAM_CHAT_ID) -- distinct
+   * from notifySeller below, which looks up a chat by Seller.telegramChatId. Used for ops alerts
+   * (new Sentry issues) that have nothing to do with any one shop. Never throws — a notification
+   * failure must not break whatever triggered it.
+   */
+  async notifyAdmin(text: string) {
+    const chatId = process.env.ADMIN_TELEGRAM_CHAT_ID;
+    if (!this.bot || !chatId) return;
+    try {
+      await this.bot.telegram.sendMessage(chatId, text, { parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+    } catch (err) {
+      this.logger.warn(`Failed to notify admin via Telegram: ${err}`);
+    }
+  }
+
   /** Sends free-form text to the seller's linked chat, if any. Never throws — notification failures must not break the calling flow. */
   async notifySeller(sellerId: string, text: string) {
     if (!this.bot) return;
@@ -206,6 +222,10 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
         ].join("\n"),
       );
     });
+
+    // Not seller-facing: the one-time step to find this chat's id for ADMIN_TELEGRAM_CHAT_ID
+    // (see notifyAdmin above) -- there's no other way to learn a chat's id without it telling you.
+    bot.command("chatid", (ctx) => ctx.reply(`Chat ID: ${ctx.chat.id}`));
 
     bot.command("unlink", async (ctx) => {
       const seller = await this.getSellerByChatId(ctx.chat.id);
