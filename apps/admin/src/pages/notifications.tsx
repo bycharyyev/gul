@@ -86,13 +86,14 @@ function TelegramCard() {
             {busy ? t("admin.notifications.preparingLink") : t("admin.notifications.connectTelegram")}
           </Button>
           {deepLink && (
-            <p className="text-xs text-slate-400">
-              {t("admin.notifications.botNotOpenedHint")}{" "}
-              <a href={deepLink} target="_blank" rel="noreferrer" className="text-brand-600 underline dark:text-brand-300">
-                {t("admin.notifications.clickHere")}
-              </a>
-              .
-            </p>
+            <a
+              href={deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50"
+            >
+              {t("admin.notifications.openTelegram")}
+            </a>
           )}
         </div>
       )}
