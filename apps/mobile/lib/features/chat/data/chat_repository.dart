@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+
 import '../../../core/network/api_client.dart';
 import '../domain/chat_models.dart';
 
@@ -108,10 +112,54 @@ class ChatRepository {
     return ChatRoomView.fromJson(raw);
   }
 
-  Future<void> send(String conversationId, String body) => _api.post<void>(
+  Future<void> send(
+    String conversationId,
+    String body, {
+    ChatAttachment? attachment,
+  }) => _api.post<void>(
     '${_base(conversationId)}/${_raw(conversationId)}/messages',
-    body: {'body': body},
+    body: {
+      'body': body,
+      if (attachment != null) 'attachment': attachment.toJson(),
+    },
   );
+
+  /// Uploads one file to be sent with a message: photo, video or document, up to 30MB.
+  ///
+  /// [onProgress] reports 0..1 as the bytes go out -- on a mobile connection a 30MB file takes
+  /// long enough that a bare spinner is indistinguishable from a frozen screen.
+  Future<ChatAttachment> uploadAttachment(
+    File file, {
+    void Function(double progress)? onProgress,
+  }) async {
+    final raw = await _api.postMultipart<Map<String, dynamic>>(
+      '/uploads/attachment',
+      FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          file.path,
+          filename: file.path.split(Platform.pathSeparator).last,
+        ),
+      }),
+      onSendProgress: onProgress == null
+          ? null
+          // total is -1 when the length is unknown; reporting a negative fraction would render
+          // as a full progress bar.
+          : (sent, total) => onProgress(total > 0 ? sent / total : 0),
+    );
+    return ChatAttachment(
+      url: raw['url'] as String? ?? '',
+      name: raw['name'] as String? ?? 'file',
+      mimeType: raw['mimeType'] as String? ?? 'application/octet-stream',
+      size: (raw['size'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// The room's picture. Null clears it, and the app goes back to the letter avatar.
+  Future<void> setRoomImage(String conversationId, String? imageUrl) =>
+      _api.patch<void>(
+        '/chat/rooms/${_raw(conversationId)}/image',
+        body: {'imageUrl': imageUrl},
+      );
 
   /// Marking read is fire-and-forget from the screen's point of view: a failure means the badge
   /// stays up a little longer, which is not worth an error in front of somebody reading a chat.

@@ -211,6 +211,11 @@ class _ConversationTile extends StatelessWidget {
         ),
         leading: CircleAvatar(
           backgroundColor: scheme.primaryContainer,
+          foregroundImage:
+              (conversation.imageUrl != null && conversation.imageUrl!.isNotEmpty)
+              ? NetworkImage(conversation.imageUrl!)
+              : null,
+          // Shown when there is no picture, and again if one fails to load.
           child: Icon(switch (conversation.kind) {
             ChatKind.group => Icons.groups_rounded,
             ChatKind.channel => Icons.campaign_rounded,
@@ -218,13 +223,23 @@ class _ConversationTile extends StatelessWidget {
             ChatKind.support => Icons.support_agent_rounded,
           }, color: scheme.primary),
         ),
-        title: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontWeight: unread > 0 ? FontWeight.w700 : FontWeight.w600,
-          ),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: unread > 0 ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ),
+            if (conversation.isVerified) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.verified_rounded, size: 16, color: scheme.primary),
+            ],
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

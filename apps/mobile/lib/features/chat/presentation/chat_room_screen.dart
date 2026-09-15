@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,6 +35,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
   bool _sending = false;
+  ChatAttachment? _attachment;
+  bool _uploading = false;
   Timer? _refreshTimer;
   bool _refreshing = false;
 
@@ -89,12 +93,16 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
 
   Future<void> _send() async {
     final body = _input.text.trim();
-    if (body.isEmpty || _sending) return;
+    // A photo on its own is a message; an empty box with nothing attached is not.
+    if ((body.isEmpty && _attachment == null) || _sending) return;
     final strings = Strings.of(context);
     setState(() => _sending = true);
     try {
-      await ref.read(chatRepositoryProvider).send(widget.conversationId, body);
+      await ref
+          .read(chatRepositoryProvider)
+          .send(widget.conversationId, body, attachment: _attachment);
       _input.clear();
+      if (mounted) setState(() => _attachment = null);
       ref.invalidate(chatMessagesProvider(widget.conversationId));
       ref.invalidate(chatInboxProvider);
     } catch (e) {
@@ -109,6 +117,36 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       }
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// Picks a photo or a video and uploads it, leaving it pending until the message is sent.
+  Future<void> _attach({required bool video}) async {
+    if (_uploading || _sending) return;
+    final strings = Strings.of(context);
+    final picker = ImagePicker();
+    final picked = video
+        ? await picker.pickVideo(source: ImageSource.gallery)
+        : await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    setState(() => _uploading = true);
+    try {
+      final uploaded = await ref
+          .read(chatRepositoryProvider)
+          .uploadAttachment(File(picked.path));
+      if (mounted) setState(() => _attachment = uploaded);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is AppException ? strings.error(e) : strings.get('err.unknown'),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -206,8 +244,54 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                   )
                 : Padding(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (_attachment != null)
+                          _PendingAttachment(
+                            attachment: _attachment!,
+                            onRemove: () => setState(() => _attachment = null),
+                          ),
+                        Row(
+                      children: [
+                        IconButton(
+                          onPressed: _uploading || _sending
+                              ? null
+                              : () => showModalBottomSheet<void>(
+                                  context: context,
+                                  builder: (sheet) => SafeArea(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ListTile(
+                                          leading: const Icon(Icons.photo_outlined),
+                                          title: Text(strings.get('chat.attachPhoto')),
+                                          onTap: () {
+                                            Navigator.of(sheet).pop();
+                                            unawaited(_attach(video: false));
+                                          },
+                                        ),
+                                        ListTile(
+                                          leading: const Icon(Icons.videocam_outlined),
+                                          title: Text(strings.get('chat.attachVideo')),
+                                          onTap: () {
+                                            Navigator.of(sheet).pop();
+                                            unawaited(_attach(video: true));
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                          icon: _uploading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.attach_file_rounded),
+                          tooltip: strings.get('chat.attach'),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _input,
@@ -235,6 +319,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                                 )
                               : const Icon(Icons.send_rounded),
                           tooltip: strings.get('chat.send'),
+                        ),
+                      ],
                         ),
                       ],
                     ),
@@ -292,14 +378,23 @@ class _Bubble extends StatelessWidget {
                   ),
                 ),
               ),
-            Text(
-              message.body,
-              style: TextStyle(
-                fontSize: 14.5,
-                height: 1.35,
-                color: mine ? scheme.onPrimary : scheme.onSurface,
+            if (message.body.isNotEmpty)
+              Text(
+                message.body,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  height: 1.35,
+                  color: mine ? scheme.onPrimary : scheme.onSurface,
+                ),
               ),
-            ),
+            if (message.attachment != null)
+              Padding(
+                padding: EdgeInsets.only(top: message.body.isEmpty ? 0 : 6),
+                child: _AttachmentView(
+                  attachment: message.attachment!,
+                  mine: mine,
+                ),
+              ),
             const SizedBox(height: 2),
             Text(
               Dates.dateTime(message.createdAt.toLocal(), strings.locale),
@@ -311,6 +406,143 @@ class _Bubble extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Human-readable size, so a file row says what it costs to open.
+String _formatBytes(int size) {
+  if (size >= 1024 * 1024) {
+    return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(size / 1024).clamp(1, double.infinity).round()} KB';
+}
+
+/// A sent attachment inside a bubble: a picture shows itself, anything else is a named row.
+class _AttachmentView extends StatelessWidget {
+  const _AttachmentView({required this.attachment, required this.mine});
+
+  final ChatAttachment attachment;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    if (attachment.isImage) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          attachment.url,
+          fit: BoxFit.cover,
+          // A broken or still-loading picture must not collapse the bubble to nothing.
+          errorBuilder: (_, _, _) => _FileRow(attachment: attachment, mine: mine),
+        ),
+      );
+    }
+    return _FileRow(attachment: attachment, mine: mine);
+  }
+}
+
+class _FileRow extends StatelessWidget {
+  const _FileRow({required this.attachment, required this.mine});
+
+  final ChatAttachment attachment;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final onColor = mine ? scheme.onPrimary : scheme.onSurface;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: (mine ? scheme.onPrimary : scheme.onSurface).withValues(
+          alpha: 0.08,
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            attachment.isVideo
+                ? Icons.videocam_outlined
+                : Icons.insert_drive_file_outlined,
+            size: 18,
+            color: onColor,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              attachment.name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: onColor),
+            ),
+          ),
+          if (attachment.size > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              _formatBytes(attachment.size),
+              style: TextStyle(
+                fontSize: 11,
+                color: onColor.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The file picked but not yet sent, shown above the composer with a way to drop it.
+class _PendingAttachment extends StatelessWidget {
+  const _PendingAttachment({required this.attachment, required this.onRemove});
+
+  final ChatAttachment attachment;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            attachment.isImage
+                ? Icons.photo_outlined
+                : attachment.isVideo
+                ? Icons.videocam_outlined
+                : Icons.insert_drive_file_outlined,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              attachment.name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          Text(
+            _formatBytes(attachment.size),
+            style: TextStyle(
+              fontSize: 11,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            tooltip: MaterialLocalizations.of(context).cancelButtonLabel,
+          ),
+        ],
       ),
     );
   }

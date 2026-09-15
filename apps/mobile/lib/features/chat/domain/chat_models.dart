@@ -34,6 +34,8 @@ class ChatConversation {
     required this.lastMessageAt,
     required this.unreadCount,
     this.officialCategory,
+    this.imageUrl,
+    this.isVerified = false,
   });
 
   final String id;
@@ -46,6 +48,13 @@ class ChatConversation {
   final DateTime lastMessageAt;
   final int unreadCount;
   final ChatOfficialCategory? officialCategory;
+
+  /// The room's own picture. Null falls back to the initial-letter avatar.
+  final String? imageUrl;
+
+  /// The tick. Platform support and official channels always have it; a shop channel earns it
+  /// through moderation. A conversation with a shop never does -- see the API's InboxEntry.
+  final bool isVerified;
 
   bool get isRoom => id.startsWith('room:');
 
@@ -63,6 +72,8 @@ class ChatConversation {
             DateTime.now(),
         unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
         officialCategory: _officialFrom(json['officialCategory'] as String?),
+        imageUrl: json['imageUrl'] as String?,
+        isVerified: json['isVerified'] as bool? ?? false,
       );
 }
 
@@ -80,6 +91,43 @@ class ChatAuthor {
   );
 }
 
+/// A file sent with a message: a photo, a video or a document, up to 30MB.
+class ChatAttachment {
+  const ChatAttachment({
+    required this.url,
+    required this.name,
+    required this.mimeType,
+    required this.size,
+  });
+
+  final String url;
+  final String name;
+  final String mimeType;
+  final int size;
+
+  bool get isImage => mimeType.startsWith('image/');
+  bool get isVideo => mimeType.startsWith('video/');
+
+  /// Null unless the message actually carries one -- the columns are all nullable together.
+  static ChatAttachment? fromMessageJson(Map<String, dynamic> json) {
+    final url = json['attachmentUrl'] as String?;
+    if (url == null || url.isEmpty) return null;
+    return ChatAttachment(
+      url: url,
+      name: json['attachmentName'] as String? ?? 'file',
+      mimeType: json['attachmentMime'] as String? ?? 'application/octet-stream',
+      size: (json['attachmentSize'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'url': url,
+    'name': name,
+    'mimeType': mimeType,
+    'size': size,
+  };
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -87,6 +135,7 @@ class ChatMessage {
     required this.createdAt,
     required this.authorId,
     required this.author,
+    this.attachment,
   });
 
   final String id;
@@ -98,6 +147,10 @@ class ChatMessage {
   final String? authorId;
   final ChatAuthor author;
 
+  /// Set when the message carries a file. The body may then be empty -- a photo without a
+  /// caption is still a message.
+  final ChatAttachment? attachment;
+
   bool isMine(String? myUserId) => authorId != null && authorId == myUserId;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
@@ -107,6 +160,7 @@ class ChatMessage {
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     authorId: json['authorId'] as String?,
     author: ChatAuthor.fromJson(json['author'] as Map<String, dynamic>?),
+    attachment: ChatAttachment.fromMessageJson(json),
   );
 }
 
@@ -117,9 +171,11 @@ class ChatRoomView {
     required this.messages,
     required this.canPost,
     this.officialCategory,
+    this.imageUrl,
   });
 
   final String title;
+  final String? imageUrl;
 
   /// Decides whether the conversation offers a members screen. Only a group has one; a thread
   /// with a shop has exactly two sides and nothing to show about them.
@@ -139,6 +195,7 @@ class ChatRoomView {
       // Defaults to true: an older server that does not send the flag had no channels either.
       canPost: room?['canPost'] as bool? ?? true,
       officialCategory: _officialFrom(room?['officialCategory'] as String?),
+      imageUrl: room?['imageUrl'] as String?,
       messages: ((json['messages'] as List<dynamic>?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(ChatMessage.fromJson)

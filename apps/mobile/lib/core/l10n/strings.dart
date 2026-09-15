@@ -341,6 +341,9 @@ class Strings {
       'chat.roomEmpty': 'Здесь пока пусто. Напишите первым.',
       'chat.inputHint': 'Сообщение',
       'chat.send': 'Отправить',
+      'chat.attach': 'Прикрепить',
+      'chat.attachPhoto': 'Фото',
+      'chat.attachVideo': 'Видео',
       'chat.emptyTitle': 'Переписок пока нет',
       'chat.emptyBody':
           'Напишите продавцу со страницы товара или обратитесь в поддержку из профиля.',
@@ -884,6 +887,9 @@ class Strings {
       'chat.roomEmpty': 'Nothing here yet. Write the first message.',
       'chat.inputHint': 'Message',
       'chat.send': 'Send',
+      'chat.attach': 'Attach',
+      'chat.attachPhoto': 'Photo',
+      'chat.attachVideo': 'Video',
       'chat.emptyTitle': 'No conversations yet',
       'chat.emptyBody':
           'Message a seller from their product page, or reach support from your profile.',
@@ -1422,6 +1428,9 @@ class Strings {
       'chat.roomEmpty': 'Bu ýer entek boş. Ilkinji bolup ýazyň.',
       'chat.inputHint': 'Habar',
       'chat.send': 'Ibermek',
+      'chat.attach': 'Goşmak',
+      'chat.attachPhoto': 'Surat',
+      'chat.attachVideo': 'Wideo',
       'chat.emptyTitle': 'Entek ýazyşma ýok',
       'chat.emptyBody':
           'Haryt sahypasyndan satyja ýazyň ýa-da profilden goldawa ýüz tutuň.',
