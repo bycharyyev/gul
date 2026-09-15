@@ -317,6 +317,10 @@ jobs:
             echo "SENTRY_ALERT_TOKEN=${{ env.SENTRY_ALERT_TOKEN }}" >> .env
             sed -i "/^ADMIN_TELEGRAM_CHAT_ID=/d" .env
             echo "ADMIN_TELEGRAM_CHAT_ID=${{ env.ADMIN_TELEGRAM_CHAT_ID }}" >> .env
+            # Same primary-only reasoning as above: Telegram getUpdates long-polling allows only
+            # one live consumer per bot token, so only one of the two active/active nodes may
+            # ever set this to "true" -- see TELEGRAM_BOT_POLLING in apps/api/.env.example.
+            grep -q "^TELEGRAM_BOT_POLLING=" .env || echo "TELEGRAM_BOT_POLLING=true" >> .env
 
             set_tag() {
               sed -i "/^IMAGE_TAG=/d" .env

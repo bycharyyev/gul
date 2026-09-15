@@ -42,12 +42,26 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`Unhandled error in Telegram handler (update ${ctx.update.update_id})`, err instanceof Error ? err.stack : err);
     });
     this.registerHandlers(bot);
+    // Set regardless of whether this node polls below: notifySeller/notifyAdmin just call
+    // bot.telegram.sendMessage, a stateless API call that works the same from every replica.
+    this.bot = bot;
+
+    // Long-polling (getUpdates) only ever has one live consumer per bot token -- Telegram kills
+    // whichever instance asks second with 409 Conflict. api runs active/active (both primary and
+    // secondary), so unconditionally calling launch() here meant one node's poller died within
+    // seconds of boot every single deploy, and inbound commands (/start shop-linking, /unlink,
+    // this /chatid) worked only by accident, on whichever node happened to win that race -- with
+    // no retry: the .catch() below only logs, it never relaunches. TELEGRAM_BOT_POLLING="true" is
+    // written to primary's .env only (see deploy.yml), so exactly one node ever calls launch().
+    if (process.env.TELEGRAM_BOT_POLLING !== "true") {
+      this.logger.log("Telegram bot: outbound-only on this node (TELEGRAM_BOT_POLLING unset)");
+      return;
+    }
     // launch()'s returned promise only resolves when the bot stops polling — use the onLaunch
     // callback to know when startup actually finished, and catch to log genuine startup failures.
     bot
       .launch(() => this.logger.log("Telegram seller bot started (long polling)"))
       .catch((err) => this.logger.error("Telegram bot stopped unexpectedly", err));
-    this.bot = bot;
   }
 
   onModuleDestroy() {
