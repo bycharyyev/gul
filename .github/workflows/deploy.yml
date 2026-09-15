@@ -43,6 +43,10 @@ env:
   # one only uploads source maps; this one only reads issues). ADMIN_TELEGRAM_CHAT_ID starts
   # unset until someone messages the bot /chatid -- both are simply absent from .env until set.
   SENTRY_ALERT_TOKEN: ${{ secrets.SENTRY_ALERT_TOKEN }}
+  # The Telegram username TELEGRAM_BOT_TOKEN actually authenticates as -- unlike the two above,
+  # this one goes to BOTH nodes (it only ever builds a t.me/<username> link, no active/active
+  # polling concern at all).
+  TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
   ADMIN_TELEGRAM_CHAT_ID: ${{ vars.ADMIN_TELEGRAM_CHAT_ID }}
 jobs:
   build-and-test:
@@ -317,6 +321,10 @@ jobs:
             echo "SENTRY_ALERT_TOKEN=${{ env.SENTRY_ALERT_TOKEN }}" >> .env
             sed -i "/^ADMIN_TELEGRAM_CHAT_ID=/d" .env
             echo "ADMIN_TELEGRAM_CHAT_ID=${{ env.ADMIN_TELEGRAM_CHAT_ID }}" >> .env
+            # Unlike the two above, this one belongs on both nodes -- it only ever builds a
+            # t.me/<username> deep link, no active/active polling concern at all.
+            sed -i "/^TELEGRAM_BOT_USERNAME=/d" .env
+            echo "TELEGRAM_BOT_USERNAME=${{ env.TELEGRAM_BOT_USERNAME }}" >> .env
             # Same primary-only reasoning as above: Telegram getUpdates long-polling allows only
             # one live consumer per bot token, so only one of the two active/active nodes may
             # ever set this to "true" -- see TELEGRAM_BOT_POLLING in apps/api/.env.example.
@@ -506,6 +514,8 @@ jobs:
             grep -q "^GHCR_OWNER=" .env || echo "GHCR_OWNER=${{ github.repository_owner }}" >> .env
             sed -i "/^SENTRY_DSN=/d" .env
             echo "SENTRY_DSN=${{ env.SENTRY_DSN }}" >> .env
+            sed -i "/^TELEGRAM_BOT_USERNAME=/d" .env
+            echo "TELEGRAM_BOT_USERNAME=${{ env.TELEGRAM_BOT_USERNAME }}" >> .env
             for attempt in 1 2 3; do
               docker compose pull && break
               echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2
