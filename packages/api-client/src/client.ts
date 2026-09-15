@@ -1302,6 +1302,25 @@ export class ApiClient {
     return this.request<void>("/sellers/me/telegram", { method: "DELETE" });
   }
 
+  // ---- Platform settings (admin) ----
+  // Same shape as the seller Telegram flow above (SellerTelegramStatusDto/LinkCodeDto) -- this
+  // is the admin panel's own "Connect Telegram", against PlatformSettings instead of one Seller.
+
+  getPlatformTelegramStatus() {
+    return this.request<SellerTelegramStatusDto>("/admin/platform-settings/telegram");
+  }
+
+  generatePlatformTelegramLinkCode() {
+    return this.request<SellerTelegramLinkCodeDto>(
+      "/admin/platform-settings/telegram/link-code",
+      { method: "POST" },
+    );
+  }
+
+  unlinkPlatformTelegram() {
+    return this.request<void>("/admin/platform-settings/telegram", { method: "DELETE" });
+  }
+
   // ---- Seller applications (public self-signup, admin-moderated) ----
   /**
    * Apply from an account that already exists.

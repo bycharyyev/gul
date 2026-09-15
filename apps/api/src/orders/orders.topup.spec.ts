@@ -27,6 +27,7 @@ function fixture() {
     {} as never,
     { maybeRewardReferral: jest.fn() } as never,
     {} as never,
+    {} as never,
   );
   return { order, prisma, service };
 }

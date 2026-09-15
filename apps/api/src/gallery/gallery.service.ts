@@ -139,6 +139,14 @@ export class GalleryService {
       });
     }
 
+    void this.telegramBot.notifyAdmin(
+      [
+        "🛍️ Новый заказ (галерея)",
+        `${product.name} (Арт. ${product.sku}) · ${order.amountTmt} TMT`,
+        `Получатель: ${order.recipientName}, ${order.deliveryCity}`,
+      ].join("\n"),
+    );
+
     return order;
   }
 

@@ -29,6 +29,7 @@ import CargoPage from "@/pages/cargo";
 import CargoShipmentDetailPage from "@/pages/cargo-shipment-detail";
 import SubdomainsPage from "@/pages/subdomains";
 import AnalyticsPage from "@/pages/analytics";
+import NotificationsPage from "@/pages/notifications";
 import AccountPage from "@/pages/account";
 import SellerLedgerPage from "@/pages/seller-ledger";
 import PaymentReconciliationPage from "@/pages/payment-reconciliation";
@@ -174,6 +175,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AnalyticsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
           </ProtectedRoute>
         }
       />

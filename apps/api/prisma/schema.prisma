@@ -691,6 +691,19 @@ model ManagedLink {
   @@index([isEnabled])
 }
 
+// A singleton row (always id "singleton") rather than a real table, since there is exactly one
+// platform to configure. Holds the admin's own Telegram link, mirroring Seller.telegramChatId /
+// telegramLinkCode -- the admin panel's own "Connect Telegram" button uses the same /start deep
+// link flow a seller's cabinet does, just against this row instead of a Seller.
+model PlatformSettings {
+  id                    String   @id @default("singleton")
+  adminTelegramChatId   String?
+  // Prefixed "admin_" (see TelegramBotService's /start handler) so the one shared bot.start()
+  // handler can tell an admin-linking code apart from a seller's without a lookup miss on either.
+  adminTelegramLinkCode String?
+  updatedAt             DateTime @updatedAt
+}
+
 // ---------- Support ----------
 
 enum SupportThreadStatus {
