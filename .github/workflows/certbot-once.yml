@@ -1,7 +1,20 @@
 name: One-off certbot bootstrap
 
+# For a from-scratch cert on a brand-new domain, before any real nginx vhost for it exists.
+# Fixed 2026-09-17: this used to SSH as root via a ROOT_SSH_KEY secret, left over from the old
+# reg.ru VPS. The current box (post 2026-08-24/25 migration) has no root SSH key at all -- the
+# `deploy` user (docker group, no sudo) is the only SSH access, root-equivalent only through the
+# docker --privileged + chroot trick, same as provision-subdomain.yml. Uses certbot's webroot
+# method (matching how renewal already works) rather than --nginx, since --nginx has nothing to
+# attach to yet.
+
 on:
   workflow_dispatch:
+    inputs:
+      domains:
+        description: 'Space-separated domains to get one cert for, e.g. "gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com"'
+        required: true
+        type: string
 
 jobs:
   certbot:
@@ -10,13 +23,33 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.ROOT_SSH_KEY }}" > ~/.ssh/root_key
-          chmod 600 ~/.ssh/root_key
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Run certbot
+      - name: Issue the cert
         run: |
-          ssh -i ~/.ssh/root_key root@${{ secrets.DEPLOY_HOST }} '
-            certbot --nginx --non-interactive --agree-tos -m malobiznes@gmail.com -d gulyaly.com -d www.gulyaly.com -d admin.gulyaly.com -d api.gulyaly.com
-            nginx -t
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            DOMAINS="${{ inputs.domains }}"
+            SCRIPT=/tmp/certbot-once.sh
+            DARGS=""
+            for d in $DOMAINS; do DARGS="$DARGS -d $d"; done
+
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "mkdir -p /var/www/certbot"
+              echo "certbot certonly --webroot -w /var/www/certbot $DARGS --non-interactive --agree-tos -m malobiznes@gmail.com"
+            } > "$SCRIPT"
+            chmod +x "$SCRIPT"
+
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh "$SCRIPT"
+            rm -f "$SCRIPT"
+          '
+
+      - name: Verify nginx still parses cleanly (no-op if nothing references the new cert yet)
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "nginx -t"
           '
