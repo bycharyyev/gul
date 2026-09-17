@@ -17,6 +17,8 @@ on:
           - verify-domain-added
           - add-a-records
           - verify-records
+          - pause-secondary
+          - resume-secondary
 
 jobs:
   setup:
@@ -70,6 +72,32 @@ jobs:
           echo "--- admin.gulyaly.com -> primary only ---"
           register "admin"
           add_a "admin.gulyaly.com" "$PRI"
+
+      - name: Temporarily remove secondary's A records (apex/www/api) so HTTP-01 validation can only reach the primary's webroot
+        if: inputs.step == 'pause-secondary'
+        run: |
+          set -e
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          for id in 92919695 92919713 92919721; do
+            echo "--- deleting id $id ---"
+            curl -s -w ' -> HTTP %{http_code}\n' -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/$id" \
+              -H "Authorization: Bearer $TOKEN"
+          done
+
+      - name: Restore secondary's A records (apex/www/api) after cert issuance
+        if: inputs.step == 'resume-secondary'
+        run: |
+          set -e
+          SEC="${{ secrets.SECONDARY_HOST }}"
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          add_a() {
+            curl -s -w ' -> HTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/$1/dns-records" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"type\": \"A\", \"value\": \"$2\", \"ttl\": 300}"
+          }
+          add_a gulyaly.com "$SEC"
+          add_a www.gulyaly.com "$SEC"
+          add_a api.gulyaly.com "$SEC"
 
       - name: Verify current zone state
         if: inputs.step == 'verify-records'
