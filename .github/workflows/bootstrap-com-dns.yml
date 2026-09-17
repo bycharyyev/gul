@@ -38,14 +38,38 @@ jobs:
       - name: Add gulyaly.com to the account's DNS hosting
         if: inputs.step == 'add-domain'
         run: |
-          echo "--- POST /api/v1/domains (add-existing / delegate-only domain) ---"
-          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v1/domains" \
-            -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          echo "--- OPTIONS /api/v1/domains (what methods does it actually allow?) ---"
+          curl -s -o /dev/null -D - -X OPTIONS "https://api.timeweb.cloud/api/v1/domains" \
+            -H "Authorization: Bearer $TOKEN" | grep -i "allow"
+          echo
+          echo "--- attempt 1: POST /api/v2/domains ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
             -d '{"fqdn": "gulyaly.com"}'
           echo
+          echo "--- attempt 2: POST /api/v1/domains/add-existing ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v1/domains/add-existing" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"fqdn": "gulyaly.com"}'
+          echo
+          echo "--- attempt 3: POST /api/v1/domains/ns-based ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v1/domains/ns-based" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"fqdn": "gulyaly.com"}'
+          echo
+          echo "--- attempt 4: PUT /api/v1/domains/gulyaly.com ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X PUT "https://api.timeweb.cloud/api/v1/domains/gulyaly.com" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"fqdn": "gulyaly.com"}'
+          echo
+          echo "--- attempt 5: POST straight to a dns-record on the not-yet-added domain (some APIs auto-create the zone on first record) ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 300}'
+          echo
           echo "--- confirm: list domains again ---"
-          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+          curl -s -H "Authorization: Bearer $TOKEN" \
             "https://api.timeweb.cloud/api/v1/domains" | python -m json.tool || true
 
       - name: Add A records mirroring gulyaly.pro's live set exactly
