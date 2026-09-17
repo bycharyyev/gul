@@ -27,7 +27,7 @@ APP_DIR="${APP_DIR:-/opt/gul}"
 SRC_DIR="${SRC_DIR:-$APP_DIR/src}"
 REPO="${REPO:-bycharyyev/gul}"
 BRANCH="${BRANCH:-main}"
-API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.gulyaly.pro/api}"
+API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.gulyaly.com/api}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4000/api/health}"
 
 # Building three Node images needs real headroom. Postgres lives on this box; an OOM during a

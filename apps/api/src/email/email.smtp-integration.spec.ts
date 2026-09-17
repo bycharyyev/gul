@@ -10,7 +10,7 @@ import * as nodemailer from "nodemailer";
  *
  *   SMTP_INTEGRATION_TEST=true \
  *   MAIL_HOST=mail.hosting.reg.ru MAIL_PORT=465 MAIL_SECURE=true \
- *   MAIL_USER=noreply@gulyaly.pro MAIL_PASS=... \
+ *   MAIL_USER=noreply@gulyaly.com MAIL_PASS=... \
  *   SMTP_TEST_RECIPIENT=someone@gmail.com \
  *   npx jest email.smtp-integration
  *

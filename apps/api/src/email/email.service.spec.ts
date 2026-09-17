@@ -12,9 +12,9 @@ function makeConfig(overrides: Record<string, string | undefined> = {}) {
     MAIL_HOST: "mail.hosting.reg.ru",
     MAIL_PORT: "465",
     MAIL_SECURE: "true",
-    MAIL_USER: "noreply@gulyaly.pro",
+    MAIL_USER: "noreply@gulyaly.com",
     MAIL_PASS: "secret",
-    MAIL_FROM: "Gulyaly <noreply@gulyaly.pro>",
+    MAIL_FROM: "Gulyaly <noreply@gulyaly.com>",
   };
   const values = { ...defaults, ...overrides };
   return { get: (key: string) => values[key] };

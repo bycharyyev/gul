@@ -673,7 +673,7 @@ model ContentPage {
   createdAt DateTime @default(now())
 }
 
-/// A short, admin-editable redirect: `gulyaly.pro/l/<slug>` -> `targetUrl`. The target is not
+/// A short, admin-editable redirect: `gulyaly.com/l/<slug>` -> `targetUrl`. The target is not
 /// modelled as a product/promo/whatever union on purpose -- staff paste whatever URL a campaign
 /// needs, and can repoint the same shared link (on a poster, in a Telegram post) to something
 /// else later without reprinting anything.
@@ -1734,7 +1734,7 @@ model ShipmentTrackingEvent {
 }
 
 // ---------- Managed subdomains ----------
-// The DNS zone already has a wildcard (*.gulyaly.pro) pointing at the VPS, so provisioning a new
+// The DNS zone already has a wildcard (*.gulyaly.com) pointing at the VPS, so provisioning a new
 // subdomain never touches DNS -- it only needs an nginx vhost (+ its own Let's Encrypt cert via
 // HTTP-01/webroot, which already works for any name that resolves here). Rows here just track
 // what CreateSubdomain/RemoveSubdomain workflow runs are in flight or done; the actual vhost
@@ -1749,7 +1749,7 @@ enum SubdomainStatus {
 
 model ManagedSubdomain {
   id         String          @id @default(cuid())
-  name       String          @unique // full hostname, e.g. "shop2.gulyaly.pro"
+  name       String          @unique // full hostname, e.g. "shop2.gulyaly.com"
   targetPort Int // local port on the VPS this subdomain proxies to
   status     SubdomainStatus @default(PENDING)
   lastError  String?

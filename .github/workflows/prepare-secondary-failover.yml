@@ -98,9 +98,9 @@ jobs:
               # directory is missing, which is the second thing a from-scratch rebuild trips on.
               echo "mkdir -p /var/cache/nginx/gul"
               echo "chown -R www-data:www-data /var/cache/nginx"
-              echo "sed -i 's/^authenticator = .*/authenticator = webroot/' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || true"
-              echo "grep -q '^webroot_path' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || echo 'webroot_path = /var/www/certbot,' >> /etc/letsencrypt/renewal/gulyaly.pro.conf"
-              echo "sed -i '/^installer = /d' /etc/letsencrypt/renewal/gulyaly.pro.conf 2>/dev/null || true"
+              echo "sed -i 's/^authenticator = .*/authenticator = webroot/' /etc/letsencrypt/renewal/gulyaly.com.conf 2>/dev/null || true"
+              echo "grep -q '^webroot_path' /etc/letsencrypt/renewal/gulyaly.com.conf 2>/dev/null || echo 'webroot_path = /var/www/certbot,' >> /etc/letsencrypt/renewal/gulyaly.com.conf"
+              echo "sed -i '/^installer = /d' /etc/letsencrypt/renewal/gulyaly.com.conf 2>/dev/null || true"
               echo "cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/"
               echo "for f in /etc/nginx/sites-available/*.conf; do ln -sf \"\$f\" \"/etc/nginx/sites-enabled/\$(basename \"\$f\")\"; done"
               echo "rm -f /etc/nginx/sites-enabled/default"

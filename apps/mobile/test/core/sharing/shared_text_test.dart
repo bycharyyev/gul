@@ -59,11 +59,11 @@ void main() {
   });
 
   group('groupInviteCodeIn', () {
-    const site = 'https://gulyaly.pro';
+    const site = 'https://gulyaly.com';
 
     test('reads the code out of our own invite link', () {
       expect(
-        groupInviteCodeIn('https://gulyaly.pro/i/ABCDEFGHJK', site),
+        groupInviteCodeIn('https://gulyaly.com/i/ABCDEFGHJK', site),
         'ABCDEFGHJK',
       );
     });
@@ -78,7 +78,7 @@ void main() {
       // hand a stranger control of where a share lands.
       expect(
         groupInviteCodeIn(
-          'https://gulyaly.pro.evil.example/i/ABCDEFGHJK',
+          'https://gulyaly.com.evil.example/i/ABCDEFGHJK',
           site,
         ),
         isNull,
@@ -90,20 +90,20 @@ void main() {
     });
 
     test('refuses a path that is not exactly one code', () {
-      expect(groupInviteCodeIn('https://gulyaly.pro/i', site), isNull);
+      expect(groupInviteCodeIn('https://gulyaly.com/i', site), isNull);
       expect(
-        groupInviteCodeIn('https://gulyaly.pro/i/ABC/extra', site),
+        groupInviteCodeIn('https://gulyaly.com/i/ABC/extra', site),
         isNull,
       );
       expect(
-        groupInviteCodeIn('https://gulyaly.pro/r/ABCDEFGHJK', site),
+        groupInviteCodeIn('https://gulyaly.com/r/ABCDEFGHJK', site),
         isNull,
       );
     });
 
     test('does not care how the host was capitalised', () {
       expect(
-        groupInviteCodeIn('https://Gulyaly.PRO/i/ABCDEFGHJK', site),
+        groupInviteCodeIn('https://Gulyaly.COM/i/ABCDEFGHJK', site),
         'ABCDEFGHJK',
       );
     });

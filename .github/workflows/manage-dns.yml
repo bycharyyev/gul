@@ -1,8 +1,8 @@
 name: Manage Timeweb DNS records
 
-# URGENT restoration + mail hardening in one workflow. NS for gulyaly.pro was recently switched
+# URGENT restoration + mail hardening in one workflow. NS for gulyaly.com was recently switched
 # to Timeweb (ns1/ns2.timeweb.ru, ns3/ns4.timeweb.org) and the new zone has ZERO A records --
-# confirmed via `dig @8.8.8.8` returning nothing for gulyaly.pro/admin/api/mail. Production is at
+# confirmed via `dig @8.8.8.8` returning nothing for gulyaly.com/admin/api/mail. Production is at
 # risk of going unreachable as resolvers pick up the new NS. This restores the exact records
 # documented in CLAUDE.md (apex + wildcard -> primary) and adds what was blocked all night
 # (mail -> secondary, DKIM key, SPF merged with Timeweb's existing one rather than replacing it).
@@ -37,7 +37,7 @@ on:
           - add-txt-record
           - verify
       dkim_fqdn:
-        description: 'replace-dkim-record only: the record name (e.g. mail._domainkey.gulyaly.pro)'
+        description: 'replace-dkim-record only: the record name (e.g. mail._domainkey.gulyaly.com)'
         required: false
         type: string
       dkim_value:
@@ -73,31 +73,31 @@ jobs:
           # (anything but the bare apex) must be registered as its own resource first
           # (POST .../subdomains/{label}, confirmed 404 "domain_not_found" otherwise) before a
           # DNS record can be attached to it.
-          echo "Creating apex A record gulyaly.pro -> primary"
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records" \
+          echo "Creating apex A record gulyaly.com -> primary"
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 300}'
           echo
           echo "Registering wildcard subdomain *"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/*"  \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/*"  \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          echo "Creating wildcard A record *.gulyaly.pro -> primary"
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/*.gulyaly.pro/dns-records" \
+          echo "Creating wildcard A record *.gulyaly.com -> primary"
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/*.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 300}'
           echo
 
-      - name: Add mail.gulyaly.pro A record -> secondary (overrides the wildcard for this name)
+      - name: Add mail.gulyaly.com A record -> secondary (overrides the wildcard for this name)
         if: inputs.step == 'add-mail-a-record'
         run: |
           echo "Registering subdomain mail"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/mail" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/mail" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/mail.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/mail.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "A", "value": "${{ secrets.SECONDARY_HOST }}", "ttl": 300}'
@@ -114,7 +114,7 @@ jobs:
           # is worse than leaving them all on one server: a browser warning is unrecoverable for
           # a normal person, and half of every visit would hit it.
           echo "--- preflight: does the secondary already serve these names properly ---"
-          for host in gulyaly.pro www.gulyaly.pro api.gulyaly.pro; do
+          for host in gulyaly.com www.gulyaly.com api.gulyaly.com; do
             code=$(curl -s -o /dev/null -m 15 --resolve "$host:443:$SEC" -w '%{http_code}:%{ssl_verify_result}' "https://$host/api/health/ready" || echo "000:1")
             echo "  $host -> $code"
             case "$code" in
@@ -128,7 +128,7 @@ jobs:
             echo
           }
           register() {
-            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/$1"               -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" >/dev/null
+            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/$1"               -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" >/dev/null
           }
 
           # Idempotent, because this needs re-running: Timeweb accepted four subdomain records
@@ -150,7 +150,7 @@ jobs:
           }
 
           echo "--- apex: add the secondary alongside the primary ---"
-          ensure_a gulyaly.pro "$SEC" secondary
+          ensure_a gulyaly.com "$SEC" secondary
 
           # api and www answer from the wildcard today. A wildcard is all-or-nothing, so the only
           # way to give these two names a second address is to make them explicit -- and an
@@ -160,18 +160,18 @@ jobs:
           for name in api www; do
             echo "--- $name: explicit records for both servers ---"
             register "$name"
-            ensure_a "$name.gulyaly.pro" "$PRI" primary
-            ensure_a "$name.gulyaly.pro" "$SEC" secondary
+            ensure_a "$name.gulyaly.com" "$PRI" primary
+            ensure_a "$name.gulyaly.com" "$SEC" secondary
           done
 
           echo "--- what the nameserver serves now (counts, so nothing is masked away) ---"
-          for name in gulyaly.pro www.gulyaly.pro api.gulyaly.pro admin.gulyaly.pro; do
+          for name in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
             n=$(dig +short A "$name" @ns1.timeweb.ru 2>/dev/null | grep -c '^[0-9]')
             echo "  $name: $n address(es)"
           done
 
           # Deliberately NOT touched:
-          #   *.gulyaly.pro  -- managed subdomains have their nginx vhosts written on the primary
+          #   *.gulyaly.com  -- managed subdomains have their nginx vhosts written on the primary
           #                     only, so half of their traffic would land on the secondary's
           #                     catch-all page instead of the site they were provisioned for.
           #   admin          -- staff console. One predictable machine is worth more here than
@@ -211,7 +211,7 @@ jobs:
           }
 
           TOTAL=0
-          for fqdn in gulyaly.pro api.gulyaly.pro www.gulyaly.pro; do
+          for fqdn in gulyaly.com api.gulyaly.com www.gulyaly.com; do
             echo "--- $fqdn ---"
             ids=$(find_secondary_a_ids "$fqdn")
             if [ -z "$ids" ]; then
@@ -224,10 +224,10 @@ jobs:
                 echo "  would delete A record id $id (points at the secondary)"
               else
                 echo "  deleting A record id $id via apex path"
-                code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/$id" \
+                code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/$id" \
                   -H "Authorization: Bearer $TOKEN")
                 echo "    -> $code"
-                if [ "$fqdn" != "gulyaly.pro" ]; then
+                if [ "$fqdn" != "gulyaly.com" ]; then
                   echo "  deleting A record id $id via its own fqdn ($fqdn) as a fallback"
                   code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/$fqdn/dns-records/$id" \
                     -H "Authorization: Bearer $TOKEN")
@@ -262,10 +262,10 @@ jobs:
 
           # Subdomain-attached records are absent from the fqdn-scoped listing but present in the
           # base domain's, tagged with their own `subdomain` -- so match on that, not on the path.
-          SUBLABEL="${DKIM_FQDN%.gulyaly.pro}"
+          SUBLABEL="${DKIM_FQDN%.gulyaly.com}"
           echo "--- existing DKIM records at $DKIM_FQDN (subdomain '$SUBLABEL') ---"
           ids=$(curl -s -H "Authorization: Bearer $TOKEN" \
-            "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/dns-records" | SUBLABEL="$SUBLABEL" python3 -c '
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | SUBLABEL="$SUBLABEL" python3 -c '
           import json, os, sys
           sub = os.environ["SUBLABEL"]
           try:
@@ -293,7 +293,7 @@ jobs:
           # nslookup reports as "no text records" -- that is a client artefact, not a missing
           # record. Check with `curl 'https://dns.google/resolve?name=<fqdn>&type=TXT'` instead.)
           echo "--- registering the subdomain (400 = already registered, fine) ---"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/$SUBLABEL" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/$SUBLABEL" \
             -H "Authorization: Bearer $TOKEN" -o /dev/null -w '    -> %{http_code}\n'
 
           echo "--- publishing the new key ---"
@@ -306,46 +306,46 @@ jobs:
         if: inputs.step == 'merge-spf-record'
         run: |
           # Existing record id 91625893 -- v=spf1 include:_spf.timeweb.ru ~all
-          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625893" \
+          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625893" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.pro ~all"}'
+            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com ~all"}'
           echo
 
       - name: Add DKIM public key TXT record
         if: inputs.step == 'add-dkim-record'
         run: |
           echo "Registering subdomain mail._domainkey"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/mail._domainkey" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/mail._domainkey" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/mail._domainkey.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/mail._domainkey.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "TXT", "value": "v=DKIM1; h=sha256; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmw0ZtQbPoHREJYcAqANJWFWpXmSd/al6hz/aqvuJJGYHzLuyJ+EzlAkrS/ajUYVAfZWaLjIDDN7s0VhT5cm8lQTebar2f3gGjU8eJa3AFilZzb7V39FOFKOG71n/oqIcJswd0b6nh4CQHzM8Al7PPmmu6un5g+3CdFxRNOktwPNbddEIKPO3CZICuchdv0wHmYj5sd9GbVy7vU5pwIukx+Cxye73NCO7B/cAOeZ4OhZiRRZdwTpVrwtY8uDb7A2IJf+SqSJD+K2NOzg7H+kGYb3K/Hryprpq5a10/+j1LSdh+G5bOKWkFx0kIg2+N//SxSKsxIbdSx/xuZVrYQDrkwIDAQAB", "ttl": 600}'
           echo
 
-      - name: Add SPF record for newsletter.gulyaly.pro (own domain, own record -- authorizes the secondary's IP)
+      - name: Add SPF record for newsletter.gulyaly.com (own domain, own record -- authorizes the secondary's IP)
         if: inputs.step == 'add-newsletter-spf-record'
         run: |
           echo "Registering subdomain newsletter"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/newsletter" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/newsletter" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/newsletter.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/newsletter.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "TXT", "value": "v=spf1 ip4:${{ secrets.SECONDARY_HOST }} ~all", "ttl": 300}'
           echo
 
-      - name: Add DKIM public key TXT record for newsletter.gulyaly.pro (selector news2026)
+      - name: Add DKIM public key TXT record for newsletter.gulyaly.com (selector news2026)
         if: inputs.step == 'add-newsletter-dkim-record'
         run: |
           echo "Registering subdomain news2026._domainkey.newsletter"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/news2026._domainkey.newsletter" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/news2026._domainkey.newsletter" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/news2026._domainkey.newsletter.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/news2026._domainkey.newsletter.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "TXT", "value": "v=DKIM1; h=sha256; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5AwGGld3TdmY/yMbp0nMQHRHv0432eafvkPJChGJJWta0R1FlQtb2cPr8wHteYbGhQvCRpYq0mv8n/FCCMDeKUX2Qs5icxgwX03juKllIpHa0ai+qSLaku2LzZIXvA6mXJOmVK9eOaIti4GwfetQ2ngEKo4E3fpLg+YjeikRgYbXxW7wrZz/E7W2lnLfDhBcgAl0nJkC0uosQXoc6HgYLx7nIUDEc7SFyMTygpSDjuC0OSVzhRj8EAMIPNMkbU/6QF56efegW7J8sI014d4oDXemejSJr8vWhs1KVsW+18UUs5/jZEz/NqxZnS3MI0L8FldFsBCQzrSCmEfUlLwznwIDAQAB", "ttl": 600}'
@@ -358,34 +358,34 @@ jobs:
           # (id 91701267, "include:_spf.timeweb.ru") alongside the real one this workflow added
           # (id 91701269, "ip4:...") -- two SPF TXT records for one name is a hard RFC violation,
           # which is exactly what Gmail's bounce reported ("SPF ... did not pass").
-          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91701267" \
+          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91701267" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo "deleted (204 = success, empty body)"
 
-      - name: "Fix DMARC: delete the mis-relocated apex record, recreate properly at _dmarc.gulyaly.pro"
+      - name: "Fix DMARC: delete the mis-relocated apex record, recreate properly at _dmarc.gulyaly.com"
         if: inputs.step == 'strengthen-dmarc-quarantine'
         run: |
           # p=none never told receivers anything -- p=quarantine tells them "if SPF/DKIM alignment
           # fails, treat with suspicion" which is itself a trust signal for correctly-aligned mail
-          # (ours is: DKIM d=gulyaly.pro matches From, SPF authorizes mail.gulyaly.pro). Not jumping
+          # (ours is: DKIM d=gulyaly.com matches From, SPF authorizes mail.gulyaly.com). Not jumping
           # straight to p=reject on a domain still building sending reputation. pct=100 applies it
           # to all mail, not a sample.
           #
           # GOTCHA (discovered 2026-08-29, took two tries): a PATCH to this record's value, whether
           # or not "subdomain" is included in the body, resets its subdomain to null (apex) --
           # confirmed the field is simply not updatable via PATCH on this API. First attempt (no
-          # subdomain in body) moved the record from _dmarc.gulyaly.pro to the apex; second attempt
+          # subdomain in body) moved the record from _dmarc.gulyaly.com to the apex; second attempt
           # (subdomain explicitly in body) did NOT move it back -- still null. The only way to
           # relocate a record here is delete + recreate at the correct fqdn.
           echo "--- delete the mis-relocated record (was id 91625899, now sitting at the apex) ---"
-          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625899" \
+          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625899" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          echo "--- recreate properly at _dmarc.gulyaly.pro ---"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/_dmarc" \
+          echo "--- recreate properly at _dmarc.gulyaly.com ---"
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/_dmarc" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/_dmarc.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/_dmarc.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "TXT", "value": "v=DMARC1; p=quarantine; pct=100; adkim=r; aspf=r", "ttl": 600}'
@@ -399,13 +399,13 @@ jobs:
           # only after confirming these landed correctly -- avoids a window with zero working MX
           # if this step's request shape turns out wrong.
           echo "--- mx1.hosting.reg.ru priority 10 ---"
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "MX", "value": "mx1.hosting.reg.ru", "priority": 10, "ttl": 3600}'
           echo
           echo "--- mx2.hosting.reg.ru priority 15 ---"
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "MX", "value": "mx2.hosting.reg.ru", "priority": 15, "ttl": 3600}'
@@ -414,10 +414,10 @@ jobs:
       - name: Delete the old Timeweb-default MX records (ids 91625895/91625897), now superseded by REG.RU's
         if: inputs.step == 'delete-old-timeweb-default-mx'
         run: |
-          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625895" \
+          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625895" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo "deleted mx1.timeweb.ru (204 = success, empty body)"
-          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625897" \
+          curl -s -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625897" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo "deleted mx2.timeweb.ru (204 = success, empty body)"
 
@@ -427,20 +427,20 @@ jobs:
           # Only include:_spf.hosting.reg.ru is added -- not REG.RU's generic "a mx ip4:<hosting-ip>"
           # example, since we authenticate via SMTP AUTH to their real relay (not sending directly
           # off our own hosting IP), so only their outbound-sending infrastructure needs covering.
-          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625893" \
+          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625893" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.pro include:_spf.hosting.reg.ru ~all"}'
+            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com include:_spf.hosting.reg.ru ~all"}'
           echo
 
-      - name: Publish REG.RU's generated DKIM key for gulyaly.pro (selector "dkim", from ISPmanager)
+      - name: Publish REG.RU's generated DKIM key for gulyaly.com (selector "dkim", from ISPmanager)
         if: inputs.step == 'add-dkim-record-regru'
         run: |
           echo "Registering subdomain dkim._domainkey"
-          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/dkim._domainkey" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/dkim._domainkey" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
           echo
-          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/dkim._domainkey.gulyaly.pro/dns-records" \
+          curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/dkim._domainkey.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"type": "TXT", "value": "v=DKIM1; k=rsa; s=email; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAotXcO00mqh4k8LYUW3836KIzRvjuUGG8O6jcO6oy+lD0xKgTlSdmZczneX2SjJAaTLgP7Hz9BFYJA6cKClcs/HOG7zfZeIlooczzSqCrBucNEV51NWb0YfVs+dJJGWSJFKEBwoWJMRCjGGJh39AhlWKG0tNIL4OONkatQK1i0FTVupEYvQ/bUC8I1HOaef+J7rhpee4+X6TO5ZqoYUNgjFZY2x127QFxcam3NHXOZw2FV8sI8NAMyj4l+CAfNa+CMOwMTqgGbdQNS3QP3kBrv2qm7gXq+CERREYiD6Xq0clS75QmWazwtO1oAhVratBXLtLEtiRwpmhpNOMiGc6fEwIDAQAB", "ttl": 600}'
@@ -460,10 +460,10 @@ jobs:
           # host. If REG.RU ever migrates the account to a different sm* server this still needs
           # updating -- email:dns-check verifies the host is actually covered, so a migration
           # surfaces as a failed daily check rather than as silent softfails.
-          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.pro/dns-records/91625893" \
+          curl -s -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/91625893" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.pro include:_spf.hosting.reg.ru a:sm41.hosting.reg.ru ~all"}'
+            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com include:_spf.hosting.reg.ru a:sm41.hosting.reg.ru ~all"}'
           echo
 
       - name: Add an arbitrary TXT record (site verification tokens, BIMI, etc.)
@@ -482,11 +482,11 @@ jobs:
           # to it -- otherwise the record create fails with 404 domain_not_found. The apex needs
           # no such registration. Registering an already-registered subdomain is harmless.
           if [ "$TXT_NAME" = "@" ]; then
-            FQDN="gulyaly.pro"
+            FQDN="gulyaly.com"
           else
-            FQDN="${TXT_NAME}.gulyaly.pro"
+            FQDN="${TXT_NAME}.gulyaly.com"
             echo "Registering subdomain $TXT_NAME"
-            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/${TXT_NAME}" \
+            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/${TXT_NAME}" \
               -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
             echo
           fi
@@ -504,7 +504,7 @@ jobs:
         if: inputs.step == 'verify'
         run: |
           curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
-            "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/dns-records" | python3 -m json.tool
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python3 -m json.tool
           # The listing above only returns records attached to the base domain. Records on a
           # registered subdomain are absent from it -- which made four records the API had just
           # accepted, with ids, look as though they had silently vanished. Ask each name itself.
@@ -512,9 +512,9 @@ jobs:
           # into json.tool turned "here is the response you need to read" into a parse error that
           # failed the whole run and showed nothing.
           for name in api www mail; do
-            echo "--- $name.gulyaly.pro ---"
+            echo "--- $name.gulyaly.com ---"
             curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
-              "https://api.timeweb.cloud/api/v2/domains/$name.gulyaly.pro/dns-records" | head -c 2000
+              "https://api.timeweb.cloud/api/v2/domains/$name.gulyaly.com/dns-records" | head -c 2000
             echo
           done
 
@@ -541,27 +541,27 @@ jobs:
           }
           case "${{ inputs.step }}" in
             restore-core-a-records)
-              wait_a gulyaly.pro "$PRIMARY" present
-              wait_a www.gulyaly.pro "$PRIMARY" present
+              wait_a gulyaly.com "$PRIMARY" present
+              wait_a www.gulyaly.com "$PRIMARY" present
               ;;
             add-mail-a-record)
-              wait_a mail.gulyaly.pro "$SECONDARY" present
+              wait_a mail.gulyaly.com "$SECONDARY" present
               ;;
             add-second-a-records)
-              for name in gulyaly.pro api.gulyaly.pro www.gulyaly.pro; do
+              for name in gulyaly.com api.gulyaly.com www.gulyaly.com; do
                 wait_a "$name" "$PRIMARY" present
                 wait_a "$name" "$SECONDARY" present
               done
               ;;
             remove-secondary-a-records)
-              for name in gulyaly.pro api.gulyaly.pro www.gulyaly.pro; do
+              for name in gulyaly.com api.gulyaly.com www.gulyaly.com; do
                 wait_a "$name" "$PRIMARY" present
                 wait_a "$name" "$SECONDARY" absent
               done
               ;;
           esac
           echo "--- what the authoritative nameserver actually answers ---"
-          for name in gulyaly.pro www.gulyaly.pro api.gulyaly.pro mail.gulyaly.pro; do
+          for name in gulyaly.com www.gulyaly.com api.gulyaly.com mail.gulyaly.com; do
             printf '%-22s ' "$name"
             dig +short A "$name" @ns1.timeweb.ru | tr '\n' ' '
             echo

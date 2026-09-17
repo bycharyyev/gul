@@ -53,10 +53,10 @@ jobs:
 
             # Renewal on this box must not depend on the nginx plugin rewriting our static
             # vhosts -- point it at the webroot the vhosts already serve /.well-known from.
-            sed -i "s/^authenticator = .*/authenticator = webroot/" /etc/letsencrypt/renewal/gulyaly.pro.conf
-            grep -q "^webroot_path" /etc/letsencrypt/renewal/gulyaly.pro.conf \
-              || echo "webroot_path = /var/www/certbot," >> /etc/letsencrypt/renewal/gulyaly.pro.conf
-            sed -i "/^installer = /d" /etc/letsencrypt/renewal/gulyaly.pro.conf
+            sed -i "s/^authenticator = .*/authenticator = webroot/" /etc/letsencrypt/renewal/gulyaly.com.conf
+            grep -q "^webroot_path" /etc/letsencrypt/renewal/gulyaly.com.conf \
+              || echo "webroot_path = /var/www/certbot," >> /etc/letsencrypt/renewal/gulyaly.com.conf
+            sed -i "/^installer = /d" /etc/letsencrypt/renewal/gulyaly.com.conf
 
             ln -sf /etc/nginx/sites-available/gulyaly-web.conf /etc/nginx/sites-enabled/
             ln -sf /etc/nginx/sites-available/gulyaly-api.conf /etc/nginx/sites-enabled/
@@ -68,7 +68,7 @@ jobs:
             echo "nginx reloaded with SSL"
 
             echo "=== cert now installed here covers ==="
-            openssl x509 -in /etc/letsencrypt/live/gulyaly.pro/fullchain.pem \
+            openssl x509 -in /etc/letsencrypt/live/gulyaly.com/fullchain.pem \
               -noout -ext subjectAltName -enddate
           '
 
@@ -80,7 +80,7 @@ jobs:
           # api's root path is legitimately 404 -- everything lives under /api -- so each host
           # is checked on a path that actually exists.
           fail=0
-          for spec in "gulyaly.pro:/" "www.gulyaly.pro:/" "api.gulyaly.pro:/api/health" "admin.gulyaly.pro:/"; do
+          for spec in "gulyaly.com:/" "www.gulyaly.com:/" "api.gulyaly.com:/api/health" "admin.gulyaly.com:/"; do
             host="${spec%%:*}"; path="${spec#*:}"
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
               --resolve "$host:443:${{ secrets.DEPLOY_HOST }}" "https://$host$path" || echo 000)

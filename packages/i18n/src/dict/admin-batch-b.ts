@@ -193,7 +193,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     "admin.managedLinks.title": "Короткие ссылки",
     "admin.managedLinks.hint":
-        "gulyaly.pro/l/<код> — можно указать на товар, акцию или любую внешнюю страницу и поменять адрес позже, не меняя саму ссылку.",
+        "gulyaly.com/l/<код> — можно указать на товар, акцию или любую внешнюю страницу и поменять адрес позже, не меняя саму ссылку.",
     "admin.managedLinks.addLink": "+ Добавить ссылку",
     "admin.managedLinks.addSubmit": "Добавить",
     "admin.managedLinks.slugLabel": "Короткий код",
@@ -217,7 +217,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.analytics.ga4.title": "Google Analytics",
     "admin.analytics.ga4.subtitle": "Ресурс gulyaly (web), GA4",
     "admin.analytics.metrika.title": "Яндекс.Метрика",
-    "admin.analytics.metrika.subtitle": "Счётчик Gulyaly, gulyaly.pro",
+    "admin.analytics.metrika.subtitle": "Счётчик Gulyaly, gulyaly.com",
     "admin.notifications.title": "Уведомления",
     "admin.notifications.hint": "Куда платформа сообщает о новых заказах и ошибках (Sentry).",
     "admin.notifications.telegramTitle": "Telegram-бот",
@@ -232,10 +232,10 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Поддомены",
-    "admin.subdomains.hint": "DNS уже настроен как wildcard (*.gulyaly.pro) — новый поддомен не требует изменений в DNS, только nginx-конфиг и сертификат на сервере. Занимает около минуты.",
+    "admin.subdomains.hint": "DNS уже настроен как wildcard (*.gulyaly.com) — новый поддомен не требует изменений в DNS, только nginx-конфиг и сертификат на сервере. Занимает около минуты.",
     "admin.subdomains.addSubdomain": "+ Добавить поддомен",
     "admin.subdomains.nameLabel": "Поддомен",
-    "admin.subdomains.namePlaceholder": "shop2.gulyaly.pro",
+    "admin.subdomains.namePlaceholder": "shop2.gulyaly.com",
     "admin.subdomains.portLabel": "Порт на сервере",
     "admin.subdomains.portPlaceholder": "3001",
     "admin.subdomains.adding": "Создаём…",
@@ -468,7 +468,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     "admin.managedLinks.title": "Short links",
     "admin.managedLinks.hint":
-        "gulyaly.pro/l/<code> — point it at a product, a promo, or any external page, and repoint it later without changing the link itself.",
+        "gulyaly.com/l/<code> — point it at a product, a promo, or any external page, and repoint it later without changing the link itself.",
     "admin.managedLinks.addLink": "+ Add link",
     "admin.managedLinks.addSubmit": "Add",
     "admin.managedLinks.slugLabel": "Short code",
@@ -492,7 +492,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.analytics.ga4.title": "Google Analytics",
     "admin.analytics.ga4.subtitle": "gulyaly (web) property, GA4",
     "admin.analytics.metrika.title": "Yandex Metrika",
-    "admin.analytics.metrika.subtitle": "Gulyaly counter, gulyaly.pro",
+    "admin.analytics.metrika.subtitle": "Gulyaly counter, gulyaly.com",
     "admin.notifications.title": "Notifications",
     "admin.notifications.hint": "Where the platform reports new orders and errors (Sentry).",
     "admin.notifications.telegramTitle": "Telegram bot",
@@ -507,10 +507,10 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Subdomains",
-    "admin.subdomains.hint": "DNS is already wildcarded (*.gulyaly.pro) -- a new subdomain needs no DNS change, only an nginx config and cert on the server. Takes about a minute.",
+    "admin.subdomains.hint": "DNS is already wildcarded (*.gulyaly.com) -- a new subdomain needs no DNS change, only an nginx config and cert on the server. Takes about a minute.",
     "admin.subdomains.addSubdomain": "+ Add subdomain",
     "admin.subdomains.nameLabel": "Subdomain",
-    "admin.subdomains.namePlaceholder": "shop2.gulyaly.pro",
+    "admin.subdomains.namePlaceholder": "shop2.gulyaly.com",
     "admin.subdomains.portLabel": "Server port",
     "admin.subdomains.portPlaceholder": "3001",
     "admin.subdomains.adding": "Creating…",
@@ -741,7 +741,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     "admin.managedLinks.title": "Gysga salgylar",
     "admin.managedLinks.hint":
-        "gulyaly.pro/l/<kod> — haryda, aksiýa ýa-da islendik daşarky sahypa ugrukdyryp bolýar, salgynyň özüni üýtgetmän, soň ugrukdyrylýan ýerini çalşyp bolýar.",
+        "gulyaly.com/l/<kod> — haryda, aksiýa ýa-da islendik daşarky sahypa ugrukdyryp bolýar, salgynyň özüni üýtgetmän, soň ugrukdyrylýan ýerini çalşyp bolýar.",
     "admin.managedLinks.addLink": "+ Salgy goş",
     "admin.managedLinks.addSubmit": "Goş",
     "admin.managedLinks.slugLabel": "Gysga kod",
@@ -765,7 +765,7 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
     "admin.analytics.ga4.title": "Google Analytics",
     "admin.analytics.ga4.subtitle": "gulyaly (web) resursy, GA4",
     "admin.analytics.metrika.title": "Ýandeks.Metrika",
-    "admin.analytics.metrika.subtitle": "Gulyaly hasaplaýjysy, gulyaly.pro",
+    "admin.analytics.metrika.subtitle": "Gulyaly hasaplaýjysy, gulyaly.com",
     "admin.notifications.title": "Duýduryşlar",
     "admin.notifications.hint": "Platforma täze sargytlar we ýalňyşlyklar (Sentry) barada nirä habar berýär.",
     "admin.notifications.telegramTitle": "Telegram bot",
@@ -780,10 +780,10 @@ export const adminBatchBDict: Record<Locale, Record<string, string>> = {
 
     // ---- admin: subdomains ----
     "admin.subdomains.title": "Subdomenler",
-    "admin.subdomains.hint": "DNS eýýäm wildcard hökmünde sazlanan (*.gulyaly.pro) -- täze subdomen üçin DNS-de üýtgeşiklik gerek däl, diňe serwerde nginx-konfig we sertifikat. Takmynan bir minut wagt alýar.",
+    "admin.subdomains.hint": "DNS eýýäm wildcard hökmünde sazlanan (*.gulyaly.com) -- täze subdomen üçin DNS-de üýtgeşiklik gerek däl, diňe serwerde nginx-konfig we sertifikat. Takmynan bir minut wagt alýar.",
     "admin.subdomains.addSubdomain": "+ Subdomen goş",
     "admin.subdomains.nameLabel": "Subdomen",
-    "admin.subdomains.namePlaceholder": "shop2.gulyaly.pro",
+    "admin.subdomains.namePlaceholder": "shop2.gulyaly.com",
     "admin.subdomains.portLabel": "Serwer porty",
     "admin.subdomains.portPlaceholder": "3001",
     "admin.subdomains.adding": "Döredilýär…",

@@ -3,7 +3,7 @@
 The HTTP surface a Gulyaly customer app can actually use, extracted from the Nest controllers
 (decorators, guards, roles) and verified against production where the endpoint is public.
 
-**Base URL:** `https://api.gulyaly.pro/api` — note the `/api` prefix; it is part of the path, not
+**Base URL:** `https://api.gulyaly.com/api` — note the `/api` prefix; it is part of the path, not
 the host.
 
 **Totals:** 157 routes overall; 69 are customer-facing (not `/admin/*`, not the API-key partner

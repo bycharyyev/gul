@@ -58,7 +58,7 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
-            <!-- App Links: opens gulyaly.pro/gallery/product/... and gulyaly.pro/l/... directly
+            <!-- App Links: opens gulyaly.com/gallery/product/... and gulyaly.com/l/... directly
                  in the app, verified against apps/web/public/.well-known/assetlinks.json (already
                  published; see docs/APP_LINKS.md). Deliberately not /i/* or /r/* yet, and not the
                  whole host: this app has no in-app route for those two, so claiming them here
@@ -71,8 +71,8 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https" android:host="gulyaly.pro" android:pathPrefix="/gallery/product/"/>
-                <data android:scheme="https" android:host="gulyaly.pro" android:pathPrefix="/l/"/>
+                <data android:scheme="https" android:host="gulyaly.com" android:pathPrefix="/gallery/product/"/>
+                <data android:scheme="https" android:host="gulyaly.com" android:pathPrefix="/l/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

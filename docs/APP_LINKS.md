@@ -1,6 +1,6 @@
 # `/.well-known/assetlinks.json`
 
-Android reads this file over HTTPS to decide whether `gulyaly.pro` and the app `pro.gulyaly.app`
+Android reads this file over HTTPS to decide whether `gulyaly.com` and the app `pro.gulyaly.app`
 belong to the same owner. Until it answers 200 with a matching fingerprint, an invite link
 (`/i/<code>`) or a referral link (`/r/<code>`) opens in the browser rather than in the app, and
 the `autoVerify` intent filter silently fails verification at install time with no visible error.
@@ -29,7 +29,7 @@ because Android verifies the domain at install time and a missing file means the
 fails for every install that happened before it appeared.
 
 **`/i/*` and `/r/*` (group invite, referral) still have no manifest entry and no in-app route** --
-this file already covers them (it verifies the whole `gulyaly.pro` domain, not specific paths),
+this file already covers them (it verifies the whole `gulyaly.com` domain, not specific paths),
 but claiming those paths in the manifest before the app has somewhere to send them would hand the
 OS-opened intent to a route that doesn't exist instead of letting it fall through to the browser
 pages that already handle both correctly. That's still the pending half of the original ask.
@@ -46,7 +46,7 @@ installed at all).
 ## Checking it
 
 ```bash
-curl -s https://gulyaly.pro/.well-known/assetlinks.json
+curl -s https://gulyaly.com/.well-known/assetlinks.json
 ```
 
 The content type must be `application/json` and there must be no redirect — Android follows

@@ -3,7 +3,7 @@ name: Install gul-cert-sync (WRITES)
 # infra/ssl/README.md has described this as "installed and running... as of 2026-08-21" the whole
 # time it was neither. certbot.timer renews certs already on the box twice daily but never adds a
 # domain to one; nothing was expanding the cert when a new vhost appeared, which is how a stray
-# managed-test1.gulyaly.pro vhost ended up serving an invalid certificate to anyone who hit it
+# managed-test1.gulyaly.com vhost ended up serving an invalid certificate to anyone who hit it
 # (found and removed via remove-stale-vhost.yml, 2026-09-03). This installs the timer that
 # README always claimed existed.
 #
@@ -91,7 +91,7 @@ jobs:
             echo "  $1$2 -> $code"
             [ "$code" = "200" ] || { echo "  $1$2 expected 200, got $code" >&2; exit 1; }
           }
-          check gulyaly.pro /
-          check www.gulyaly.pro /
-          check api.gulyaly.pro /api/health/ready
-          check admin.gulyaly.pro /
+          check gulyaly.com /
+          check www.gulyaly.com /
+          check api.gulyaly.com /api/health/ready
+          check admin.gulyaly.com /

@@ -61,7 +61,7 @@ function verificationTemplate(
     copy.ignore,
     "",
     "Gulyaly",
-    "https://gulyaly.pro",
+    "https://gulyaly.com",
   ].join("\n");
 
   return { kind: "AUTH_EMAIL_VERIFICATION", locale, subject: copy.subject, preheader: copy.preheader, html, text };
@@ -138,7 +138,7 @@ function passwordResetTemplate(
     copy.ignore,
     "",
     "Gulyaly",
-    "https://gulyaly.pro",
+    "https://gulyaly.com",
   ].join("\n");
 
   return { kind: "AUTH_PASSWORD_RESET", locale, subject: copy.subject, preheader: copy.preheader, html, text };
@@ -191,7 +191,7 @@ function passwordChangedTemplate(
     preheader: copy.preheader,
     bodyHtml: [paragraph(copy.greeting), paragraph(copy.intro), paragraph(copy.warn)].join("\n"),
   });
-  const text = [copy.greeting, "", copy.intro, "", copy.warn, "", "Gulyaly", "https://gulyaly.pro"].join("\n");
+  const text = [copy.greeting, "", copy.intro, "", copy.warn, "", "Gulyaly", "https://gulyaly.com"].join("\n");
   return { kind: "ACCOUNT_PASSWORD_CHANGED", locale, subject: copy.subject, preheader: copy.preheader, html, text };
 }
 
@@ -202,7 +202,7 @@ const PASSWORD_CHANGED: DefaultTemplate[] = [
     title: "Пароль изменён",
     greeting: "Здравствуйте, {{user.firstName}}!",
     intro: "Пароль вашего аккаунта был изменён {{event.at}}. Все активные сессии завершены.",
-    warn: "Если это были не вы — немедленно восстановите пароль и напишите в поддержку: support@gulyaly.pro",
+    warn: "Если это были не вы — немедленно восстановите пароль и напишите в поддержку: support@gulyaly.com",
   }),
   passwordChangedTemplate("en", {
     subject: "Your Gulyaly password was changed",
@@ -210,7 +210,7 @@ const PASSWORD_CHANGED: DefaultTemplate[] = [
     title: "Password changed",
     greeting: "Hello, {{user.firstName}}!",
     intro: "Your account password was changed on {{event.at}}. All active sessions were signed out.",
-    warn: "If this wasn't you, reset your password immediately and contact support: support@gulyaly.pro",
+    warn: "If this wasn't you, reset your password immediately and contact support: support@gulyaly.com",
   }),
   passwordChangedTemplate("tkm", {
     subject: "Gulyaly parolyňyz üýtgedildi",
@@ -218,7 +218,7 @@ const PASSWORD_CHANGED: DefaultTemplate[] = [
     title: "Parol üýtgedildi",
     greeting: "Salam, {{user.firstName}}!",
     intro: "Hasabyňyzyň paroly {{event.at}} üýtgedildi. Ähli işjeň sessiýalar ýapyldy.",
-    warn: "Eger bu siz bolmasaňyz, derrew paroly dikeldiň we goldawa ýazyň: support@gulyaly.pro",
+    warn: "Eger bu siz bolmasaňyz, derrew paroly dikeldiň we goldawa ýazyň: support@gulyaly.com",
   }),
 ];
 
@@ -281,7 +281,7 @@ function orderTemplate(kind: EmailKind, locale: EmailLocale, copy: OrderCopy): D
   if (copy.note) {
     textLines.push("", `{{#order.deliveryNote}}${copy.note.label}: ${copy.note.body}{{/order.deliveryNote}}`);
   }
-  textLines.push("", "Gulyaly", "https://gulyaly.pro");
+  textLines.push("", "Gulyaly", "https://gulyaly.com");
 
   return { kind, locale, subject: copy.subject, preheader: copy.preheader, html, text: textLines.join("\n") };
 }
@@ -426,7 +426,7 @@ function cargoTemplate(kind: EmailKind, locale: EmailLocale, copy: CargoCopy): D
     `${copy.labels.total}: {{shipment.totalPriceTmt}} TMT`,
     "",
     "Gulyaly",
-    "https://gulyaly.pro",
+    "https://gulyaly.com",
   ].join("\n");
 
   return { kind, locale, subject: copy.subject, preheader: copy.preheader, html, text };
@@ -586,7 +586,7 @@ const SELLER_NEW_ORDER: DefaultTemplate[] = (
       `{{#order.cardMessage}}${copy.labels.card}: {{order.cardMessage}}{{/order.cardMessage}}`,
       "",
       "Gulyaly",
-      "https://gulyaly.pro",
+      "https://gulyaly.com",
     ].join("\n"),
   };
 });
@@ -606,7 +606,7 @@ function simpleSellerTemplate(
       preheader: copy.preheader,
       bodyHtml: copy.lines.map(paragraph).join("\n"),
     }),
-    text: [...copy.lines, "", "Gulyaly", "https://gulyaly.pro"].join("\n"),
+    text: [...copy.lines, "", "Gulyaly", "https://gulyaly.com"].join("\n"),
   };
 }
 
@@ -721,7 +721,7 @@ const SELLER_APPROVED: DefaultTemplate[] = [
     lines: [
       "Здравствуйте, {{seller.name}}!",
       "Ваша заявка одобрена. Магазин «{{seller.shopName}}» создан.",
-      "Войдите на https://gulyaly.pro/login под номером телефона, который указали в заявке, — с тем же паролем.",
+      "Войдите на https://gulyaly.com/login под номером телефона, который указали в заявке, — с тем же паролем.",
       "В кабинете подтвердите этот email, чтобы получать письма о заказах и выплатах, и привяжите Telegram для мгновенных уведомлений.",
     ],
   }),
@@ -732,7 +732,7 @@ const SELLER_APPROVED: DefaultTemplate[] = [
     lines: [
       "Hello, {{seller.name}}!",
       "Your application is approved. The shop “{{seller.shopName}}” has been created.",
-      "Sign in at https://gulyaly.pro/login with the phone number from your application and the same password.",
+      "Sign in at https://gulyaly.com/login with the phone number from your application and the same password.",
       "In your account, confirm this email to receive order and payout notifications, and link Telegram for instant alerts.",
     ],
   }),
@@ -743,7 +743,7 @@ const SELLER_APPROVED: DefaultTemplate[] = [
     lines: [
       "Salam, {{seller.name}}!",
       "Arzaňyz tassyklandy. «{{seller.shopName}}» dükany döredildi.",
-      "https://gulyaly.pro/login salgysyndan arzada görkezen telefon belgiňiz we şol parol bilen giriň.",
+      "https://gulyaly.com/login salgysyndan arzada görkezen telefon belgiňiz we şol parol bilen giriň.",
       "Hasabyňyzda şu e-poçtany tassyklaň — sargytlar we tölegler barada hat almak üçin, hem-de Telegram-y baglaň.",
     ],
   }),
@@ -760,7 +760,7 @@ const SELLER_REJECTED: DefaultTemplate[] = [
       // The reason is what makes a rejection actionable instead of a dead end -- wrapped so the
       // line disappears when an admin left no note.
       "{{#seller.reason}}Причина: {{seller.reason}}{{/seller.reason}}",
-      "Вы можете исправить указанное и подать заявку снова. Вопросы — на support@gulyaly.pro",
+      "Вы можете исправить указанное и подать заявку снова. Вопросы — на support@gulyaly.com",
     ],
   }),
   simpleSellerTemplate("SELLER_REJECTED", "en", {
@@ -771,7 +771,7 @@ const SELLER_REJECTED: DefaultTemplate[] = [
       "Hello, {{seller.name}}!",
       "Unfortunately your application was declined.",
       "{{#seller.reason}}Reason: {{seller.reason}}{{/seller.reason}}",
-      "You're welcome to address it and apply again. Questions: support@gulyaly.pro",
+      "You're welcome to address it and apply again. Questions: support@gulyaly.com",
     ],
   }),
   simpleSellerTemplate("SELLER_REJECTED", "tkm", {
@@ -782,7 +782,7 @@ const SELLER_REJECTED: DefaultTemplate[] = [
       "Salam, {{seller.name}}!",
       "Gynansak-da, arzaňyz ret edildi.",
       "{{#seller.reason}}Sebäbi: {{seller.reason}}{{/seller.reason}}",
-      "Görkezileni düzedip, täzeden tabşyryp bilersiňiz. Soraglar: support@gulyaly.pro",
+      "Görkezileni düzedip, täzeden tabşyryp bilersiňiz. Soraglar: support@gulyaly.com",
     ],
   }),
 ];

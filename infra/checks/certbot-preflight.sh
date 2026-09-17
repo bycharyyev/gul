@@ -11,7 +11,7 @@ echo -n "nginx plugin (python3-certbot-nginx): "
 dpkg -l python3-certbot-nginx 2>/dev/null | grep -q '^ii' && echo "installed" || echo "MISSING"
 echo
 echo "--- current cert and its SANs ---"
-echo | timeout 8 openssl s_client -connect 127.0.0.1:443 -servername gulyaly.pro 2>/dev/null \
+echo | timeout 8 openssl s_client -connect 127.0.0.1:443 -servername gulyaly.com 2>/dev/null \
   | openssl x509 -noout -subject -enddate -ext subjectAltName 2>/dev/null
 echo
 echo "--- server_name entries the script would expand to (its own domain scan) ---"

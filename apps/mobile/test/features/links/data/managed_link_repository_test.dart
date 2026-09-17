@@ -14,7 +14,7 @@ void main() {
       (_) async => {
         'id': 'l1',
         'slug': 'leto2026',
-        'targetUrl': 'https://gulyaly.pro/gallery/product/p1',
+        'targetUrl': 'https://gulyaly.com/gallery/product/p1',
         'isEnabled': true,
         'clickCount': 3,
       },
@@ -24,6 +24,6 @@ void main() {
       api,
     ).resolveTargetUrl('leto2026');
 
-    expect(target, 'https://gulyaly.pro/gallery/product/p1');
+    expect(target, 'https://gulyaly.com/gallery/product/p1');
   });
 }

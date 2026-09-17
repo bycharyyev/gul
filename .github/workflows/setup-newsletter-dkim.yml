@@ -1,11 +1,11 @@
-name: Set up DKIM for newsletter.gulyaly.pro (separate selector, doesn't touch the existing one)
+name: Set up DKIM for newsletter.gulyaly.com (separate selector, doesn't touch the existing one)
 
 # Adds a second DKIM key/selector for the marketing-mail domain, additive only:
-# - Generates a new 2048-bit keypair for newsletter.gulyaly.pro, selector "news2026"
+# - Generates a new 2048-bit keypair for newsletter.gulyaly.com, selector "news2026"
 # - Appends one line each to the EXISTING /etc/opendkim/KeyTable and /etc/opendkim/SigningTable
-#   (the gulyaly.pro/"mail" selector entries already there are untouched)
+#   (the gulyaly.com/"mail" selector entries already there are untouched)
 # - Reloads opendkim to pick up the new tables (does not restart Postfix, does not affect
-#   in-flight transactional mail signing for gulyaly.pro)
+#   in-flight transactional mail signing for gulyaly.com)
 # opendkim.conf itself needs no change -- KeyTable/SigningTable already support multiple
 # domains; the top-level Domain/Selector/KeyFile directives there are only opendkim's
 # single-domain fallback, superseded by table lookups whenever an entry matches.
@@ -31,16 +31,16 @@ jobs:
         run: |
           cat > /tmp/newsletter-dkim.sh <<'SCRIPT'
           set -e
-          mkdir -p /etc/opendkim/keys/newsletter.gulyaly.pro
-          cd /etc/opendkim/keys/newsletter.gulyaly.pro
+          mkdir -p /etc/opendkim/keys/newsletter.gulyaly.com
+          cd /etc/opendkim/keys/newsletter.gulyaly.com
           if [ ! -f news2026.private ]; then
-            opendkim-genkey -b 2048 -d newsletter.gulyaly.pro -s news2026 -D /etc/opendkim/keys/newsletter.gulyaly.pro
+            opendkim-genkey -b 2048 -d newsletter.gulyaly.com -s news2026 -D /etc/opendkim/keys/newsletter.gulyaly.com
           fi
-          chown -R opendkim:opendkim /etc/opendkim/keys/newsletter.gulyaly.pro
+          chown -R opendkim:opendkim /etc/opendkim/keys/newsletter.gulyaly.com
           chmod 600 news2026.private
 
-          KEYTABLE_LINE="news2026._domainkey.newsletter.gulyaly.pro newsletter.gulyaly.pro:news2026:/etc/opendkim/keys/newsletter.gulyaly.pro/news2026.private"
-          SIGNINGTABLE_LINE="*@newsletter.gulyaly.pro news2026._domainkey.newsletter.gulyaly.pro"
+          KEYTABLE_LINE="news2026._domainkey.newsletter.gulyaly.com newsletter.gulyaly.com:news2026:/etc/opendkim/keys/newsletter.gulyaly.com/news2026.private"
+          SIGNINGTABLE_LINE="*@newsletter.gulyaly.com news2026._domainkey.newsletter.gulyaly.com"
 
           grep -qxF "$KEYTABLE_LINE" /etc/opendkim/KeyTable || echo "$KEYTABLE_LINE" >> /etc/opendkim/KeyTable
           grep -qxF "$SIGNINGTABLE_LINE" /etc/opendkim/SigningTable || echo "$SIGNINGTABLE_LINE" >> /etc/opendkim/SigningTable
@@ -54,8 +54,8 @@ jobs:
           sleep 1
           systemctl is-active opendkim
 
-          echo "--- DKIM PUBLIC KEY DNS TXT RECORD for newsletter.gulyaly.pro (public, safe to print) ---"
-          cat /etc/opendkim/keys/newsletter.gulyaly.pro/news2026.txt
+          echo "--- DKIM PUBLIC KEY DNS TXT RECORD for newsletter.gulyaly.com (public, safe to print) ---"
+          cat /etc/opendkim/keys/newsletter.gulyaly.com/news2026.txt
           SCRIPT
           scp -i ~/.ssh/id_ed25519 /tmp/newsletter-dkim.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/newsletter-dkim.sh
           ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
@@ -66,11 +66,11 @@ jobs:
           ' < /dev/null
           rm -f /tmp/newsletter-dkim.sh
 
-      - name: Confirm existing gulyaly.pro/mail signing is untouched
+      - name: Confirm existing gulyaly.com/mail signing is untouched
         run: |
           ssh -i ~/.ssh/id_ed25519 ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
             docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "
-              echo \"mail.private still present: \$(test -f /etc/opendkim/keys/gulyaly.pro/mail.private && echo yes || echo NO)\"
-              grep \"gulyaly.pro\" /etc/opendkim/SigningTable
+              echo \"mail.private still present: \$(test -f /etc/opendkim/keys/gulyaly.com/mail.private && echo yes || echo NO)\"
+              grep \"gulyaly.com\" /etc/opendkim/SigningTable
             "
           ' < /dev/null

@@ -107,7 +107,7 @@ Design system: brand gradient (`from-brand-*` violet to `accent-*` teal) defined
 ## Production deployment
 
 > **Migrated (2026-08-24/25).** Production now runs entirely on `DEPLOY_HOST` (SmartApe, 6
-> vCPU / 3.8 GiB, Ubuntu 26.04) — DNS (`*.gulyaly.pro` wildcard, low TTL) points here. The old
+> vCPU / 3.8 GiB, Ubuntu 26.04) — DNS (`*.gulyaly.com` wildcard, low TTL) points here. The old
 > reg.ru box (`OLD_VPS_HOST`) is no longer part of the serving path; its future role is
 > undecided (a dedicated new VPS took over the warm-standby/mail role instead — see below). No
 > IP or hostname is hardcoded anywhere in workflows/compose files — everything reads
@@ -121,7 +121,7 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 
 - **Server**: `deploy` user (docker group, no sudo), key-based via `DEPLOY_SSH_KEY`. App lives in `/opt/gul`. Root/manual access is whatever the hosting panel's console provides — there's no separate root key workflow for this box (unlike the old reg.ru one).
 - **`/opt/gul/.env`**: real production secrets (DB password, JWT secrets, `TELEGRAM_BOT_TOKEN`, `CORS_ORIGINS`, mail creds, `GH_ACTIONS_TOKEN`/`GH_REPO`/`PROVISION_CALLBACK_SECRET` for the subdomains feature). Lives only on the server, never committed — `docker-compose.prod.yml` (committed) references it via `env_file`.
-- **Domains**: `gulyaly.pro`/`www.` → web, `admin.gulyaly.pro` → admin, `api.gulyaly.pro` → api. Routing is host-level Nginx (not containerized) + Certbot-issued Let's Encrypt certs; containers only bind `127.0.0.1:<port>`. Nginx vhosts live in [`infra/nginx/`](infra/nginx/) — edit them in the repo, not on the server; pushing a change under `infra/nginx/**` (or a manual dispatch) auto-runs `.github/workflows/sync-nginx.yml`, which ships every `*.conf` there to `/etc/nginx/sites-available/`, symlinks it into `sites-enabled`, and reloads (via the docker-chroot privilege trick below, since `deploy` has no sudo). `gulyaly-subdomain-fallback.conf` is the `default_server` catch-all for any `*.gulyaly.pro` hostname that isn't one of the three real vhosts or a currently-managed subdomain — branded page, auto-redirects to the main storefront after 5s. Certs use webroot (`/var/www/certbot`) for renewal rather than certbot's nginx plugin, so certbot never rewrites these static files.
+- **Domains**: `gulyaly.com`/`www.` → web, `admin.gulyaly.com` → admin, `api.gulyaly.com` → api. Routing is host-level Nginx (not containerized) + Certbot-issued Let's Encrypt certs; containers only bind `127.0.0.1:<port>`. Nginx vhosts live in [`infra/nginx/`](infra/nginx/) — edit them in the repo, not on the server; pushing a change under `infra/nginx/**` (or a manual dispatch) auto-runs `.github/workflows/sync-nginx.yml`, which ships every `*.conf` there to `/etc/nginx/sites-available/`, symlinks it into `sites-enabled`, and reloads (via the docker-chroot privilege trick below, since `deploy` has no sudo). `gulyaly-subdomain-fallback.conf` is the `default_server` catch-all for any `*.gulyaly.com` hostname that isn't one of the three real vhosts or a currently-managed subdomain — branded page, auto-redirects to the main storefront after 5s. Certs use webroot (`/var/www/certbot`) for renewal rather than certbot's nginx plugin, so certbot never rewrites these static files.
 - **The `deploy` user has no sudo, but IS in the `docker` group** — already root-equivalent on the host (well-known docker caveat: `docker run --privileged` + `chroot` lets any docker-group member act as real host root). Every workflow that needs to touch `/etc`, systemd, or ufw uses this pattern: build a plain shell script via `echo` lines into a temp file first (not a heredoc — heredocs inside a GH Actions `run: |` block and inline nested quoting have both caused real bugs this way), then `docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh <script>`. Firewall (`ufw`) operations additionally need `--network=host` on that same `docker run` — `--pid=host` alone puts you in the host's process namespace but not its network namespace, so `ufw`/iptables would otherwise affect only the throwaway container's own isolated network stack.
 - **SSL renewal is fully automatic, no manual `certbot` runs needed**: `certbot.timer` (from the apt package) renews existing certs twice daily; `gul-cert-sync.timer` (source in [`infra/ssl/`](infra/ssl/README.md), installed by `install-cert-sync.yml`) runs daily and re-expands the cert to cover every `server_name` currently in `/etc/nginx/sites-enabled/*.conf`, **on both hosts** — sync-nginx.yml ships the same vhosts to primary and secondary, so both need the same domain set kept covered. This README claimed the timer was live from 2026-08-21; it never actually had an install workflow and `drift.sh` found it absent on both machines on 2026-09-03, which is how a stray test vhost went on serving an invalid certificate until someone happened to check. `.github/workflows/certbot-once.yml` is the original manual bootstrap workflow this superseded for renewal/expansion — still there for a from-scratch cert on a brand-new domain.
 - **Managed subdomains** (admin console → Subdomains tab): staff add `{name, targetPort}`; the API (`apps/api/src/subdomains/`) writes a `PENDING` `ManagedSubdomain` row and dispatches `.github/workflows/provision-subdomain.yml` via the GitHub REST API (needs `GH_ACTIONS_TOKEN`, a fine-grained PAT scoped to this repo with Actions read/write, in `/opt/gul/.env`). That workflow writes the nginx vhost + issues an HTTP-01 cert (same docker-chroot trick) and reports the result back to `POST /admin/subdomains/callback`, authenticated by a shared secret (`X-Provision-Secret` header vs. `PROVISION_CALLBACK_SECRET`) rather than a JWT, since GitHub Actions is calling it, not a logged-in user.
@@ -207,7 +207,7 @@ per an explicit ask, unlike the old reg.ru box) runs:
   `postgres` alias, which is reserved for post-failover use).
 
 **What's still needed for real traffic to reach it**: DNS today only ever hands out primary's IP
-(the `*.gulyaly.pro` wildcard) — add a second A record for `gulyaly.pro` pointing at the
+(the `*.gulyaly.com` wildcard) — add a second A record for `gulyaly.com` pointing at the
 secondary's IP for client-side failover to actually kick in. This is a manual, one-time DNS-panel
 step (no API access available to automate it), same category as the mail-relay DNS gap below.
 
@@ -217,7 +217,7 @@ needs nothing, see above): run `.github/workflows/failover-to-secondary.yml` wit
 primary), repoints the *already-running* app containers' `DATABASE_URL` from primary's (dead) IP
 to the now-writable local database, and health-checks the API. **DNS is not touched automatically**
 (rejected earlier as a split-brain risk with only two nodes) — if the second A record above isn't
-in place yet, the last step is manually pointing `gulyaly.pro` at the secondary; TTL is already
+in place yet, the last step is manually pointing `gulyaly.com` at the secondary; TTL is already
 low. Rerun `prepare-secondary-failover.yml` beforehand if it's been a while, so certs/`.env` are
 current (it also keeps `.env`'s `DATABASE_URL` pointed at primary, consistent with active/active,
 rather than resetting it back to the local standby). Known gap: the uploads volume isn't synced to
@@ -233,28 +233,28 @@ untrusted for writes until that happens.
 the primary's IP only; port 25 is explicitly denied (this relay only sends the app's own outgoing
 mail, it doesn't need to receive any). `MAIL_HOST` is still the secondary's raw IP with a pinned
 self-signed cert (`MAIL_TLS_CA_BASE64`/`MAIL_TLS_SERVERNAME` in `email.service.ts`) rather than a
-real Let's Encrypt cert + hostname — now that `mail.gulyaly.pro` resolves correctly (see below),
+real Let's Encrypt cert + hostname — now that `mail.gulyaly.com` resolves correctly (see below),
 this could be swapped for a real cert via `certbot-once.yml`, just not done yet.
 
-**DNS is now scriptable — see "DNS management" below.** `gulyaly.pro`'s A/wildcard records, the
+**DNS is now scriptable — see "DNS management" below.** `gulyaly.com`'s A/wildcard records, the
 `mail` A record, SPF (merged into Timeweb's existing record), and the DKIM public key were all
 published via `manage-dns.yml` on 2026-08-27. DKIM signing itself (OpenDKIM + Postfix milter on
-the secondary, domain `gulyaly.pro`, selector `mail`) is live and verifiable by recipients — but
+the secondary, domain `gulyaly.com`, selector `mail`) is live and verifiable by recipients — but
 only since 2026-09-05. It was **claimed** live from 2026-08-27 and was not: `setup-dkim.yml`
 wrote a wildcard `SigningTable` without the `refile:` prefix that makes a wildcard a pattern, so
 every message left unsigned while opendkim logged nothing at default verbosity. Caught only by
 reading a delivered message's headers (`dkim=` absent from `Authentication-Results` entirely).
 DMARC passed the whole time on SPF alone, which is why nothing looked wrong. If you touch DKIM,
-verify by reading real headers — `systemctl is-active opendkim` proves nothing. DMARC already existed (`_dmarc.gulyaly.pro`, `p=none`) from Timeweb's
+verify by reading real headers — `systemctl is-active opendkim` proves nothing. DMARC already existed (`_dmarc.gulyaly.com`, `p=none`) from Timeweb's
 own defaults — left as-is, that's the correct safe starting posture.
 
-**Marketing mail is split onto its own sending identity** (`newsletter.gulyaly.pro`), so spam
+**Marketing mail is split onto its own sending identity** (`newsletter.gulyaly.com`), so spam
 complaints on a broadcast can't hurt deliverability for transactional mail (order confirmations,
 codes). `EmailService` (`apps/api/src/email/email.service.ts`) holds two independent
 `nodemailer.Transporter`s sharing the same relay/TLS config but different SASL logins
 (`MAIL_USER`/`MAIL_PASS` vs `MAIL_USER_MARKETING`/`MAIL_PASS_MARKETING`); `sendMarketingBroadcast`
 uses the marketing one and `MAIL_FROM_MARKETING`. DKIM uses a separate selector (`news2026` on
-`newsletter.gulyaly.pro`, vs `mail` on `gulyaly.pro`) and its own SPF record — see
+`newsletter.gulyaly.com`, vs `mail` on `gulyaly.com`) and its own SPF record — see
 [DNS_CHANGELOG.md](docs/architecture/DNS_CHANGELOG.md) for how those records were added (and one real gotcha:
 registering the subdomain auto-attached a duplicate default SPF record that broke delivery until
 removed). Postfix enforces the split: `smtpd_sender_login_maps` +
@@ -268,7 +268,7 @@ owned by user ...`). The `newsletter` SASL account's password is rotated via
 
 ### DNS management: Timeweb Cloud API
 
-`gulyaly.pro` was registered at reg.ru but its NS records now point at Timeweb Cloud
+`gulyaly.com` was registered at reg.ru but its NS records now point at Timeweb Cloud
 (`ns1/ns2.timeweb.ru`, `ns3/ns4.timeweb.org`) — Timeweb is the actual authoritative DNS, reg.ru is
 just the registrar. This is scriptable: `manage-dns.yml` calls `https://api.timeweb.cloud` with a
 Bearer token (`TIMEWEB_API_TOKEN` secret, from https://timeweb.cloud/my/api-keys) — **no IP
@@ -279,22 +279,22 @@ Real gotchas hit building this (all fixed in `manage-dns.yml`, worth knowing bef
 API calls by hand):
 - **Don't send a `subdomain` key in the record-creation body.** The target hostname belongs in
   the URL path instead: `POST /api/v2/domains/{fqdn}/dns-records` where `{fqdn}` is the *specific*
-  record name (`mail.gulyaly.pro`, `*.gulyaly.pro`, etc.), not always the base domain. Sending
+  record name (`mail.gulyaly.com`, `*.gulyaly.com`, etc.), not always the base domain. Sending
   `subdomain` in the body errors `400 property subdomain should not exist`.
 - **A subdomain must be registered as its own resource before a record can be attached to it** —
   `POST /api/v1/domains/{fqdn}/subdomains/{label}` (no body), *then* the dns-records POST above.
   Skipping this errors `404 domain_not_found` on the record create. The apex domain itself needs
   no such registration.
-- **Wildcard subdomain is literally `*`**: `.../subdomains/*` then `.../domains/*.gulyaly.pro/dns-records`.
+- **Wildcard subdomain is literally `*`**: `.../subdomains/*` then `.../domains/*.gulyaly.com/dns-records`.
 - **Registering a subdomain auto-attaches Timeweb's own default SPF/MX/DMARC-style records to
   it** — harmless clutter for names that don't send mail as themselves (our mail is sent as
-  `noreply@gulyaly.pro`, the apex, so only the apex's SPF record matters), but don't be surprised
+  `noreply@gulyaly.com`, the apex, so only the apex's SPF record matters), but don't be surprised
   to see it in a `GET .../dns-records` listing.
 - **Never add a second SPF `TXT` record** — multiple SPF records for one name is invalid per
-  spec and breaks the check entirely. `gulyaly.pro` already had Timeweb's own SPF
+  spec and breaks the check entirely. `gulyaly.com` already had Timeweb's own SPF
   (`include:_spf.timeweb.ru`, for Timeweb's own MX-based mail hosting on this domain — real MX
   records exist, so don't touch them either) — `PATCH` the existing record to append
-  ` a:mail.gulyaly.pro` rather than creating a new one.
+  ` a:mail.gulyaly.com` rather than creating a new one.
 - A `run: |` block containing an unindented multi-line string (e.g. a bare `python3 -c "..."`
   heredoc starting at column 0) breaks the YAML block scalar and silently invalidates the *whole*
   workflow file — GitHub then reports the confusing `422 Workflow does not have 'workflow_dispatch'
@@ -308,7 +308,7 @@ API calls by hand):
 - **`PATCH .../dns-records/{id}` cannot relocate a record — the `subdomain` field is not
   updatable via PATCH, whether or not you include it in the body.** Discovered 2026-08-29:
   PATCHing a record's `value` with no `subdomain` in the body silently reset it to `null` (moved
-  a `_dmarc.gulyaly.pro` record to the bare apex); a second attempt with `"subdomain": "_dmarc"`
+  a `_dmarc.gulyaly.com` record to the bare apex); a second attempt with `"subdomain": "_dmarc"`
   explicitly in the body did *not* move it back — still `null`. The SPF-merge PATCH earlier in
   this file works fine only because that record's subdomain was already `null` (apex) to begin
   with, so nothing moved. **To relocate a record (or to update the value of any record that isn't

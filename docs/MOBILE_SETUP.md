@@ -50,7 +50,7 @@ flutter run --dart-define=APP_ENV=staging
 ```
 
 ```bash
-flutter run --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://api.gulyaly.pro/api
+flutter run --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://api.gulyaly.com/api
 ```
 
 **On a physical device, always pass these.** With no `--dart-define` the environment is

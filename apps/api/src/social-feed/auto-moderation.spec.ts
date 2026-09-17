@@ -26,7 +26,7 @@ describe("textVerdict", () => {
   });
 
   it("allows our own address", () => {
-    expect(textVerdict("подробнее на https://gulyaly.pro/feed")).toBeNull();
+    expect(textVerdict("подробнее на https://gulyaly.com/feed")).toBeNull();
   });
 
   it("passes an ordinary caption, and an empty one", () => {

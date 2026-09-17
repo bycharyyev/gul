@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
 import type { GalleryProductDto } from "@topup-hub/types";
 
-const SITE_URL = "https://gulyaly.pro";
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.gulyaly.pro/api";
+const SITE_URL = "https://gulyaly.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.gulyaly.com/api";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [

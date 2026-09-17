@@ -17,6 +17,6 @@ jobs:
       - name: Run certbot
         run: |
           ssh -i ~/.ssh/root_key root@${{ secrets.DEPLOY_HOST }} '
-            certbot --nginx --non-interactive --agree-tos -m malobiznes@gmail.com -d gulyaly.pro -d www.gulyaly.pro -d admin.gulyaly.pro -d api.gulyaly.pro
+            certbot --nginx --non-interactive --agree-tos -m malobiznes@gmail.com -d gulyaly.com -d www.gulyaly.com -d admin.gulyaly.com -d api.gulyaly.com
             nginx -t
           '

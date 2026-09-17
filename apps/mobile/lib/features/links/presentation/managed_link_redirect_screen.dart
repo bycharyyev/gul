@@ -9,7 +9,7 @@ import '../../../core/l10n/strings.dart';
 import '../../gallery/presentation/product_screen.dart';
 import '../../home/presentation/home_screen.dart';
 
-/// Where `gulyaly.pro/l/<slug>` lands inside the app.
+/// Where `gulyaly.com/l/<slug>` lands inside the app.
 ///
 /// A link staff pointed at one of this app's own pages (today, only a product) opens that screen
 /// directly, in-app, rather than round-tripping through a browser tab this app would immediately

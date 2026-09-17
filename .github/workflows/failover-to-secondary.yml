@@ -111,6 +111,6 @@ jobs:
         run: |
           echo "Secondary is now writing to its own (just-promoted) database instead of primary's."
           echo "The API is also using secondary's local emergency Redis; durable sweepers will rebuild pending work."
-          echo "If a second A record for gulyaly.pro already points here, most clients have already"
-          echo "failed over on their own. Otherwise, do this by hand: point/add the gulyaly.pro DNS"
+          echo "If a second A record for gulyaly.com already points here, most clients have already"
+          echo "failed over on their own. Otherwise, do this by hand: point/add the gulyaly.com DNS"
           echo "A record at ${{ secrets.SECONDARY_HOST }}. TTL is already low."

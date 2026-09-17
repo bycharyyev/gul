@@ -16,7 +16,7 @@ import '../domain/legal_page.dart';
 ///
 /// 1. **The content comes from the API, not from a URL.** `GET /content-pages/:slug` returns the
 ///    same text the website renders, with per-locale variants. Pointing a webview at
-///    `gulyaly.pro/pages/privacy` would drag the site's header, footer and menu into the app —
+///    `gulyaly.com/pages/privacy` would drag the site's header, footer and menu into the app —
 ///    the customer asked to read one page, not to browse the storefront inside a tab. The text is
 ///    wrapped in a small stylesheet that matches the app's own theme instead.
 /// 2. **Every navigation is blocked.** `onNavigationRequest` refuses everything except the

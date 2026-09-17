@@ -78,6 +78,6 @@ jobs:
         env:
           HOST: ${{ secrets[matrix.host_secret] }}
         run: |
-          code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" --resolve "api.gulyaly.pro:443:$HOST" https://api.gulyaly.pro/api/health/ready)
-          echo "  api.gulyaly.pro via $HOST -> $code"
+          code=$(curl -s -o /dev/null -m 15 -w "%{http_code}" --resolve "api.gulyaly.com:443:$HOST" https://api.gulyaly.com/api/health/ready)
+          echo "  api.gulyaly.com via $HOST -> $code"
           [ "$code" = "200" ] || { echo "  not healthy after prune" >&2; exit 1; }

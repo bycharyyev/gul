@@ -19,8 +19,8 @@ class _Repository extends Mock implements GalleryRepository {}
 /// pins one: the link this screen puts in its QR code is the point of the test.
 const _config = AppConfig(
   environment: AppEnvironment.production,
-  apiBaseUrl: 'https://api.gulyaly.pro/api',
-  siteBaseUrl: 'https://gulyaly.pro',
+  apiBaseUrl: 'https://api.gulyaly.com/api',
+  siteBaseUrl: 'https://gulyaly.com',
   connectTimeout: Duration(seconds: 15),
   receiveTimeout: Duration(seconds: 30),
 );

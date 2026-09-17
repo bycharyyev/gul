@@ -19,7 +19,7 @@ export type ManagedSubdomainDto = z.infer<typeof managedSubdomainSchema>;
 export const createSubdomainSchema = z.object({
   name: z
     .string()
-    .regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.gulyaly\.pro$/, "Must be a subdomain of gulyaly.pro"),
+    .regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.gulyaly\.com$/, "Must be a subdomain of gulyaly.com"),
   targetPort: z.number().int().min(1024).max(65535),
 });
 export type CreateSubdomainInput = z.infer<typeof createSubdomainSchema>;

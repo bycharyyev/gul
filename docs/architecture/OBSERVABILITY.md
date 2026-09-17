@@ -7,7 +7,7 @@ Prometheus/Grafana/Loki — see [[feedback-architecture-discuss-first-topup-hub|
 ## Metrics — Netdata, primary as parent, secondary streams in
 
 - **Primary** (`DEPLOY_HOST`) runs Netdata as the "parent". Dashboard:
-  `https://admin.gulyaly.pro/netdata` — sits behind a custom login gate
+  `https://admin.gulyaly.com/netdata` — sits behind a custom login gate
   (`netdata-gate.service`, `/opt/netdata-gate/netdata_gate.py`, proxied by nginx at
   `/netdata-login` + `/netdata-check`) since Netdata has no auth of its own. Credentials: rotate
   via `.github/workflows/rotate-netdata-gate.yml` (generates fresh `GATE_PASS`/`GATE_SECRET` on

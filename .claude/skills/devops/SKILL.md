@@ -13,7 +13,7 @@ drifts, this doesn't).
 
 ## DNS is scriptable now (Timeweb Cloud API)
 
-`gulyaly.pro`'s NS points at Timeweb Cloud (`ns1/ns2.timeweb.ru`, `ns3/ns4.timeweb.org`) --
+`gulyaly.com`'s NS points at Timeweb Cloud (`ns1/ns2.timeweb.ru`, `ns3/ns4.timeweb.org`) --
 registrar stayed reg.ru, but Timeweb is the authoritative DNS. `manage-dns.yml` calls
 `https://api.timeweb.cloud` with `TIMEWEB_API_TOKEN` (Bearer token, no IP allowlisting -- unlike
 reg.ru's own API, which is why every DNS task before 2026-08-27 was a manual DNS-panel step).

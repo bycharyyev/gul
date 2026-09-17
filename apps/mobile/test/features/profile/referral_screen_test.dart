@@ -32,8 +32,8 @@ ProfileOverview _overview({
 /// host, which says nothing about what a customer would send.
 const _config = AppConfig(
   environment: AppEnvironment.production,
-  apiBaseUrl: 'https://api.gulyaly.pro/api',
-  siteBaseUrl: 'https://gulyaly.pro',
+  apiBaseUrl: 'https://api.gulyaly.com/api',
+  siteBaseUrl: 'https://gulyaly.com',
   connectTimeout: Duration(seconds: 15),
   receiveTimeout: Duration(seconds: 30),
 );
@@ -107,6 +107,6 @@ void main() {
     // /r/<code>, which stores it and carries it through registration.
     await pumpScreen(t);
 
-    expect(find.text('https://gulyaly.pro/r/aygul'), findsOneWidget);
+    expect(find.text('https://gulyaly.com/r/aygul'), findsOneWidget);
   });
 }

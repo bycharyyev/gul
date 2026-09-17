@@ -6,7 +6,7 @@ on:
         description: "add or remove"
         required: true
       name:
-        description: "full hostname, e.g. shop2.gulyaly.pro"
+        description: "full hostname, e.g. shop2.gulyaly.com"
         required: true
       port:
         description: "local port to proxy to (required for add)"
@@ -26,8 +26,8 @@ jobs:
           # Defense in depth: the admin API already validates this, but a workflow_dispatch can
           # also be triggered by anyone with write access to the repo's Actions, bypassing that.
           case "${{ inputs.name }}" in
-            *.gulyaly.pro) ;;
-            *) echo "name must be a subdomain of gulyaly.pro" >&2; exit 1 ;;
+            *.gulyaly.com) ;;
+            *) echo "name must be a subdomain of gulyaly.com" >&2; exit 1 ;;
           esac
           if [ "${{ inputs.action }}" = "add" ] && [ -z "${{ inputs.port }}" ]; then
             echo "port is required for action=add" >&2
@@ -146,7 +146,7 @@ jobs:
           if [ "$OUTCOME" = "success" ]; then
             if [ "${{ inputs.action }}" = "add" ]; then STATUS="ACTIVE"; else STATUS="REMOVED"; fi
           fi
-          curl -fsS -X POST "https://api.gulyaly.pro/api/admin/subdomains/callback" \
+          curl -fsS -X POST "https://api.gulyaly.com/api/admin/subdomains/callback" \
             -H "Content-Type: application/json" \
             -H "X-Provision-Secret: ${{ secrets.PROVISION_CALLBACK_SECRET }}" \
             -d "{\"name\":\"${{ inputs.name }}\",\"status\":\"$STATUS\"}" || true

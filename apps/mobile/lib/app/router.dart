@@ -81,7 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RegisterScreen.path,
         builder: (_, __) => const RegisterScreen(),
       ),
-      // Where an Android App Link for gulyaly.pro/l/<slug> lands -- resolved and sent on from
+      // Where an Android App Link for gulyaly.com/l/<slug> lands -- resolved and sent on from
       // there, never a destination of its own. Outside the shell for the same reason ShopScreen
       // is: this is arrived at from outside the app, not one of the five tabs.
       GoRoute(

@@ -310,7 +310,7 @@ const SAMPLE_VALUES: Record<string, string> = {
   "event.at": "01.09.2026 14:32",
   "event.ip": "203.0.113.10",
   "message.body": "Текст сообщения.",
-  unsubscribeUrl: "https://api.gulyaly.pro/api/marketing/unsubscribe?uid=demo&token=demo",
+  unsubscribeUrl: "https://api.gulyaly.com/api/marketing/unsubscribe?uid=demo&token=demo",
 };
 
 /**

@@ -10,7 +10,7 @@ import { Providers } from "@/components/providers";
 
 const manrope = Manrope({ subsets: ["latin", "cyrillic"], variable: "--font-sans" });
 
-const SITE_URL = "https://gulyaly.pro";
+const SITE_URL = "https://gulyaly.com";
 const SITE_NAME = "Gulyaly";
 const DESCRIPTION =
   "Маркетплейс пополнения баланса мобильных операторов и цифровых сервисов. Быстро, безопасно, с прозрачным курсом.";

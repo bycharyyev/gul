@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 
 /// Everywhere the site itself already builds these -- referral, group-invite. Kept in one
 /// place so this page and AppConfig on mobile never disagree about the shape of the URL.
-const SITE_BASE_URL = "https://gulyaly.pro";
+const SITE_BASE_URL = "https://gulyaly.com";
 
 const emptyDraft: AdminManagedLinkInput = {
   slug: "",
@@ -103,7 +103,7 @@ export default function ManagedLinksPage() {
               <Input
                 value={draft.targetUrl}
                 onChange={(e) => setDraft((d) => ({ ...d, targetUrl: e.target.value }))}
-                placeholder="https://gulyaly.pro/gallery/product/..."
+                placeholder="https://gulyaly.com/gallery/product/..."
                 required
               />
             </div>

@@ -81,7 +81,7 @@ void main() {
       final link = SocialLink.fromJson(const {
         'id': 'cmt67ruzx0002qm01t2ajrqtf',
         'platform': 'INSTAGRAM',
-        'url': 'https://instagram.com/gulyaly.pro',
+        'url': 'https://instagram.com/gulyaly.com',
         'label': '',
         'sortOrder': 0,
       });

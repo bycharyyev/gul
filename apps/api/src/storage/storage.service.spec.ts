@@ -28,18 +28,18 @@ describe("StorageService", () => {
 
     it("uses S3_PUBLIC_BASE_URL when set, so reads can go to a CDN", () => {
       const service = new StorageService(
-        makeConfig({ ...S3_ENV, S3_PUBLIC_BASE_URL: "https://cdn.gulyaly.pro" }),
+        makeConfig({ ...S3_ENV, S3_PUBLIC_BASE_URL: "https://cdn.gulyaly.com" }),
       );
       // The write path still targets the bucket; only the URL handed to clients changes.
-      expect(service.publicKeyFromUrl("https://cdn.gulyaly.pro/avatars/x.jpg")).toBe("avatars/x.jpg");
+      expect(service.publicKeyFromUrl("https://cdn.gulyaly.com/avatars/x.jpg")).toBe("avatars/x.jpg");
       expect(service.publicKeyFromUrl("https://open.s3.regru.cloud/avatars/x.jpg")).toBeNull();
     });
 
     it("tolerates a trailing slash in the configured base", () => {
       const service = new StorageService(
-        makeConfig({ ...S3_ENV, S3_PUBLIC_BASE_URL: "https://cdn.gulyaly.pro/" }),
+        makeConfig({ ...S3_ENV, S3_PUBLIC_BASE_URL: "https://cdn.gulyaly.com/" }),
       );
-      expect(service.publicKeyFromUrl("https://cdn.gulyaly.pro/avatars/x.jpg")).toBe("avatars/x.jpg");
+      expect(service.publicKeyFromUrl("https://cdn.gulyaly.com/avatars/x.jpg")).toBe("avatars/x.jpg");
     });
   });
 

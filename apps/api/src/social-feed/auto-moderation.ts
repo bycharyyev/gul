@@ -68,7 +68,7 @@ const RULES: ReadonlyArray<{
   {
     id: "external-link",
     pattern:
-      /\b(?:https?:\/\/|www\.)(?!(?:[a-z0-9-]+\.)*gulyaly\.pro\b)[a-z0-9-]+\.[a-z]{2,}/i,
+      /\b(?:https?:\/\/|www\.)(?!(?:[a-z0-9-]+\.)*gulyaly\.com\b)[a-z0-9-]+\.[a-z]{2,}/i,
   },
   // Messenger handles, the other way a sale walks out of the door.
   { id: "messenger-handle", pattern: /(?:^|\s)@[a-z0-9_]{4,}/i },

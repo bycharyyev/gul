@@ -33,38 +33,38 @@ check() { # check <host> <path> <expected-codes...>
 }
 
 echo "=== storefront ==="
-check gulyaly.pro /            200
-check gulyaly.pro /gallery     200
-check gulyaly.pro /login       200
-check gulyaly.pro /register    200
-check gulyaly.pro /track       200
-check gulyaly.pro /become-seller 200
+check gulyaly.com /            200
+check gulyaly.com /gallery     200
+check gulyaly.com /login       200
+check gulyaly.com /register    200
+check gulyaly.com /track       200
+check gulyaly.com /become-seller 200
 
 echo "=== seller panel ==="
 # Unauthenticated it either renders its own shell or bounces to the login page. Both are fine;
 # a 500 or a blank 404 is not, and that is what a broken build looks like here.
-check gulyaly.pro /seller          200 302 307
-check gulyaly.pro /seller/orders   200 302 307
-check gulyaly.pro /seller/products 200 302 307
-check gulyaly.pro /seller/shop     200 302 307
+check gulyaly.com /seller          200 302 307
+check gulyaly.com /seller/orders   200 302 307
+check gulyaly.com /seller/products 200 302 307
+check gulyaly.com /seller/shop     200 302 307
 
 echo "=== admin console ==="
-check admin.gulyaly.pro /      200
+check admin.gulyaly.com /      200
 
 echo "=== api, the paths the apps actually call ==="
-check api.gulyaly.pro /api/health/ready          200
-check api.gulyaly.pro /api/catalog/services      200
-check api.gulyaly.pro /api/catalog/payment-methods 200
-check api.gulyaly.pro /api/gallery/products      200
-check api.gulyaly.pro /api/gallery/categories    200
-check api.gulyaly.pro /api/home-slides           200
-check api.gulyaly.pro /api/stories               200
-check api.gulyaly.pro /api/social-links          200
-check api.gulyaly.pro /api/content-pages/welcome 200
+check api.gulyaly.com /api/health/ready          200
+check api.gulyaly.com /api/catalog/services      200
+check api.gulyaly.com /api/catalog/payment-methods 200
+check api.gulyaly.com /api/gallery/products      200
+check api.gulyaly.com /api/gallery/categories    200
+check api.gulyaly.com /api/home-slides           200
+check api.gulyaly.com /api/stories               200
+check api.gulyaly.com /api/social-links          200
+check api.gulyaly.com /api/content-pages/welcome 200
 # Guarded routes must still be guarded. A 200 here would mean the guard came off, which is a
 # worse outcome than a page being down and would otherwise deploy green.
-check api.gulyaly.pro /api/orders/me   401
-check api.gulyaly.pro /api/auth/me     401
+check api.gulyaly.com /api/orders/me   401
+check api.gulyaly.com /api/auth/me     401
 
 echo
 if [ "$FAILED" -gt 0 ]; then

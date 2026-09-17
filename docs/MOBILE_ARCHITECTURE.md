@@ -501,7 +501,7 @@ finished.
   Depth comes from layering, not from a shadow drawn on nothing.
 * **Air.** 20–28dp radii, a wider spacing rhythm, a heavier and tighter type scale.
 
-The brand hues did not change. A customer moving between `gulyaly.pro` and the app has to
+The brand hues did not change. A customer moving between `gulyaly.com` and the app has to
 recognise one product.
 
 ### Real blur is used in exactly one place
@@ -562,7 +562,7 @@ means "not written yet", not "empty page".
 
 The text is wrapped in a small theme-matched stylesheet and shown in a WebView with
 **`onNavigationRequest` returning `prevent` for everything**. Pointing the WebView at
-`gulyaly.pro/pages/privacy` would have dragged the site's header, footer and menu into the app —
+`gulyaly.com/pages/privacy` would have dragged the site's header, footer and menu into the app —
 someone asked to read one page, not to browse the storefront inside a tab. JavaScript is off and
 the content is escaped, so an admin-authored page cannot execute anything.
 

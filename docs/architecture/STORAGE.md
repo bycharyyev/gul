@@ -56,7 +56,7 @@ external profile, not an image, uploading a file for it wouldn't make sense.
 - `POST /api/uploads/image`: real upload → direct `open` bucket URL, fetched it → `200`, deleted
   the object afterward.
 - The `ImageUploadField` UI itself was click-tested for real in a browser against the actual
-  production admin (`admin.gulyaly.pro`, real login, catalog → TMCELL's logo field) — clicking
+  production admin (`admin.gulyaly.com`, real login, catalog → TMCELL's logo field) — clicking
   "Загрузить" opens the file picker correctly; a file selected through it round-tripped through
   the real network request and populated the field with a genuine `open` bucket URL, with the
   preview image rendering successfully (no `onError` fallback triggered). Discarded the unsaved

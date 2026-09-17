@@ -18,8 +18,8 @@ class _FakeBuildContext extends Fake implements BuildContext {}
 
 const _config = AppConfig(
   environment: AppEnvironment.production,
-  apiBaseUrl: 'https://api.gulyaly.pro/api',
-  siteBaseUrl: 'https://gulyaly.pro',
+  apiBaseUrl: 'https://api.gulyaly.com/api',
+  siteBaseUrl: 'https://gulyaly.com',
   connectTimeout: Duration(seconds: 15),
   receiveTimeout: Duration(seconds: 30),
 );
@@ -73,7 +73,7 @@ void main() {
     final repo = _Repository();
     when(
       () => repo.resolveTargetUrl('leto2026'),
-    ).thenAnswer((_) async => 'https://gulyaly.pro/gallery/product/p1');
+    ).thenAnswer((_) async => 'https://gulyaly.com/gallery/product/p1');
 
     await _open(t, repo: repo);
 

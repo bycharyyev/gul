@@ -43,7 +43,7 @@ no session affinity is needed. **A crash of primary's containers alone needs no 
 the secondary is already serving. See [`HIGH_AVAILABILITY.md`](HIGH_AVAILABILITY.md#topology).
 
 > Status note: `infra/watchdog/gul-watchdog.sh` (updated 2026-09-03) records that the second
-> `gulyaly.pro` A record went in on that date, so the secondary is now receiving real customers.
+> `gulyaly.com` A record went in on that date, so the secondary is now receiving real customers.
 > The "what's left" section of `HIGH_AVAILABILITY.md` predates that change and is stale on this
 > one point.
 

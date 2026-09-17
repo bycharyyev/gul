@@ -80,6 +80,6 @@ The bridge keeps those unstable details outside the order state machine.
    unconfigured deployment simply does not expose it.
 3. Insert a `PaymentMethod` row whose `provider` equals the adapter's `key`, `isEnabled = false`.
 4. Configure credentials and `PAYMENT_RETURN_URL` in `/opt/gul/.env` on **both** hosts.
-5. Register `https://api.gulyaly.pro/api/payments/webhooks/<key>` in the merchant account.
+5. Register `https://api.gulyaly.com/api/payments/webhooks/<key>` in the merchant account.
 6. Run a sandbox payment end to end and read the resulting `PaymentEvent` row.
 7. Only then set `isEnabled = true`.

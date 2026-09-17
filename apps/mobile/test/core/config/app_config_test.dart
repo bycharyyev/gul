@@ -24,8 +24,8 @@ void main() {
       // manifest sets usesCleartextTraffic=false, so such a build would fail every request.
       const config = AppConfig(
         environment: AppEnvironment.production,
-        apiBaseUrl: 'https://api.gulyaly.pro/api',
-        siteBaseUrl: 'https://gulyaly.pro',
+        apiBaseUrl: 'https://api.gulyaly.com/api',
+        siteBaseUrl: 'https://gulyaly.com',
         connectTimeout: Duration(seconds: 15),
         receiveTimeout: Duration(seconds: 30),
       );
@@ -37,8 +37,8 @@ void main() {
     test('production keeps request bodies out of the log', () {
       const config = AppConfig(
         environment: AppEnvironment.production,
-        apiBaseUrl: 'https://api.gulyaly.pro/api',
-        siteBaseUrl: 'https://gulyaly.pro',
+        apiBaseUrl: 'https://api.gulyaly.com/api',
+        siteBaseUrl: 'https://gulyaly.com',
         connectTimeout: Duration(seconds: 15),
         receiveTimeout: Duration(seconds: 30),
       );
@@ -49,24 +49,24 @@ void main() {
     test(
       'a trailing slash on the site url is trimmed, so links never double up',
       () {
-        // The invite and referral links concatenate onto this. `gulyaly.pro//i/CODE` resolves for
+        // The invite and referral links concatenate onto this. `gulyaly.com//i/CODE` resolves for
         // a browser and looks like a mistake to the person reading it.
         const config = AppConfig(
           environment: AppEnvironment.production,
-          apiBaseUrl: 'https://api.gulyaly.pro/api',
-          siteBaseUrl: 'https://gulyaly.pro',
+          apiBaseUrl: 'https://api.gulyaly.com/api',
+          siteBaseUrl: 'https://gulyaly.com',
           connectTimeout: Duration(seconds: 15),
           receiveTimeout: Duration(seconds: 30),
         );
 
         expect(
           config.groupInviteLink('ABCDEFGHJK'),
-          'https://gulyaly.pro/i/ABCDEFGHJK',
+          'https://gulyaly.com/i/ABCDEFGHJK',
         );
-        expect(config.referralLink('AMAN'), 'https://gulyaly.pro/r/AMAN');
+        expect(config.referralLink('AMAN'), 'https://gulyaly.com/r/AMAN');
         expect(
           config.productLink('p1'),
-          'https://gulyaly.pro/gallery/product/p1',
+          'https://gulyaly.com/gallery/product/p1',
         );
       },
     );

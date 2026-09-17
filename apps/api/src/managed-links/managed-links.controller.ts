@@ -11,7 +11,7 @@ import { Roles } from "../auth/decorators/roles.decorator";
 export class ManagedLinksController {
   constructor(private links: ManagedLinksService) {}
 
-  // ---- Public: what gulyaly.pro/l/:slug on the storefront resolves through ----
+  // ---- Public: what gulyaly.com/l/:slug on the storefront resolves through ----
 
   @Get(":slug")
   resolve(@Param("slug") slug: string) {

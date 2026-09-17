@@ -27,7 +27,7 @@ one shared backend, plus a B2B channel:
 Supporting systems: an in-app support chat, admin-managed marketing content (home slides,
 "stories", social links, static pages), a referral program paying TMT rewards to whichever
 customer or seller referred a new user, and a "Managed Subdomains" feature letting staff
-provision a new `*.gulyaly.pro` vhost + TLS cert from the admin UI with no server access.
+provision a new `*.gulyaly.com` vhost + TLS cert from the admin UI with no server access.
 
 ## 2. Technology
 

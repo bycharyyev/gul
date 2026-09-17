@@ -74,14 +74,14 @@ class AppConfig {
     // 10.0.2.2 is the host loopback as seen from the Android emulator; localhost there is
     // the emulator itself.
     AppEnvironment.development => 'http://10.0.2.2:4000/api',
-    AppEnvironment.staging => 'https://api.gulyaly.pro/api',
-    AppEnvironment.production => 'https://api.gulyaly.pro/api',
+    AppEnvironment.staging => 'https://api.gulyaly.com/api',
+    AppEnvironment.production => 'https://api.gulyaly.com/api',
   };
 
   static String _defaultSiteFor(AppEnvironment env) => switch (env) {
     AppEnvironment.development => 'http://10.0.2.2:3000',
-    AppEnvironment.staging => 'https://gulyaly.pro',
-    AppEnvironment.production => 'https://gulyaly.pro',
+    AppEnvironment.staging => 'https://gulyaly.com',
+    AppEnvironment.production => 'https://gulyaly.com',
   };
 
   /// The link a customer sends a friend. `/r/<code>` is a real route on the storefront: it stores

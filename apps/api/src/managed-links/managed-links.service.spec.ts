@@ -27,7 +27,7 @@ describe("ManagedLinksService.resolve", () => {
         findUnique: jest.fn().mockResolvedValue({
           id: "l1",
           slug: "leto2026",
-          targetUrl: "https://gulyaly.pro/gallery/product/p1",
+          targetUrl: "https://gulyaly.com/gallery/product/p1",
           isEnabled: true,
         }),
         update,
@@ -36,7 +36,7 @@ describe("ManagedLinksService.resolve", () => {
 
     const link = await target(prisma).resolve("leto2026");
 
-    expect(link.targetUrl).toBe("https://gulyaly.pro/gallery/product/p1");
+    expect(link.targetUrl).toBe("https://gulyaly.com/gallery/product/p1");
     expect(update).toHaveBeenCalledWith({
       where: { id: "l1" },
       data: { clickCount: { increment: 1 } },
@@ -54,7 +54,7 @@ describe("ManagedLinksService.create", () => {
     await expect(
       target(prisma).create({
         slug: "leto2026",
-        targetUrl: "https://gulyaly.pro/gallery",
+        targetUrl: "https://gulyaly.com/gallery",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });

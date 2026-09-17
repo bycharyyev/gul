@@ -155,7 +155,7 @@ Every response carries `X-Quota-Limit`, `-Remaining` and `-Reset`, and a rejecti
 being rejected.
 
 **`X-Quota-*`, not `X-RateLimit-*`, and that distinction was learned from production.** A live
-check against `api.gulyaly.pro` showed `@nestjs/throttler` already writing `X-RateLimit-Limit: 120`
+check against `api.gulyaly.com` showed `@nestjs/throttler` already writing `X-RateLimit-Limit: 120`
 for its own per-route, per-IP limit. Reusing those names would have overwritten them and produced
 a header that actively misleads: a public caller would read "limit 300" from the quota and still be
 rejected at 120 by the throttler, whose numbers had just been erased. Two limiters, two sets of

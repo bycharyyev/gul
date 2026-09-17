@@ -71,7 +71,7 @@ primary's *database* is gone too.
      failover requires both nodes on the same L2 broadcast domain. These two VPS are on
      different subnets with different gateways (see table above) — a floating IP simply cannot
      move between them at the network layer. This isn't a config problem, it's how ARP/VRRP work.
-  2. **DNS-provider API access — resolved 2026-08-27.** `gulyaly.pro`'s NS was pointed at
+  2. **DNS-provider API access — resolved 2026-08-27.** `gulyaly.com`'s NS was pointed at
      Timeweb Cloud (registrar stayed reg.ru; Timeweb is now the authoritative DNS). Timeweb's API
      uses a plain Bearer token (`TIMEWEB_API_TOKEN` secret) with no IP allowlisting, unlike
      reg.ru's — see `manage-dns.yml` and the "DNS management" section in `CLAUDE.md`. Automating
@@ -80,7 +80,7 @@ primary's *database* is gone too.
      doc already argues against — a human-triggered `manage-dns.yml` dispatch as the last step of
      `failover-to-secondary.yml` would be the shape of it, not an automatic trigger.
 - **Routing across both nodes still needs one more DNS record.** The cheap way to get real
-  client-side failover for the common case: add a *second* A record for `gulyaly.pro` (the
+  client-side failover for the common case: add a *second* A record for `gulyaly.com` (the
   wildcard already covers `www`/`admin`/`api`) pointing at the secondary's IP, alongside the
   existing one for primary. Most HTTP clients and browsers already retry the next A record on a
   connection failure. This is now a one-line `manage-dns.yml` dispatch away rather than a DNS-panel
@@ -131,7 +131,7 @@ down"** — nothing pages a human on that condition today. What exists:
 
 ### The actual steps
 
-1. **Diagnose first.** `curl https://api.gulyaly.pro/api/health/ready` failing doesn't by itself
+1. **Diagnose first.** `curl https://api.gulyaly.com/api/health/ready` failing doesn't by itself
    mean the database is gone — check `ssh` reachability to primary and `docker compose ps` there
    if at all possible. If primary's containers are just crashed/restarting and the VPS itself is
    reachable, this is the "nothing to do, secondary's already serving" case, not a failover case.
@@ -159,7 +159,7 @@ down"** — nothing pages a human on that condition today. What exists:
      connects changes.
    - Starts the secondary's local Redis, switches `PRIMARY_REDIS_HOST=redis`, recreates API, and
      health-checks it against the freshly promoted database and emergency queue.
-5. **DNS**: if the second A record for `gulyaly.pro` → `91.184.250.89` (see "what's left" below)
+5. **DNS**: if the second A record for `gulyaly.com` → `91.184.250.89` (see "what's left" below)
    already exists, most clients fail over on their own via normal A-record retry — nothing to do.
    If it doesn't exist yet, add it via `manage-dns.yml` (Timeweb Cloud API — **not** the reg.ru
    panel; NS moved to Timeweb on 2026-08-27, see the "DNS management" section in `CLAUDE.md`). TTL
@@ -220,7 +220,7 @@ nothing financially authoritative lives only in Redis.
 
 `enable-active-active.yml` has run successfully — both nodes are up, both pass
 `/api/health/ready` against the same primary database. What's still needed is purely on the DNS
-side: **add a second A record for `gulyaly.pro` pointing at `91.184.250.89`**, alongside the
+side: **add a second A record for `gulyaly.com` pointing at `91.184.250.89`**, alongside the
 existing one for the primary. Until that exists, DNS still only ever hands out primary's IP, so
 the secondary — while fully healthy and serving correctly if asked — never actually receives real
 traffic today. This is no longer blocked on DNS-panel access (see the Timeweb API section above)

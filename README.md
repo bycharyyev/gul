@@ -53,7 +53,7 @@ staff, visible live in the admin console.
 compared, raw key shown only once) against the same catalog, rates, and order pipeline used by
 consumer orders — this is the wholesale B2B channel.
 
-**Managed subdomains.** From the admin console, staff can spin up a new `*.gulyaly.pro` subdomain
+**Managed subdomains.** From the admin console, staff can spin up a new `*.gulyaly.com` subdomain
 proxying to any local service on the VPS — provisioning writes an nginx vhost and issues its own
 TLS certificate automatically via a GitHub Actions pipeline, with no manual server work. Any
 hostname that *isn't* a real vhost or a currently-managed subdomain falls through to a branded
@@ -134,7 +134,7 @@ Two VPS instances, both provisioned identically from GitHub Actions (no manual s
   [`HIGH_AVAILABILITY.md`](docs/architecture/HIGH_AVAILABILITY.md), including the one manual DNS
   step (a second A record) still needed for both nodes to actually receive live traffic today.
 
-Domains are split by subdomain (`gulyaly.pro` → web, `admin.` → admin, `api.` → api), routed by
+Domains are split by subdomain (`gulyaly.com` → web, `admin.` → admin, `api.` → api), routed by
 host nginx.
 
 ## Security posture

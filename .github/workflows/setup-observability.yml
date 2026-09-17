@@ -2,7 +2,7 @@ name: Set up observability (netdata streaming to primary + bounded journald rete
 
 # Extends the netdata install already on primary rather than adding Prometheus/Grafana/Loki:
 # - secondary gets netdata installed as a streaming "child" of primary's "parent" -- one unified
-#   dashboard (existing gate/nginx auth on primary, admin.gulyaly.pro/netdata), no second login,
+#   dashboard (existing gate/nginx auth on primary, admin.gulyaly.com/netdata), no second login,
 #   no Netdata Cloud account, near-zero extra resource cost.
 # - journald retention is capped on both hosts (SystemMaxUse) so switching Docker's logging driver
 #   to journald (docker-compose.*.yml, same commit as this file) can't refill the disk the way
