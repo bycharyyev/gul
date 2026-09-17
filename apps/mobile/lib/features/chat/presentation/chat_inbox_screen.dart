@@ -118,13 +118,13 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(22),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(.85),
+                          color: Colors.white.withValues(alpha: .85),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(22),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(.85),
+                          color: Colors.white.withValues(alpha: .85),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -241,11 +241,11 @@ class _ConversationTile extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: Colors.white.withOpacity(.68),
-      shadowColor: Colors.indigo.withOpacity(.12),
+      color: Colors.white.withValues(alpha: .68),
+      shadowColor: Colors.indigo.withValues(alpha: .12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: Colors.white.withOpacity(.9)),
+        side: BorderSide(color: Colors.white.withValues(alpha: .9)),
       ),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
