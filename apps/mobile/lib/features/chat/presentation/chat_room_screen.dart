@@ -198,177 +198,196 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       ),
       body: _GlassBackdrop(
         child: Column(
-        children: [
-          if (view.valueOrNull?.officialCategory ==
-              ChatOfficialCategory.security)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text(
-                strings.get('chat.securityHint'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          Expanded(
-            child: AsyncView<ChatRoomView>(
-              value: view,
-              onRetry: () =>
-                  ref.invalidate(chatMessagesProvider(widget.conversationId)),
-              skeleton: const Center(child: CircularProgressIndicator()),
-              isEmpty: (room) => room.messages.isEmpty,
-              empty: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    strings.get('chat.roomEmpty'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+          children: [
+            if (view.valueOrNull?.officialCategory ==
+                ChatOfficialCategory.security)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Text(
+                  strings.get('chat.securityHint'),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              data: (room) => ListView.builder(
-                controller: _scroll,
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                itemCount: room.messages.length,
-                itemBuilder: (context, i) =>
-                    _Bubble(message: room.messages[i], myUserId: myId),
-              ),
-            ),
-          ),
-          SafeArea(
-            top: false,
-            child: view.valueOrNull?.canPost == false
-                // A channel somebody follows. The note replaces the composer rather than showing a
-                // disabled one: a greyed-out field invites tapping to find out why.
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            Expanded(
+              child: AsyncView<ChatRoomView>(
+                value: view,
+                onRetry: () =>
+                    ref.invalidate(chatMessagesProvider(widget.conversationId)),
+                skeleton: const Center(child: CircularProgressIndicator()),
+                isEmpty: (room) => room.messages.isEmpty,
+                empty: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
                     child: Text(
-                      strings.get('chat.readOnly'),
+                      strings.get('chat.roomEmpty'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 12.5,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  )
-                : Container(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                    decoration: BoxDecoration(
-                      // The composer is the one surface that genuinely blurs what scrolls under
-                      // it -- a single fixed bar, not one filter per message, so the list stays
-                      // cheap to scroll.
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surface.withValues(alpha: 0.78),
-                      border: Border(
-                        top: BorderSide(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outlineVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                data: (room) => ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  itemCount: room.messages.length,
+                  itemBuilder: (context, i) =>
+                      _Bubble(message: room.messages[i], myUserId: myId),
+                ),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: view.valueOrNull?.canPost == false
+                  // A channel somebody follows. The note replaces the composer rather than showing a
+                  // disabled one: a greyed-out field invites tapping to find out why.
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Text(
+                        strings.get('chat.readOnly'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_attachment != null)
-                          _PendingAttachment(
-                            attachment: _attachment!,
-                            onRemove: () => setState(() => _attachment = null),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                      decoration: BoxDecoration(
+                        // The composer is the one surface that genuinely blurs what scrolls under
+                        // it -- a single fixed bar, not one filter per message, so the list stays
+                        // cheap to scroll.
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.78),
+                        border: Border(
+                          top: BorderSide(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.outlineVariant.withValues(alpha: 0.6),
                           ),
-                        Row(
-                      children: [
-                        IconButton(
-                          onPressed: _uploading || _sending
-                              ? null
-                              : () => showModalBottomSheet<void>(
-                                  context: context,
-                                  builder: (sheet) => SafeArea(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ListTile(
-                                          leading: const Icon(Icons.photo_outlined),
-                                          title: Text(strings.get('chat.attachPhoto')),
-                                          onTap: () {
-                                            Navigator.of(sheet).pop();
-                                            unawaited(_attach(video: false));
-                                          },
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_attachment != null)
+                            _PendingAttachment(
+                              attachment: _attachment!,
+                              onRemove: () =>
+                                  setState(() => _attachment = null),
+                            ),
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: _uploading || _sending
+                                    ? null
+                                    : () => showModalBottomSheet<void>(
+                                        context: context,
+                                        builder: (sheet) => SafeArea(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.photo_outlined,
+                                                ),
+                                                title: Text(
+                                                  strings.get(
+                                                    'chat.attachPhoto',
+                                                  ),
+                                                ),
+                                                onTap: () {
+                                                  Navigator.of(sheet).pop();
+                                                  unawaited(
+                                                    _attach(video: false),
+                                                  );
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.videocam_outlined,
+                                                ),
+                                                title: Text(
+                                                  strings.get(
+                                                    'chat.attachVideo',
+                                                  ),
+                                                ),
+                                                onTap: () {
+                                                  Navigator.of(sheet).pop();
+                                                  unawaited(
+                                                    _attach(video: true),
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        ListTile(
-                                          leading: const Icon(Icons.videocam_outlined),
-                                          title: Text(strings.get('chat.attachVideo')),
-                                          onTap: () {
-                                            Navigator.of(sheet).pop();
-                                            unawaited(_attach(video: true));
-                                          },
+                                      ),
+                                icon: _uploading
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
                                         ),
-                                      ],
+                                      )
+                                    : const Icon(Icons.attach_file_rounded),
+                                tooltip: strings.get('chat.attach'),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: _input,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  maxLength: 2000,
+                                  textInputAction: TextInputAction.send,
+                                  onSubmitted: (_) => _send(),
+                                  decoration: InputDecoration(
+                                    hintText: strings.get('chat.inputHint'),
+                                    counterText: '',
+                                    filled: true,
+                                    fillColor: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withValues(alpha: 0.7),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(22),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(22),
+                                      borderSide: BorderSide.none,
                                     ),
                                   ),
                                 ),
-                          icon: _uploading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.attach_file_rounded),
-                          tooltip: strings.get('chat.attach'),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _input,
-                            minLines: 1,
-                            maxLines: 4,
-                            maxLength: 2000,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _send(),
-                            decoration: InputDecoration(
-                              hintText: strings.get('chat.inputHint'),
-                              counterText: '',
-                              filled: true,
-                              fillColor: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest
-                                  .withValues(alpha: 0.7),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                borderSide: BorderSide.none,
+                              const SizedBox(width: 8),
+                              IconButton.filled(
+                                onPressed: _sending ? null : _send,
+                                icon: _sending
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.send_rounded),
+                                tooltip: strings.get('chat.send'),
                               ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: _sending ? null : _send,
-                          icon: _sending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.send_rounded),
-                          tooltip: strings.get('chat.send'),
-                        ),
-                      ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-          ),
-        ],
+            ),
+          ],
         ),
       ),
     );
@@ -532,7 +551,8 @@ class _AttachmentView extends StatelessWidget {
             attachment.url,
             fit: BoxFit.cover,
             // A broken or still-loading picture must not collapse the bubble to nothing.
-            errorBuilder: (_, _, _) => _FileRow(attachment: attachment, mine: mine),
+            errorBuilder: (_, _, _) =>
+                _FileRow(attachment: attachment, mine: mine),
           ),
         ),
       );
@@ -630,10 +650,7 @@ class _PendingAttachment extends StatelessWidget {
           ),
           Text(
             _formatBytes(attachment.size),
-            style: TextStyle(
-              fontSize: 11,
-              color: scheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
           ),
           IconButton(
             onPressed: onRemove,
