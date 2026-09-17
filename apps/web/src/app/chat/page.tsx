@@ -313,7 +313,8 @@ export default function ChatPage() {
     : "";
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col px-3 py-5 sm:px-6">
+    <main className="relative mx-auto flex min-h-[calc(100dvh-5rem)] max-w-6xl flex-col overflow-hidden px-3 py-5 sm:px-6">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_8%_8%,rgba(129,140,248,.24),transparent_35%),radial-gradient(circle_at_92%_18%,rgba(45,212,191,.2),transparent_32%),linear-gradient(135deg,#f8fbff,#eef2ff 48%,#f0fdfa)] dark:bg-[radial-gradient(circle_at_8%_8%,rgba(99,102,241,.25),transparent_35%),radial-gradient(circle_at_92%_18%,rgba(20,184,166,.18),transparent_32%),linear-gradient(135deg,#080d1d,#111936 48%,#071b1b)]" />
       <header className="mb-5 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Чаты</h1>
@@ -353,15 +354,15 @@ export default function ChatPage() {
           {notice}
         </p>
       )}
-      <div className="flex h-[min(760px,75dvh)] min-h-[440px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
+      <div className="flex h-[min(760px,78dvh)] min-h-[480px] overflow-hidden rounded-[28px] border border-white/70 bg-white/55 shadow-[0_24px_80px_rgba(30,64,175,.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/55 dark:shadow-black/30">
         <aside
           aria-label="Список чатов"
           className={cn(
-            "w-full shrink-0 flex-col border-r border-slate-200 dark:border-white/10 md:flex md:w-80",
+            "w-full shrink-0 flex-col border-r border-white/70 bg-white/45 dark:border-white/10 dark:bg-slate-900/35 md:flex md:w-80",
             active || panel ? "hidden" : "flex",
           )}
         >
-          <div className="space-y-3 p-4">
+          <div className="space-y-3 border-b border-white/60 p-4 dark:border-white/10">
             <input
               aria-label="Поиск чатов"
               placeholder="Найти чат"
@@ -376,7 +377,7 @@ export default function ChatPage() {
                   aria-pressed={filter === label}
                   onClick={() => setFilter(label)}
                   className={cn(
-                    "rounded-full px-2.5 py-1.5 text-xs focus-visible:ring-2 focus-visible:ring-brand-400",
+                    "rounded-full px-3 py-1.5 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-brand-400",
                     filter === label
                       ? "bg-brand-600 text-white"
                       : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
@@ -405,7 +406,7 @@ export default function ChatPage() {
                   onClick={() => open(row.id)}
                   className={cn(
                     "flex w-full gap-3 px-4 py-3 text-left hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400 dark:hover:bg-white/5",
-                    active === row.id && "bg-brand-50 dark:bg-brand-950",
+                    active === row.id && "bg-white/80 shadow-sm dark:bg-white/10",
                   )}
                 >
                   {row.imageUrl ? (
@@ -823,7 +824,7 @@ export default function ChatPage() {
             </div>
           ) : active ? (
             <>
-              <header className="flex items-center gap-2 border-b border-slate-200 px-3 py-3 dark:border-white/10">
+              <header className="flex items-center gap-2 border-b border-white/60 bg-white/35 px-3 py-3 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/35">
                 <button
                   aria-label="К списку чатов"
                   className={cn(button, "md:hidden")}
@@ -883,7 +884,7 @@ export default function ChatPage() {
                   )}
               </header>
               <div
-                className="flex-1 space-y-3 overflow-y-auto bg-gradient-to-br from-brand-50/70 via-white to-accent-50/60 p-4 dark:from-brand-950/40 dark:via-slate-950 dark:to-accent-950/30"
+                className="flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_85%_10%,rgba(45,212,191,.16),transparent_28%),radial-gradient(circle_at_15%_80%,rgba(129,140,248,.18),transparent_30%)] p-4 dark:bg-[radial-gradient(circle_at_85%_10%,rgba(20,184,166,.14),transparent_28%),radial-gradient(circle_at_15%_80%,rgba(99,102,241,.18),transparent_30%)]"
                 aria-live="polite"
                 aria-relevant="additions"
               >
@@ -961,7 +962,7 @@ export default function ChatPage() {
               </div>
               {conversation?.room.canPost ? (
                 <form
-                  className="flex flex-wrap items-end gap-2 border-t border-slate-200 p-3 dark:border-white/10"
+                  className="flex flex-wrap items-end gap-2 border-t border-white/60 bg-white/35 p-3 backdrop-blur-md dark:border-white/10 dark:bg-slate-900/35"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void send();

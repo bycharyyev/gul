@@ -38,7 +38,11 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
     final inbox = ref.watch(chatInboxProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xfff4f7ff),
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: Text(strings.get('chat.title')),
         actions: [
           IconButton(
@@ -57,90 +61,122 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(chatUnreadProvider);
-          ref.invalidate(chatInboxProvider);
-          await ref.read(chatInboxProvider.future);
-        },
-        child: AsyncView<List<ChatConversation>>(
-          value: inbox,
-          onRetry: () => ref.invalidate(chatInboxProvider),
-          skeleton: const _InboxSkeleton(),
-          isEmpty: (list) => list.isEmpty,
-          empty: _EmptyInbox(),
-          data: (list) {
-            final visible = list.where((item) {
-              final title = item.title.isEmpty
-                  ? strings.get('chat.support')
-                  : item.title;
-              final matchesQuery = '$title ${item.lastMessage ?? ''}'
-                  .toLowerCase()
-                  .contains(_query);
-              return matchesQuery &&
-                  switch (_filter) {
-                    'unread' => item.unreadCount > 0,
-                    'official' => item.officialCategory != null,
-                    'groups' => item.kind == ChatKind.group,
-                    _ => true,
-                  };
-            }).toList();
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                12,
-                8,
-                12,
-                AppShell.contentBottomInset,
-              ),
-              children: [
-                TextField(
-                  onChanged: (value) =>
-                      setState(() => _query = value.trim().toLowerCase()),
-                  decoration: InputDecoration(
-                    hintText: strings.get('chat.search'),
-                    prefixIcon: const Icon(Icons.search_rounded),
-                  ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xfff8fbff), Color(0xffeef2ff), Color(0xffe5f7f5)],
+          ),
+        ),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(chatUnreadProvider);
+            ref.invalidate(chatInboxProvider);
+            await ref.read(chatInboxProvider.future);
+          },
+          child: AsyncView<List<ChatConversation>>(
+            value: inbox,
+            onRetry: () => ref.invalidate(chatInboxProvider),
+            skeleton: const _InboxSkeleton(),
+            isEmpty: (list) => list.isEmpty,
+            empty: _EmptyInbox(),
+            data: (list) {
+              final visible = list.where((item) {
+                final title = item.title.isEmpty
+                    ? strings.get('chat.support')
+                    : item.title;
+                final matchesQuery = '$title ${item.lastMessage ?? ''}'
+                    .toLowerCase()
+                    .contains(_query);
+                return matchesQuery &&
+                    switch (_filter) {
+                      'unread' => item.unreadCount > 0,
+                      'official' => item.officialCategory != null,
+                      'groups' => item.kind == ChatKind.group,
+                      _ => true,
+                    };
+              }).toList();
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  12,
+                  8,
+                  12,
+                  AppShell.contentBottomInset,
                 ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final filter in [
-                        'all',
-                        'unread',
-                        'official',
-                        'groups',
-                      ])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(strings.get('chat.$filter')),
-                            selected: _filter == filter,
-                            onSelected: (_) => setState(() => _filter = filter),
-                          ),
+                children: [
+                  TextField(
+                    onChanged: (value) =>
+                        setState(() => _query = value.trim().toLowerCase()),
+                    decoration: InputDecoration(
+                      hintText: strings.get('chat.search'),
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      filled: true,
+                      fillColor: Colors.white70,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide: BorderSide(
+                          color: Colors.white.withOpacity(.85),
                         ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (visible.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      strings.get('chat.noMatches'),
-                      textAlign: TextAlign.center,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide: BorderSide(
+                          color: Colors.white.withOpacity(.85),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(22),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 1.5,
+                        ),
+                      ),
                     ),
                   ),
-                for (final conversation in visible)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ConversationTile(conversation: conversation),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final filter in [
+                          'all',
+                          'unread',
+                          'official',
+                          'groups',
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(strings.get('chat.$filter')),
+                              selected: _filter == filter,
+                              onSelected: (_) =>
+                                  setState(() => _filter = filter),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-              ],
-            );
-          },
+                  const SizedBox(height: 8),
+                  if (visible.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        strings.get('chat.noMatches'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  for (final conversation in visible)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ConversationTile(conversation: conversation),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -204,6 +240,13 @@ class _ConversationTile extends StatelessWidget {
     final unread = conversation.unreadCount;
 
     return Card(
+      elevation: 0,
+      color: Colors.white.withOpacity(.68),
+      shadowColor: Colors.indigo.withOpacity(.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: Colors.white.withOpacity(.9)),
+      ),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         onTap: () => context.push(
@@ -212,7 +255,8 @@ class _ConversationTile extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: scheme.primaryContainer,
           foregroundImage:
-              (conversation.imageUrl != null && conversation.imageUrl!.isNotEmpty)
+              (conversation.imageUrl != null &&
+                  conversation.imageUrl!.isNotEmpty)
               ? NetworkImage(conversation.imageUrl!)
               : null,
           // Shown when there is no picture, and again if one fails to load.
