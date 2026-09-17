@@ -1,0 +1,95 @@
+name: Bootstrap gulyaly.com DNS zone in Timeweb
+
+# One-off: gulyaly.com's registrar-level NS now points at Timeweb (confirmed via Verisign RDAP),
+# but Timeweb's own nameservers answer REFUSED for it -- the domain hasn't been added as a hosted
+# zone inside the Timeweb account yet (NS delegation and "is this zone hosted here" are separate).
+# This adds the domain, then mirrors gulyaly.pro's real live A-record set exactly:
+#   apex, www, api -> both DEPLOY_HOST and SECONDARY_HOST (dual A, active/active)
+#   admin -> DEPLOY_HOST only (single, matches gulyaly.pro's admin vhost -- one predictable box)
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Which step to run'
+        required: true
+        type: choice
+        options:
+          - list-domains
+          - add-domain
+          - add-a-records
+          - verify
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List domains currently in the Timeweb account (discover the add-domain shape)
+        if: inputs.step == 'list-domains'
+        run: |
+          echo "--- GET /api/v1/domains ---"
+          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains" | python -m json.tool || true
+          echo
+          echo "--- does gulyaly.com already exist as a zone? ---"
+          curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records"
+
+      - name: Add gulyaly.com to the account's DNS hosting
+        if: inputs.step == 'add-domain'
+        run: |
+          echo "--- POST /api/v1/domains (add-existing / delegate-only domain) ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v1/domains" \
+            -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"fqdn": "gulyaly.com"}'
+          echo
+          echo "--- confirm: list domains again ---"
+          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains" | python -m json.tool || true
+
+      - name: Add A records mirroring gulyaly.pro's live set exactly
+        if: inputs.step == 'add-a-records'
+        run: |
+          set -e
+          PRI="${{ secrets.DEPLOY_HOST }}"
+          SEC="${{ secrets.SECONDARY_HOST }}"
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+
+          add_a() { # add_a <fqdn> <ip>
+            curl -s -w ' -> HTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/$1/dns-records" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"type\": \"A\", \"value\": \"$2\", \"ttl\": 300}"
+          }
+          register() { # register <label>
+            curl -s -o /dev/null -w '  register %s -> HTTP %{http_code}\n' -X POST \
+              "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/$1" \
+              -H "Authorization: Bearer $TOKEN"
+          }
+
+          echo "--- apex: gulyaly.com -> primary + secondary ---"
+          add_a gulyaly.com "$PRI"
+          add_a gulyaly.com "$SEC"
+
+          for name in www api; do
+            echo "--- $name.gulyaly.com -> primary + secondary ---"
+            register "$name"
+            add_a "$name.gulyaly.com" "$PRI"
+            add_a "$name.gulyaly.com" "$SEC"
+          done
+
+          echo "--- admin.gulyaly.com -> primary only ---"
+          register "admin"
+          add_a "admin.gulyaly.com" "$PRI"
+
+      - name: Verify current zone state
+        if: inputs.step == 'verify'
+        run: |
+          echo "--- base domain listing ---"
+          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python -m json.tool || true
+          for name in www api admin; do
+            echo "--- $name.gulyaly.com ---"
+            curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+              "https://api.timeweb.cloud/api/v2/domains/$name.gulyaly.com/dns-records" | python -m json.tool || true
+          done
