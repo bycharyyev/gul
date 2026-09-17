@@ -33,7 +33,7 @@ source /etc/gul-disk-alert.env # MAIL_ALERT_USER, MAIL_ALERT_PASS, MAIL_ALERT_TO
 
 BODY_FILE=$(mktemp)
 {
-  echo "From: Gulyaly Alerts <alerts@gulyaly.com>"
+  echo "From: Gulyaly Alerts <alerts@gulyaly.pro>"
   echo "To: $MAIL_ALERT_TO"
   echo "Subject: [gulyaly] disk usage on $HOST: ${USAGE}%$([ "$FORCE" -eq 1 ] && echo ' (test)')"
   echo "Date: $(date -R)"
@@ -51,7 +51,7 @@ BODY_FILE=$(mktemp)
 } >"$BODY_FILE"
 
 curl -s -m 20 -k --url "smtp://${MAIL_RELAY_HOST}:587" --ssl-reqd \
-  --mail-from "alerts@gulyaly.com" --mail-rcpt "$MAIL_ALERT_TO" \
+  --mail-from "alerts@gulyaly.pro" --mail-rcpt "$MAIL_ALERT_TO" \
   --user "${MAIL_ALERT_USER}:${MAIL_ALERT_PASS}" --upload-file "$BODY_FILE"
 
 rm -f "$BODY_FILE"

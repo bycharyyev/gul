@@ -1,4 +1,4 @@
-# DNS changelog — gulyaly.com
+# DNS changelog — gulyaly.pro
 
 Record of every DNS change made via `manage-dns.yml` (Timeweb Cloud API). This is **not** an
 approval log — during the current pre-launch test phase, DNS changes are made without a
@@ -11,31 +11,31 @@ are documented in [CLAUDE.md](../../CLAUDE.md#dns-management-timeweb-cloud-api).
 
 ## 2026-08-27 — NS migration to Timeweb, emergency restore
 
-`gulyaly.com`'s NS records had just been switched to Timeweb (`ns1/ns2.timeweb.ru`,
+`gulyaly.pro`'s NS records had just been switched to Timeweb (`ns1/ns2.timeweb.ru`,
 `ns3/ns4.timeweb.org`); the new zone had zero A records, putting production at risk of going
 unreachable as resolvers picked up the new NS.
 
-- **`restore-core-a-records`** — apex (`gulyaly.com`) and wildcard (`*.gulyaly.com`) A records →
+- **`restore-core-a-records`** — apex (`gulyaly.pro`) and wildcard (`*.gulyaly.pro`) A records →
   primary VPS. Restores what CLAUDE.md documents as the intended state.
-- **`add-mail-a-record`** — `mail.gulyaly.com` A record → secondary VPS (overrides the wildcard
+- **`add-mail-a-record`** — `mail.gulyaly.pro` A record → secondary VPS (overrides the wildcard
   for this one name; the mail relay lives on the secondary).
-- **`merge-spf-record`** — PATCHed Timeweb's existing SPF record for `gulyaly.com`
-  (`v=spf1 include:_spf.timeweb.ru ~all`) to add `a:mail.gulyaly.com`, rather than creating a
+- **`merge-spf-record`** — PATCHed Timeweb's existing SPF record for `gulyaly.pro`
+  (`v=spf1 include:_spf.timeweb.ru ~all`) to add `a:mail.gulyaly.pro`, rather than creating a
   second SPF TXT record. Two SPF records for one name is invalid (RFC 7208) and breaks the check
   entirely — this lesson mattered again a day later (see 2026-08-28 below).
-- **`add-dkim-record`** — `mail._domainkey.gulyaly.com` TXT, publishing the DKIM public key for
+- **`add-dkim-record`** — `mail._domainkey.gulyaly.pro` TXT, publishing the DKIM public key for
   selector `mail` (the transactional-mail signing key, OpenDKIM + Postfix milter on the
-  secondary). Makes DKIM verifiable by recipients for `noreply@gulyaly.com`.
+  secondary). Makes DKIM verifiable by recipients for `noreply@gulyaly.pro`.
 
-## 2026-08-28 — newsletter.gulyaly.com (mail-split step 2)
+## 2026-08-28 — newsletter.gulyaly.pro (mail-split step 2)
 
 Part of separating marketing mail onto its own sending domain/selector, so spam complaints on a
 newsletter can't drag down deliverability for transactional mail (order confirmations, codes).
 
-- **`add-newsletter-spf-record`** — new TXT record for `newsletter.gulyaly.com`,
+- **`add-newsletter-spf-record`** — new TXT record for `newsletter.gulyaly.pro`,
   `v=spf1 ip4:<secondary-ip> ~all`. Its own record (not merged into the apex's), since
-  `newsletter.gulyaly.com` sends mail as itself.
-- **`add-newsletter-dkim-record`** — `news2026._domainkey.newsletter.gulyaly.com` TXT, the DKIM
+  `newsletter.gulyaly.pro` sends mail as itself.
+- **`add-newsletter-dkim-record`** — `news2026._domainkey.newsletter.gulyaly.pro` TXT, the DKIM
   public key for selector `news2026` (deliberately a different selector from the transactional
   `mail` selector, so the two signing keys are fully independent).
 - **`remove-newsletter-default-spf-duplicate`** — registering the `newsletter` subdomain as its
@@ -58,19 +58,19 @@ delete Timeweb's auto-added SPF duplicate before relying on the domain's own SPF
 
 Strengthened DMARC from `p=none` (Timeweb's default, monitor-only) to `p=quarantine; pct=100`, as
 part of a deliverability push after a test email landed in spam. Real trust signal for
-correctly-aligned mail (DKIM `d=gulyaly.com` matches From, SPF authorizes `mail.gulyaly.com`);
+correctly-aligned mail (DKIM `d=gulyaly.pro` matches From, SPF authorizes `mail.gulyaly.pro`);
 deliberately not `p=reject` yet on a domain still building sending reputation.
 
 **Incident, self-caused and self-fixed within the same session**: first attempt used `PATCH` on
 the existing DMARC record's `value` without including `subdomain` in the body — this silently
-reset the record's subdomain to `null`, relocating it from `_dmarc.gulyaly.com` to the bare apex.
-For a few minutes, `_dmarc.gulyaly.com` had no real DMARC record (falling back to the `*` wildcard
+reset the record's subdomain to `null`, relocating it from `_dmarc.gulyaly.pro` to the bare apex.
+For a few minutes, `_dmarc.gulyaly.pro` had no real DMARC record (falling back to the `*` wildcard
 SPF-content record — an unrelated garbage value at that name) while the apex carried a stray
 DMARC-content TXT record it should never have had. A second `PATCH` attempt with `subdomain`
 explicitly included did *not* fix it — the field turned out not to be updatable via `PATCH` at
 all, regardless of what's sent. Fixed properly by deleting the mis-relocated apex record and
-recreating it fresh at `_dmarc.gulyaly.com` via the normal register-subdomain-then-POST path.
-Confirmed via authoritative NS: `_dmarc.gulyaly.com` now returns the correct DMARC value, apex
+recreating it fresh at `_dmarc.gulyaly.pro` via the normal register-subdomain-then-POST path.
+Confirmed via authoritative NS: `_dmarc.gulyaly.pro` now returns the correct DMARC value, apex
 carries only the correct SPF, no stray record either place. See CLAUDE.md's DNS management
 section for the documented gotcha — PATCH is only safe for a record's value when the record is
 already sitting at the exact name it should stay at; relocating anything means delete + recreate.

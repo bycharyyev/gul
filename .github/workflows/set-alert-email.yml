@@ -11,7 +11,7 @@ on:
       address:
         description: Address to send operational alerts to
         type: string
-        default: support@gulyaly.com
+        default: support@gulyaly.pro
         required: true
 
 jobs:

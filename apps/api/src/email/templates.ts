@@ -1,5 +1,5 @@
 /** Shared with email-layout.ts -- see the note there on why this is a PNG on a public URL. */
-const LOGO_URL = process.env.MAIL_LOGO_URL || "https://gulyaly.com/brand/gulyaly-logo-96.png";
+const LOGO_URL = process.env.MAIL_LOGO_URL || "https://gulyaly.pro/brand/gulyaly-logo-96.png";
 
 function escapeHtml(value: string) {
   return value

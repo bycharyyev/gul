@@ -10,7 +10,7 @@ follows is standard sender authentication and hygiene, which is what actually mo
 A real message delivered to Gmail on 2026-09-01 returned:
 
 ```
-dkim=pass  header.i=@gulyaly.com header.s=dkim
+dkim=pass  header.i=@gulyaly.pro header.s=dkim
 spf=pass   (designates 31.31.197.80 as permitted sender)
 dmarc=pass (p=QUARANTINE)
 ```
@@ -23,11 +23,11 @@ to the sending path.
 
 | Control | State |
 |---|---|
-| SPF | `v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com include:_spf.hosting.reg.ru a:sm41.hosting.reg.ru ~all` |
+| SPF | `v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.pro include:_spf.hosting.reg.ru a:sm41.hosting.reg.ru ~all` |
 | DKIM | selector `dkim`, 2048-bit, signed by REG.RU |
 | DMARC | `p=quarantine; pct=100; adkim=r; aspf=r` |
 | TLS | SMTP submission on 465 (implicit TLS) |
-| Alignment | relaxed (`adkim=r`, `aspf=r`) — From domain and signing domain are both `gulyaly.com` |
+| Alignment | relaxed (`adkim=r`, `aspf=r`) — From domain and signing domain are both `gulyaly.pro` |
 | plain-text part | every email is `multipart/alternative` |
 | One-click unsubscribe | RFC 8058 `List-Unsubscribe` + `List-Unsubscribe-Post` on marketing |
 | Consent | marketing requires explicit opt-in; suppression list honoured |
@@ -84,8 +84,8 @@ rather than as a present key.
 precede it.
 
 **Alignment** is the part people miss: SPF and DKIM passing is not enough — the domain they pass
-*for* has to match the From domain. Ours does, because we send as `@gulyaly.com` and REG.RU signs
-as `gulyaly.com`.
+*for* has to match the From domain. Ours does, because we send as `@gulyaly.pro` and REG.RU signs
+as `gulyaly.pro`.
 
 ## Rates and reputation
 
@@ -102,7 +102,7 @@ are behavioural, not technical:
 
 ## Google Postmaster Tools
 
-**Set up and verified** (2026-09-01). `gulyaly.com` is registered and ownership is confirmed via
+**Set up and verified** (2026-09-01). `gulyaly.pro` is registered and ownership is confirmed via
 a `google-site-verification` TXT record at the apex — it sits alongside SPF, which is fine: the
 one-record-per-name rule applies to SPF specifically, not to TXT in general.
 
@@ -116,10 +116,10 @@ and domain reputation — the only first-party view of how Gmail actually sees u
 
 ## BIMI — record published, logo will not show in Gmail yet
 
-The record is live at `default._bimi.gulyaly.com`:
+The record is live at `default._bimi.gulyaly.pro`:
 
 ```
-v=BIMI1; l=https://gulyaly.com/brand/gulyaly-bimi.svg;
+v=BIMI1; l=https://gulyaly.pro/brand/gulyaly-bimi.svg;
 ```
 
 Prerequisites, all met: SPF/DKIM/DMARC pass and align, DMARC is at `p=quarantine` with
@@ -145,7 +145,7 @@ the same way rather than exporting from a tracer.
 
 ### Wildcard shadowing, when publishing
 
-`*.gulyaly.com` has a TXT record, so until Timeweb publishes a newly created specific name,
+`*.gulyaly.pro` has a TXT record, so until Timeweb publishes a newly created specific name,
 resolvers answer from the wildcard — for `default._bimi` that looks like an SPF record appearing
 where BIMI should be. It is not a broken BIMI record; check the zone via the API before
 re-creating anything.

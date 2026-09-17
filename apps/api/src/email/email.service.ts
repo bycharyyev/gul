@@ -142,7 +142,7 @@ export class EmailService {
     // address if unset, rather than failing, so this stays optional until the newsletter domain
     // is actually provisioned.
     this.fromAddressMarketing = this.config.get<string>("MAIL_FROM_MARKETING") || this.fromAddress;
-    this.apiPublicUrl = this.config.get<string>("API_PUBLIC_URL") || "https://api.gulyaly.com";
+    this.apiPublicUrl = this.config.get<string>("API_PUBLIC_URL") || "https://api.gulyaly.pro";
     // Reused rather than a dedicated secret -- the HMAC below is domain-separated by a fixed
     // prefix, so there's no cross-purpose collision with this secret's use for JWTs.
     this.unsubscribeSecret = this.config.get<string>("JWT_ACCESS_SECRET") || "";

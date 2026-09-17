@@ -9,7 +9,7 @@
  */
 import { promises as dns } from "dns";
 
-const DOMAIN = process.argv[2] ?? process.env.MAIL_SENDER_DOMAIN ?? "gulyaly.com";
+const DOMAIN = process.argv[2] ?? process.env.MAIL_SENDER_DOMAIN ?? "gulyaly.pro";
 
 /** DKIM selector REG.RU generated for this domain in ISPmanager. */
 const DKIM_SELECTOR = process.env.MAIL_DKIM_SELECTOR ?? "dkim";

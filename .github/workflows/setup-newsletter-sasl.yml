@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       password:
-        description: 'Password for the newsletter@mail.gulyaly.com SASL account'
+        description: 'Password for the newsletter@mail.gulyaly.pro SASL account'
         required: true
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         run: |
           cat > /tmp/newsletter-sasl.sh <<'SCRIPT'
           set -e
-          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.com newsletter
+          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.pro newsletter
           chgrp sasl /etc/sasldb2
           chmod 640 /etc/sasldb2
           echo "--- accounts now (names only) ---"

@@ -7,8 +7,8 @@ name: Set up DKIM signing on the mail relay
 # reason the second A-record for active/active and the mail A-record are manual steps, see
 # CLAUDE.md). Idempotent: re-running regenerates the same selector's key and re-applies config.
 #
-# Signing domain is gulyaly.com (that's the visible From: domain -- MAIL_FROM is
-# noreply@gulyaly.com), selector "mail", even though the relay host itself is mail.gulyaly.com --
+# Signing domain is gulyaly.pro (that's the visible From: domain -- MAIL_FROM is
+# noreply@gulyaly.pro), selector "mail", even though the relay host itself is mail.gulyaly.pro --
 # those are two independent things.
 
 on:
@@ -33,10 +33,10 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq opendkim opendkim-tools >/dev/null
 
-          mkdir -p /etc/opendkim/keys/gulyaly.com
-          cd /etc/opendkim/keys/gulyaly.com
+          mkdir -p /etc/opendkim/keys/gulyaly.pro
+          cd /etc/opendkim/keys/gulyaly.pro
           if [ ! -f mail.private ]; then
-            opendkim-genkey -b 2048 -d gulyaly.com -s mail -D /etc/opendkim/keys/gulyaly.com
+            opendkim-genkey -b 2048 -d gulyaly.pro -s mail -D /etc/opendkim/keys/gulyaly.pro
           fi
           chown -R opendkim:opendkim /etc/opendkim
           chmod 600 mail.private
@@ -45,12 +45,12 @@ jobs:
           {
           echo "127.0.0.1"
           echo "localhost"
-          echo "mail.gulyaly.com"
+          echo "mail.gulyaly.pro"
           echo "PRIMARY_IP_PLACEHOLDER"
           } > /etc/opendkim/TrustedHosts
 
-          echo "mail._domainkey.gulyaly.com gulyaly.com:mail:/etc/opendkim/keys/gulyaly.com/mail.private" > /etc/opendkim/KeyTable
-          echo "*@gulyaly.com mail._domainkey.gulyaly.com" > /etc/opendkim/SigningTable
+          echo "mail._domainkey.gulyaly.pro gulyaly.pro:mail:/etc/opendkim/keys/gulyaly.pro/mail.private" > /etc/opendkim/KeyTable
+          echo "*@gulyaly.pro mail._domainkey.gulyaly.pro" > /etc/opendkim/SigningTable
 
           # The FILE is conventionally named "TrustedHosts", but the config DIRECTIVE that points
           # at it is "InternalHosts" -- using "TrustedHosts" as a directive name is what caused
@@ -58,8 +58,8 @@ jobs:
           {
           echo "Syslog yes"
           echo "UMask 002"
-          echo "Domain gulyaly.com"
-          echo "KeyFile /etc/opendkim/keys/gulyaly.com/mail.private"
+          echo "Domain gulyaly.pro"
+          echo "KeyFile /etc/opendkim/keys/gulyaly.pro/mail.private"
           echo "Selector mail"
           echo "Socket inet:12301@localhost"
           echo "PidFile /run/opendkim/opendkim.pid"
@@ -67,8 +67,8 @@ jobs:
           echo "SubDomains no"
           echo "InternalHosts /etc/opendkim/TrustedHosts"
           echo "KeyTable /etc/opendkim/KeyTable"
-          # `refile:` is what makes the "*@gulyaly.com" wildcard a pattern. Without it the table
-          # is an exact-match lookup, the literal string "*@gulyaly.com" is never anybody's
+          # `refile:` is what makes the "*@gulyaly.pro" wildcard a pattern. Without it the table
+          # is an exact-match lookup, the literal string "*@gulyaly.pro" is never anybody's
           # sender, and every message leaves unsigned while opendkim logs nothing at default
           # verbosity -- silent for as long as nobody reads a delivered message's headers.
           # (Found 2026-09-05: mail had been going out unsigned the whole time. DMARC still
@@ -95,7 +95,7 @@ jobs:
           systemctl is-active postfix
 
           echo "--- DKIM PUBLIC KEY DNS RECORD (public, safe to print) ---"
-          cat /etc/opendkim/keys/gulyaly.com/mail.txt
+          cat /etc/opendkim/keys/gulyaly.pro/mail.txt
           SCRIPT
           sed -i "s#PRIMARY_IP_PLACEHOLDER#${{ secrets.DEPLOY_HOST }}#" /tmp/dkim-setup.sh
           scp -i ~/.ssh/id_ed25519 /tmp/dkim-setup.sh "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/dkim-setup.sh"

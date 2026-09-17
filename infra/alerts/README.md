@@ -6,7 +6,7 @@ service) -- see `.github/workflows/install-disk-alert.yml` for installation.
 - `gul-disk-alert.sh` -- the check + send. Rate-limited to one email/hour via a timestamp file in
   `/var/lib/gul-disk-alert/`. `--test` forces a send regardless of current usage, for verification.
 - `gul-disk-alert.service` / `.timer` -- runs the script every 15 minutes via systemd.
-- Sends from `alerts@gulyaly.com`, authenticated as a dedicated `alerts` SASL account (separate
+- Sends from `alerts@gulyaly.pro`, authenticated as a dedicated `alerts` SASL account (separate
   from `noreply`/`newsletter`) -- covered by the domain's existing SPF/DKIM (selector `mail`), no
   new DNS records needed.
 - Credentials + recipient live in `/etc/gul-disk-alert.env` (root-only, `chmod 600`), written by

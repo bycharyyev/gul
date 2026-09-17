@@ -49,7 +49,7 @@ jobs:
       - name: Verify -- relay still healthy
         run: |
           for i in $(seq 1 10); do
-            curl -fsS -m 5 https://api.gulyaly.com/api/health/ready > /dev/null && echo healthy && exit 0
+            curl -fsS -m 5 https://api.gulyaly.pro/api/health/ready > /dev/null && echo healthy && exit 0
             sleep 2
           done
           exit 1

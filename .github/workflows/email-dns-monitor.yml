@@ -17,7 +17,7 @@ on:
       domain:
         description: Domain to check
         type: string
-        default: gulyaly.com
+        default: gulyaly.pro
 
 jobs:
   check:
@@ -37,4 +37,4 @@ jobs:
       # Runner DNS works, so this uses the ordinary resolver -- the same path a receiving mail
       # server takes, rather than the DoH fallback the script keeps for restricted networks.
       - name: Check mail DNS
-        run: pnpm --filter @topup-hub/api email:dns-check "${{ inputs.domain || 'gulyaly.com' }}"
+        run: pnpm --filter @topup-hub/api email:dns-check "${{ inputs.domain || 'gulyaly.pro' }}"

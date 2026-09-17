@@ -34,7 +34,7 @@ jobs:
         run: |
           cat > /tmp/create-alerts-sasl.sh <<'SCRIPT'
           set -e
-          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.com alerts
+          echo '__PASS_PLACEHOLDER__' | saslpasswd2 -p -c -u mail.gulyaly.pro alerts
           sasldblistusers2
           SCRIPT
           sed -i "s#__PASS_PLACEHOLDER__#$PASS#" /tmp/create-alerts-sasl.sh
@@ -47,12 +47,12 @@ jobs:
           ' < /dev/null
           rm -f /tmp/create-alerts-sasl.sh
 
-      - name: Map alerts@gulyaly.com to the alerts SASL account (reject_sender_login_mismatch rejects unmapped senders too, not just conflicting ones)
+      - name: Map alerts@gulyaly.pro to the alerts SASL account (reject_sender_login_mismatch rejects unmapped senders too, not just conflicting ones)
         run: |
           cat > /tmp/map-alerts.sh <<'SCRIPT'
           set -e
-          grep -q '^alerts@gulyaly.com ' /etc/postfix/sender_login_maps 2>/dev/null || \
-            echo 'alerts@gulyaly.com alerts@mail.gulyaly.com' >> /etc/postfix/sender_login_maps
+          grep -q '^alerts@gulyaly.pro ' /etc/postfix/sender_login_maps 2>/dev/null || \
+            echo 'alerts@gulyaly.pro alerts@mail.gulyaly.pro' >> /etc/postfix/sender_login_maps
           postmap hash:/etc/postfix/sender_login_maps
           cat /etc/postfix/sender_login_maps
           SCRIPT
@@ -87,7 +87,7 @@ jobs:
           MAIL_ALERT_USER=alerts
           MAIL_ALERT_PASS=__PASS_PLACEHOLDER__
           MAIL_ALERT_TO=__ALERT_TO_PLACEHOLDER__
-          MAIL_RELAY_HOST=mail.gulyaly.com
+          MAIL_RELAY_HOST=mail.gulyaly.pro
           ENV
           chmod 600 /etc/gul-disk-alert.env
           systemctl daemon-reload

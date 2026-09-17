@@ -18,7 +18,7 @@ const CANVAS = "#f6f5fb";
  * Absolute and public: a mail client fetches this from wherever the recipient opens the message,
  * so a relative path or an internal host would simply fail to load.
  */
-const LOGO_URL = process.env.MAIL_LOGO_URL || "https://gulyaly.com/brand/gulyaly-logo-96.png";
+const LOGO_URL = process.env.MAIL_LOGO_URL || "https://gulyaly.pro/brand/gulyaly-logo-96.png";
 
 export interface LayoutOptions {
   title: string;
@@ -31,7 +31,7 @@ export interface LayoutOptions {
 }
 
 export function emailLayout(options: LayoutOptions): string {
-  const site = options.siteUrl ?? "https://gulyaly.com";
+  const site = options.siteUrl ?? "https://gulyaly.pro";
   return `<!doctype html>
 <html lang="ru">
   <head>
