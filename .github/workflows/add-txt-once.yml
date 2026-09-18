@@ -1,0 +1,22 @@
+name: Add a one-off apex TXT record for gulyaly.com
+
+# For site-verification tokens (Google Search Console, etc.) that need a TXT record at the bare
+# apex. Deleted after use.
+
+on:
+  workflow_dispatch:
+    inputs:
+      value:
+        description: 'Full TXT record value'
+        required: true
+        type: string
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add TXT record at gulyaly.com apex
+        run: |
+          BODY=$(python -c "import json,sys; print(json.dumps({'type':'TXT','value':sys.argv[1],'ttl':600}))" "${{ inputs.value }}")
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
+            -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" -H "Content-Type: application/json" -d "$BODY"
