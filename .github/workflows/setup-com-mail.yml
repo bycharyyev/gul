@@ -124,7 +124,11 @@ jobs:
           P=$(echo "$JOINED" | grep -oE 'p=.*')
           if [ -z "$P" ]; then echo "could not extract p= value" >&2; exit 1; fi
           VALUE="v=DKIM1; h=sha256; k=rsa; $P"
-          echo "--- registering subdomain mail._domainkey ---"
+          echo "--- deleting the previous (truncated) record at this name, if any ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X DELETE "https://api.timeweb.cloud/api/v2/domains/mail._domainkey.gulyaly.com/dns-records/92957297" \
+            -H "Authorization: Bearer $TOKEN"
+          echo
+          echo "--- registering subdomain mail._domainkey (400/already-registered is fine) ---"
           curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/mail._domainkey" \
             -H "Authorization: Bearer $TOKEN"
           echo
