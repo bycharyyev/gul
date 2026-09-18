@@ -113,7 +113,15 @@ jobs:
             docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/cat /etc/opendkim/keys/gulyaly.com/mail.txt
           ')
           echo "$PVAL"
-          P=$(echo "$PVAL" | tr -d "\n\t" | grep -oE 'p=[A-Za-z0-9+/=]+' | head -1)
+          # A 2048-bit key's p= value is longer than one DNS TXT string (255 bytes), so
+          # opendkim-genkey's .txt output splits it across several quoted strings on their own
+          # lines -- e.g. "p=FIRST_HALF"\n"SECOND_HALF" with no repeated "p=" on the continuation.
+          # A naive `grep -oE 'p=[A-Za-z0-9+/=]+'` stops at the closing quote of the FIRST string
+          # and silently publishes a truncated key (confirmed the hard way: mail-tester.com
+          # reported dkim=permerror on the first attempt). Concatenate the contents of every
+          # quoted segment first, then find where "p=" starts within that joined string.
+          JOINED=$(echo "$PVAL" | grep -oE '"[^"]*"' | sed 's/^"//; s/"$//' | tr -d '\n')
+          P=$(echo "$JOINED" | grep -oE 'p=.*')
           if [ -z "$P" ]; then echo "could not extract p= value" >&2; exit 1; fi
           VALUE="v=DKIM1; h=sha256; k=rsa; $P"
           echo "--- registering subdomain mail._domainkey ---"
