@@ -99,7 +99,6 @@ function LayoutChrome({ children }: { children: ReactNode }) {
   const navItems = useNavItems();
   const navigate = useNavigate();
   const [user, setUser] = useState(getCurrentUser());
-  const [navQuery, setNavQuery] = useState("");
   const [navOrder, setNavOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("gulyaly.admin.nav-order") ?? "[]"); } catch { return []; }
   });
@@ -124,7 +123,7 @@ function LayoutChrome({ children }: { children: ReactNode }) {
     if (ai === -1) return 1;
     if (bi === -1) return -1;
     return ai - bi;
-  }).filter((item) => item.label.toLowerCase().includes(navQuery.trim().toLowerCase()));
+  });
 
   function moveNav(target: string) {
     if (!draggedNav || draggedNav === target) return;
@@ -162,11 +161,6 @@ function LayoutChrome({ children }: { children: ReactNode }) {
         {/* Independently scrollable: the nav list alone can exceed the viewport, the logo above
             and the account/logout block below stay put instead of scrolling away with it. */}
         <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <div className="mb-2 flex items-center gap-2">
-            <input value={navQuery} onChange={(e) => setNavQuery(e.target.value)} placeholder="Найти раздел…" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100" aria-label="Поиск раздела" />
-            {navOrder.length > 0 && <button type="button" onClick={() => { setNavOrder([]); localStorage.removeItem("gulyaly.admin.nav-order"); }} className="text-[10px] font-semibold text-slate-400 hover:text-brand-600" title="Сбросить порядок">Сбросить</button>}
-          </div>
-          <p className="mb-2 px-1 text-[10px] uppercase tracking-wider text-slate-400">Перетаскивайте разделы для сортировки</p>
           <div className="space-y-1">
           {orderedNavItems.map((item) => (
             <NavLink
