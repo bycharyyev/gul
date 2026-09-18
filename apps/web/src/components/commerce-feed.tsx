@@ -20,6 +20,7 @@ import {
 import { useTranslation } from "@topup-hub/i18n";
 import type { SocialFeedPostDto } from "@topup-hub/types";
 import { API_ORIGIN, api, isAuthenticated } from "@/lib/api";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 type FeedPost = {
   id: string;
@@ -637,7 +638,7 @@ export function CommerceFeed() {
                   {post.body}
                 </p>
                 {post.media?.type === "photo" && (
-                  <img
+                  <ImageWithFallback
                     src={post.media.url}
                     alt={post.media.alt}
                     className="aspect-[4/5] w-full object-cover"
@@ -655,7 +656,7 @@ export function CommerceFeed() {
                   <div className="relative mx-3 my-3 overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-r from-white to-cyan-50 p-2.5 dark:border-cyan-100/10 dark:from-[#102a3a] dark:to-[#0b2130]">
                     <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-cyan-300 via-blue-500 to-violet-400" />
                     <div className="flex gap-3 pl-1">
-                      <img
+                      <ImageWithFallback
                         src={post.product.image}
                         alt=""
                         className="h-16 w-16 rounded-xl object-cover"

@@ -16,6 +16,7 @@ import type { SellerTimeseriesPoint, SellerTopProductDto } from "@topup-hub/type
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 const PERIODS = [7, 30, 90];
 
@@ -132,8 +133,7 @@ export default function SellerAnalyticsPage() {
                 className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-white/5"
               >
                 <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-400">{i + 1}</span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.imageUrl} alt={p.name} className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                <ImageWithFallback src={p.imageUrl} alt={p.name} className="h-10 w-10 shrink-0 rounded-lg object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{p.name}</p>
                   <p className="text-xs text-slate-400">

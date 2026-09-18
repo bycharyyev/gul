@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
  */
 export function CargoBanner() {
   const [banners, setBanners] = useState<CargoBannerDto[]>([]);
+  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     api
@@ -22,7 +23,7 @@ export function CargoBanner() {
   }, []);
 
   const banner = banners[0];
-  if (!banner) return null;
+  if (!banner || imageFailed) return null;
 
   const content = (
     <>
@@ -34,6 +35,7 @@ export function CargoBanner() {
         alt={banner.title}
         className="h-32 w-full object-cover sm:h-40"
         loading="lazy"
+        onError={() => setImageFailed(true)}
       />
       <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 to-transparent" />
       <div className="absolute inset-0 flex flex-col justify-center gap-1 p-5 text-white">

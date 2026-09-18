@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { HomeSlideDetailDto } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 const AUTO_ADVANCE_MS = 6000;
 
@@ -121,8 +122,7 @@ export function HeroSlideCarousel() {
                 "radial-gradient(600px circle at var(--glow-x, 50%) var(--glow-y, 50%), rgba(255,255,255,0.18), transparent 45%)",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <ImageWithFallback
               key={slide.id}
               src={slide.imageUrl}
               alt=""

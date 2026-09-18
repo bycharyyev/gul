@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { StoryDetailDto } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 const STORY_DURATION_MS = 6000;
 
@@ -30,8 +31,7 @@ export function StoriesRow() {
           >
             <span className="border-gradient-brand relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full p-[2px]">
               <span className="h-full w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={story.imageUrl} alt="" className="h-full w-full object-cover" />
+                <ImageWithFallback src={story.imageUrl} alt="" className="h-full w-full object-cover" />
               </span>
               {story.badgeLabel && (
                 <span className="bg-gradient-brand absolute -right-1 -top-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-soft">
@@ -179,8 +179,7 @@ function StoryViewer({
           <CloseIcon />
         </button>
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={story.imageUrl} alt="" className="h-full w-full object-cover" />
+        <ImageWithFallback src={story.imageUrl} alt="" className="h-full w-full object-cover" />
 
         <button
           aria-label={t("web.stories.prevAriaLabel")}

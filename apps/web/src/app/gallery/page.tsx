@@ -8,6 +8,7 @@ import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { GalleryOrderModal } from "@/components/gallery-order-modal";
 
 export default function GalleryPage() {
@@ -84,8 +85,7 @@ function GalleryPageInner() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {visibleProducts.map((product) => (
           <Card key={product.id} className="flex flex-col overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={product.imageUrl} alt={product.name} className="aspect-square w-full object-cover" />
+            <ImageWithFallback src={product.imageUrl} alt={product.name} className="aspect-square w-full object-cover" />
             <div className="flex flex-1 flex-col p-3">
               <p className="text-sm font-semibold leading-snug">{product.name}</p>
               <p className="mt-0.5 text-[11px] text-slate-400">{t("web.gallery.sku", { sku: product.sku })}</p>

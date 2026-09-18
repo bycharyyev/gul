@@ -6,6 +6,7 @@ import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { trackViewItem } from "@/lib/analytics";
 import { Card } from "@/components/ui/card";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { GalleryOrderModal } from "@/components/gallery-order-modal";
 
 /**
@@ -51,8 +52,7 @@ export function ProductView({ id }: { id: string }) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
       <Card className="grid gap-6 overflow-hidden p-6 sm:grid-cols-2 sm:p-8">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ImageWithFallback
           src={product.imageUrl}
           alt={product.name}
           className="aspect-square w-full rounded-xl2 object-cover"

@@ -12,6 +12,7 @@ import type {
 } from "@topup-hub/types";
 import { api, isAuthenticated } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 /** Mirrors MAX_UPLOAD_ATTACHMENT_SIZE_BYTES on the API -- checked here only to fail fast with a
  *  readable message instead of uploading 30MB to be refused. */
@@ -30,8 +31,7 @@ function Attachment({ message, mine }: { message: ChatMessageDto; mine: boolean 
   if (isImage) {
     return (
       <a href={message.attachmentUrl} target="_blank" rel="noreferrer" className="mt-1 block">
-        {/* eslint-disable-next-line @next/next/no-img-element -- user upload, arbitrary host/size */}
-        <img
+        <ImageWithFallback
           src={message.attachmentUrl}
           alt={message.attachmentName ?? "Вложение"}
           className="max-h-60 w-auto rounded-2xl object-cover"
@@ -410,11 +410,9 @@ export default function ChatPage() {
                   )}
                 >
                   {row.imageUrl ? (
-                    /* eslint-disable-next-line @next/next/no-img-element -- user upload, arbitrary host */
-                    <img
+                    <ImageWithFallback
                       src={row.imageUrl}
                       alt=""
-                      aria-hidden="true"
                       className="h-11 w-11 shrink-0 rounded-2xl object-cover"
                     />
                   ) : (
@@ -679,8 +677,7 @@ export default function ChatPage() {
                           Фото группы
                           <span className="mt-2 flex items-center gap-3">
                             {group.imageUrl ? (
-                              /* eslint-disable-next-line @next/next/no-img-element -- user upload */
-                              <img
+                              <ImageWithFallback
                                 src={group.imageUrl}
                                 alt=""
                                 className="h-14 w-14 rounded-2xl object-cover"

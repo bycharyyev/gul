@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 export default function SellerAdsPage() {
   const { t } = useTranslation();
@@ -201,8 +202,7 @@ function AdHistoryList({
         const live = item.isActive && !expired;
         return (
           <div key={item.id} className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-white/5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+            <ImageWithFallback src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{item.title}</p>
               <p className="text-xs text-slate-400">
