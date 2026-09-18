@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Area,
   AreaChart,
@@ -18,7 +19,6 @@ import type { AdminStatsDto, OrdersTimeseriesPoint } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
-import { StatCard } from "@/components/stat-card";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING_PAYMENT: "#f59e0b",
@@ -32,6 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<AdminStatsDto | null>(null);
   const [series, setSeries] = useState<OrdersTimeseriesPoint[]>([]);
   const [days, setDays] = useState(30);
@@ -60,11 +61,18 @@ export default function DashboardPage() {
 
   const totalVolume = series.reduce((sum, p) => sum + p.volumeTmt, 0);
   const totalOrdersInPeriod = series.reduce((sum, p) => sum + p.orderCount, 0);
+  const completedOrders = stats?.ordersByStatus.COMPLETED ?? 0;
+  const pendingOrders = (stats?.ordersByStatus.PENDING_PAYMENT ?? 0) + (stats?.ordersByStatus.PAID ?? 0) + (stats?.ordersByStatus.PROCESSING ?? 0);
+  const completionRate = stats?.totals.orders ? Math.round((completedOrders / stats.totals.orders) * 100) : 0;
+  const averageOrder = totalOrdersInPeriod ? totalVolume / totalOrdersInPeriod : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("admin.nav.dashboard")}</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{t("admin.nav.dashboard")}</h1>
+          <p className="mt-1 text-sm text-slate-500">Контроль заказов, объёма и состояния сервиса в одном месте</p>
+        </div>
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
           {[7, 30, 90].map((d) => (
             <button
@@ -82,11 +90,28 @@ export default function DashboardPage() {
 
       {stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label={t("admin.dashboard.totalOrders")} value={stats.totals.orders} />
-          <StatCard label={t("admin.dashboard.ordersInPeriod", { days })} value={totalOrdersInPeriod} />
-          <StatCard label={t("admin.dashboard.volumeInPeriod", { days })} value={totalVolume.toFixed(0)} />
-          <StatCard label={t("admin.dashboard.customers")} value={stats.totals.customers} />
+          <MetricCard label={t("admin.dashboard.totalOrders")} value={stats.totals.orders} hint={`${completedOrders} завершено`} onClick={() => navigate("/orders")} />
+          <MetricCard label={t("admin.dashboard.ordersInPeriod", { days })} value={totalOrdersInPeriod} hint={`${pendingOrders} требуют внимания`} onClick={() => navigate("/orders")} />
+          <MetricCard label={t("admin.dashboard.volumeInPeriod", { days })} value={`${totalVolume.toFixed(0)} TMT`} hint={`Средний заказ ${averageOrder.toFixed(0)} TMT`} />
+          <MetricCard label={t("admin.dashboard.customers")} value={stats.totals.customers} hint={`${completionRate}% заказов завершено`} onClick={() => navigate("/users")} />
         </div>
+      )}
+
+      {stats && (
+        <Card className="border-brand-100 bg-gradient-to-r from-brand-50 via-white to-teal-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-brand-600">Операционный обзор</p>
+              <h2 className="mt-1 text-lg font-bold">Что требует внимания сейчас</h2>
+            </div>
+            <button onClick={() => navigate("/orders")} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700">Открыть заказы</button>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <Insight label="В обработке" value={pendingOrders} tone={pendingOrders ? "amber" : "green"} />
+            <Insight label="Завершено всего" value={completedOrders} tone="green" />
+            <Insight label="Конверсия завершения" value={`${completionRate}%`} tone={completionRate >= 80 ? "green" : "amber"} />
+          </div>
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -156,4 +181,20 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function MetricCard({ label, value, hint, onClick }: { label: string; value: string | number; hint: string; onClick?: () => void }) {
+  return (
+    <button type="button" onClick={onClick} disabled={!onClick} className="text-left disabled:cursor-default">
+      <Card className={`h-full p-4 transition ${onClick ? "hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md" : ""}`}>
+        <p className="text-xs font-medium uppercase text-slate-400">{label}</p>
+        <p className="mt-1 text-2xl font-bold">{value}</p>
+        <p className="mt-1 text-xs text-slate-500">{hint}</p>
+      </Card>
+    </button>
+  );
+}
+
+function Insight({ label, value, tone }: { label: string; value: string | number; tone: "amber" | "green" }) {
+  return <div className={`rounded-xl border p-3 ${tone === "amber" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>;
 }
