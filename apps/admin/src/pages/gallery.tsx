@@ -84,8 +84,16 @@ export default function GalleryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("admin.gallery.title")}</h1>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-600">Commerce studio</p><h1 className="mt-1 text-2xl font-bold">{t("admin.gallery.title")}</h1><p className="mt-1 text-sm text-slate-500">Физические товары, продавцы, доставка и продвижение — в одном рабочем месте.</p></div>
+        <Button onClick={() => setSelectedProductId(NEW_PRODUCT_ID)}>{t("admin.gallery.newProduct")}</Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <GalleryMetric label="Товаров" value={products.length} detail={`${products.filter((p) => p.isEnabled).length} опубликовано`} />
+        <GalleryMetric label="Категорий" value={categories.length} detail="структура витрины" />
+        <GalleryMetric label="Продавцов" value={new Set(products.map((p) => p.seller?.id).filter(Boolean)).size} detail="с товарами в галерее" />
+        <GalleryMetric label="Без продавца" value={products.filter((p) => !p.seller).length} detail="управляются платформой" tone="amber" />
       </div>
 
       <Card className="p-4">
@@ -177,6 +185,8 @@ export default function GalleryPage() {
             />
           )}
           {selectedProduct && (
+            <div className="space-y-4">
+            {selectedProduct.seller && <Card className="flex items-center gap-3 border-teal-100 bg-teal-50/60 p-4"><div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white text-sm font-bold text-teal-700">{selectedProduct.seller.shopName.slice(0, 2).toUpperCase()}</div><div><p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Продавец / создатель</p><p className="font-semibold">{selectedProduct.seller.shopName}</p><p className="text-xs text-slate-500">@{selectedProduct.seller.handle}</p></div><span className="ml-auto rounded-full bg-white px-3 py-1 text-xs font-medium text-teal-700">Информация отображается покупателю</span></Card>}
             <ProductForm
               key={selectedProduct.id}
               initial={{
@@ -194,14 +204,28 @@ export default function GalleryPage() {
               onDelete={() => handleDeleteProduct(selectedProduct.id)}
               submitLabel={t("admin.gallery.saveProductSubmit")}
             />
+            </div>
           )}
           {!selectedProductId && (
             <Card className="p-8 text-center text-sm text-slate-500">{t("admin.gallery.selectProductPrompt")}</Card>
           )}
         </div>
       </div>
+
+      <Card className="border-brand-100 bg-gradient-to-r from-brand-50/70 via-white to-teal-50/60 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-brand-600">Доставка и продвижение</p><h2 className="mt-1 text-lg font-bold">Готовим галерею к продажам</h2><p className="mt-1 max-w-2xl text-sm text-slate-500">Для следующего шага добавим тарифы доставки по странам, бесплатную доставку от суммы и итоговый расчёт до оплаты. Параметры будут доступны и продавцам, и API.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">В разработке</span></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3"><DeliveryCard title="TKM" text="Локальная доставка" /><DeliveryCard title="RU" text="Доставка в Россию" /><DeliveryCard title="Global" text="Международная доставка" /></div>
+      </Card>
     </div>
   );
+}
+
+function GalleryMetric({ label, value, detail, tone = "brand" }: { label: string; value: number; detail: string; tone?: "brand" | "amber" }) {
+  return <Card className={`border p-4 ${tone === "amber" ? "border-amber-200 bg-amber-50" : "border-brand-100 bg-white"}`}><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></Card>;
+}
+
+function DeliveryCard({ title, text }: { title: string; text: string }) {
+  return <div className="rounded-xl border border-white bg-white/80 p-3"><p className="font-semibold">{title}</p><p className="mt-1 text-xs text-slate-500">{text}</p><p className="mt-3 text-xs font-medium text-slate-400">Тарифы и free shipping — скоро</p></div>;
 }
 
 function ProductForm({
