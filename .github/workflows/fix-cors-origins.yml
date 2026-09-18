@@ -49,7 +49,7 @@ jobs:
               *,https://gulyaly.com,*) echo "already present" ;;
               *)
                 NEW="$CURRENT,https://gulyaly.com,https://www.gulyaly.com,https://admin.gulyaly.com"
-                sed -i "s#^CORS_ORIGINS=.*#CORS_ORIGINS=\"$NEW\"#" .env
+                sed -i "s#^CORS_ORIGINS=.*#CORS_ORIGINS=$NEW#" .env
                 echo "updated to: $NEW"
                 ;;
             esac
@@ -67,7 +67,7 @@ jobs:
               *,https://gulyaly.com,*) echo "already present" ;;
               *)
                 NEW="$CURRENT,https://gulyaly.com,https://www.gulyaly.com,https://admin.gulyaly.com"
-                sed -i "s#^CORS_ORIGINS=.*#CORS_ORIGINS=\"$NEW\"#" .env
+                sed -i "s#^CORS_ORIGINS=.*#CORS_ORIGINS=$NEW#" .env
                 echo "updated to: $NEW"
                 ;;
             esac
