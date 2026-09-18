@@ -119,13 +119,15 @@ function LayoutChrome({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white px-4 py-6">
-        <div className="mb-8 flex items-center gap-2 px-2 text-lg font-extrabold">
+    <div className="flex h-screen overflow-hidden">
+      <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="flex shrink-0 items-center gap-2 px-6 pb-4 pt-6 text-lg font-extrabold">
           <img src="/brand/gulyaly.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-full" />
           <span className="text-gradient">Gulyaly</span>
         </div>
-        <nav className="flex-1 space-y-1">
+        {/* Independently scrollable: the nav list alone can exceed the viewport, the logo above
+            and the account/logout block below stay put instead of scrolling away with it. */}
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -145,7 +147,7 @@ function LayoutChrome({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-slate-200 pt-3">
+        <div className="shrink-0 border-t border-slate-200 px-4 pb-6 pt-3">
           <NavLink
             to="/account"
             className={({ isActive }) =>
@@ -167,7 +169,7 @@ function LayoutChrome({ children }: { children: ReactNode }) {
           <LanguageSwitcher className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600" />
         </div>
       </aside>
-      <main className="flex-1 bg-slate-50 p-8">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50 p-8">{children}</main>
     </div>
   );
 }
