@@ -113,7 +113,8 @@ jobs:
           curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python -m json.tool || true
           for name in www api admin; do
-            echo "--- $name.gulyaly.com ---"
+            echo "--- $name.gulyaly.com (raw, not pretty-printed -- this endpoint doesn't always answer with plain JSON) ---"
             curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
-              "https://api.timeweb.cloud/api/v2/domains/$name.gulyaly.com/dns-records" | python -m json.tool || true
+              "https://api.timeweb.cloud/api/v2/domains/$name.gulyaly.com/dns-records"
+            echo
           done
