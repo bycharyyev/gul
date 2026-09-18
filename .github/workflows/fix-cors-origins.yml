@@ -19,6 +19,7 @@ on:
           - update-secondary
           - retry-recreate-secondary-api
           - recreate-secondary-api
+          - inspect-live-env
 
 jobs:
   fix:
@@ -100,4 +101,19 @@ jobs:
             cd /opt/gul-secondary
             grep "^CORS_ORIGINS=" .env
             docker compose -f docker-compose.yml up -d api
+          '
+
+      - name: Inspect the CORS_ORIGINS env var actually inside the running api containers
+        if: inputs.step == 'inspect-live-env'
+        run: |
+          echo "--- primary ---"
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            docker inspect gul-api-1 --format "{{range .Config.Env}}{{println .}}{{end}}" | grep CORS
+            docker inspect gul-api-1 --format "started: {{.State.StartedAt}}"
+          '
+          echo "--- secondary ---"
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker ps --format "{{.Names}}" | grep -i api
+            docker inspect $(docker ps --format "{{.Names}}" | grep -i api | head -1) --format "{{range .Config.Env}}{{println .}}{{end}}" | grep CORS
+            docker inspect $(docker ps --format "{{.Names}}" | grep -i api | head -1) --format "started: {{.State.StartedAt}}"
           '
