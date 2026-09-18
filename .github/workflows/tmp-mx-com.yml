@@ -1,0 +1,26 @@
+name: tmp mx com
+on:
+  workflow_dispatch:
+jobs:
+  mx:
+    runs-on: ubuntu-latest
+    env:
+      T: ${{ secrets.TIMEWEB_API_TOKEN }}
+    steps:
+      - name: Switch gulyaly.com mail to REG.RU hosting
+        run: |
+          set -e
+          API=https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records
+          for mx in "mx1.hosting.reg.ru 10" "mx2.hosting.reg.ru 15"; do
+            set -- $mx
+            curl -s -X POST "$API" -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+              -d "{\"type\":\"MX\",\"value\":\"$1\",\"priority\":$2,\"ttl\":3600}" | cut -c1-160; echo
+          done
+          LIST=$(curl -s "$API?limit=200" -H "Authorization: Bearer $T")
+          echo "$LIST" | jq -r '.dns_records[]|select(.type=="MX" or (.type=="TXT" and (.data.value|startswith("v=spf1"))))|"\(.id) \(.type) \(.data.value // .data.target)"'
+          for id in $(echo "$LIST" | jq -r '.dns_records[]|select(.type=="MX" and (.data.value|test("timeweb")))|.id'); do
+            curl -s -o /dev/null -w "delete $id -> %{http_code}\n" -X DELETE "$API/$id" -H "Authorization: Bearer $T"
+          done
+          SPF=$(echo "$LIST" | jq -r '.dns_records[]|select(.type=="TXT" and (.data.value|startswith("v=spf1")))|.id')
+          curl -s -X PATCH "$API/$SPF" -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+            -d '{"type":"TXT","value":"v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com include:_spf.hosting.reg.ru a:sm41.hosting.reg.ru ~all"}' | cut -c1-200; echo
