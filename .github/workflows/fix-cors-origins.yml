@@ -18,6 +18,7 @@ on:
           - update-primary
           - update-secondary
           - retry-recreate-secondary-api
+          - recreate-secondary-api
 
 jobs:
   fix:
@@ -89,4 +90,14 @@ jobs:
               echo "=== $f ==="
               docker compose -f "$f" config --services 2>&1 | head -5
             done
+          '
+
+      - name: Recreate the api container on secondary with the real compose file name
+        if: inputs.step == 'recreate-secondary-api'
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            set -e
+            cd /opt/gul-secondary
+            grep "^CORS_ORIGINS=" .env
+            docker compose -f docker-compose.yml up -d api
           '
