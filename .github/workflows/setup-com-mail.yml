@@ -1,0 +1,162 @@
+name: Set up mail identity for gulyaly.com
+
+# The relay itself (Postfix on the secondary, port 587, SASL account "noreply") is transport --
+# domain-agnostic, already live, and does not need touching. What's actually domain-bound and
+# still only configured for gulyaly.pro: the DKIM signing identity (a DKIM key is tied to its
+# d= domain), the app's MAIL_FROM/MAIL_SENDER_DOMAIN, and gulyaly.com's own SPF/DKIM DNS records.
+# This adds a gulyaly.com signing identity ALONGSIDE the existing gulyaly.pro one (both stay in
+# OpenDKIM's KeyTable/SigningTable; nothing about .pro is removed) and repoints the app's sending
+# identity to gulyaly.com.
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Which step to run'
+        required: true
+        type: choice
+        options:
+          - dns-mail-a-record
+          - dns-merge-spf
+          - dkim-generate
+          - dns-publish-dkim
+          - update-env-and-recreate
+          - show-dkim-public-key
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Register mail.gulyaly.com and point it at the secondary
+        if: inputs.step == 'dns-mail-a-record'
+        run: |
+          set -e
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          curl -s -w '\nregister -> HTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/mail" \
+            -H "Authorization: Bearer $TOKEN"
+          curl -s -w '\nA record -> HTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/mail.gulyaly.com/dns-records" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"type": "A", "value": "${{ secrets.SECONDARY_HOST }}", "ttl": 300}'
+
+      - name: Merge a:mail.gulyaly.com into the existing SPF record (never create a second SPF TXT)
+        if: inputs.step == 'dns-merge-spf'
+        run: |
+          set -e
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          echo "--- current apex TXT records ---"
+          curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python -m json.tool
+          echo "--- PATCH id 92919599 (the SPF record) ---"
+          curl -s -w '\nHTTP %{http_code}\n' -X PATCH "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/92919599" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"type": "TXT", "value": "v=spf1 include:_spf.timeweb.ru a:mail.gulyaly.com ~all"}'
+
+      - name: Generate a DKIM keypair for gulyaly.com and add it to OpenDKIM alongside .pro
+        if: inputs.step == 'dkim-generate'
+        run: |
+          cat > /tmp/dkim-com-setup.sh <<'SCRIPT'
+          set -e
+          mkdir -p /etc/opendkim/keys/gulyaly.com
+          cd /etc/opendkim/keys/gulyaly.com
+          if [ ! -f mail.private ]; then
+            opendkim-genkey -b 2048 -d gulyaly.com -s mail -D /etc/opendkim/keys/gulyaly.com
+          fi
+          chown -R opendkim:opendkim /etc/opendkim
+          chmod 600 mail.private
+
+          # Additive: append a gulyaly.com line to each table rather than replacing the file, so
+          # the existing gulyaly.pro entries (and its mail) keep working unchanged.
+          grep -q "^mail._domainkey.gulyaly.com " /etc/opendkim/KeyTable 2>/dev/null || \
+            echo "mail._domainkey.gulyaly.com gulyaly.com:mail:/etc/opendkim/keys/gulyaly.com/mail.private" >> /etc/opendkim/KeyTable
+          grep -q "^\*@gulyaly.com " /etc/opendkim/SigningTable 2>/dev/null || \
+            echo "*@gulyaly.com mail._domainkey.gulyaly.com" >> /etc/opendkim/SigningTable
+
+          systemctl restart opendkim
+          systemctl restart postfix
+          sleep 1
+          systemctl is-active opendkim
+          systemctl is-active postfix
+          echo "--- KeyTable ---"; cat /etc/opendkim/KeyTable
+          echo "--- SigningTable ---"; cat /etc/opendkim/SigningTable
+          echo "--- DKIM PUBLIC KEY DNS RECORD (public, safe to print) ---"
+          cat /etc/opendkim/keys/gulyaly.com/mail.txt
+          SCRIPT
+          scp -i ~/.ssh/deploy_key /tmp/dkim-com-setup.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/dkim-com-setup.sh
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host -v /tmp/dkim-com-setup.sh:/host/tmp/dkim-com-setup.sh alpine chroot /host /bin/bash /tmp/dkim-com-setup.sh
+            status=$?
+            rm -f /tmp/dkim-com-setup.sh
+            exit $status
+          ' < /dev/null
+
+      - name: Show just the DKIM public key line (re-run to re-print if it scrolled off the log)
+        if: inputs.step == 'show-dkim-public-key'
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/cat /etc/opendkim/keys/gulyaly.com/mail.txt
+          '
+
+      - name: Publish the DKIM public key TXT record for gulyaly.com
+        if: inputs.step == 'dns-publish-dkim'
+        run: |
+          set -e
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          echo "--- fetch the public key straight off the server (the .txt file's DNS-ready p= value) ---"
+          PVAL=$(ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/cat /etc/opendkim/keys/gulyaly.com/mail.txt
+          ')
+          echo "$PVAL"
+          P=$(echo "$PVAL" | tr -d "\n\t" | grep -oE 'p=[A-Za-z0-9+/=]+' | head -1)
+          if [ -z "$P" ]; then echo "could not extract p= value" >&2; exit 1; fi
+          VALUE="v=DKIM1; h=sha256; k=rsa; $P"
+          echo "--- registering subdomain mail._domainkey ---"
+          curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/mail._domainkey" \
+            -H "Authorization: Bearer $TOKEN"
+          echo
+          echo "--- publishing TXT ---"
+          BODY=$(python -c "import json,sys; print(json.dumps({'type':'TXT','value':sys.argv[1],'ttl':600}))" "$VALUE")
+          curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/mail._domainkey.gulyaly.com/dns-records" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$BODY"
+
+      - name: Point the app's sending identity at gulyaly.com and recreate api on both nodes
+        if: inputs.step == 'update-env-and-recreate'
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            set -e
+            cd /opt/gul
+            set_kv() {
+              key="$1"; val="$2"
+              if grep -q "^${key}=" .env; then
+                sed -i "s#^${key}=.*#${key}=\"${val}\"#" .env
+              else
+                echo "${key}=\"${val}\"" >> .env
+              fi
+            }
+            set_kv MAIL_FROM "Gulyaly <noreply@gulyaly.com>"
+            set_kv MAIL_SENDER_DOMAIN "gulyaly.com"
+            grep -E "^MAIL_FROM=|^MAIL_SENDER_DOMAIN=" .env
+            docker compose up -d --force-recreate api
+          '
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            set -e
+            cd /opt/gul-secondary
+            set_kv() {
+              key="$1"; val="$2"
+              if grep -q "^${key}=" .env; then
+                sed -i "s#^${key}=.*#${key}=\"${val}\"#" .env
+              else
+                echo "${key}=\"${val}\"" >> .env
+              fi
+            }
+            set_kv MAIL_FROM "Gulyaly <noreply@gulyaly.com>"
+            set_kv MAIL_SENDER_DOMAIN "gulyaly.com"
+            grep -E "^MAIL_FROM=|^MAIL_SENDER_DOMAIN=" .env
+            docker compose -f docker-compose.yml up -d api
+          '
