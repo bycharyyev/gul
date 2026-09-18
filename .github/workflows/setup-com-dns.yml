@@ -75,14 +75,21 @@ jobs:
 
       - name: Temporarily remove secondary's A records (apex/www/api) so HTTP-01 validation can only reach the primary's webroot
         if: inputs.step == 'pause-secondary'
+        # A subdomain-attached record (www, api) must be deleted through its OWN fqdn path, not
+        # the apex's -- the apex path only works for a record that is actually apex-scoped
+        # (confirmed by CLAUDE.md's DNS-management notes). Using the apex path for a subdomain
+        # record silently no-ops: no error, but nothing is deleted either.
         run: |
           set -e
           TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
-          for id in 92919695 92919713 92919721; do
-            echo "--- deleting id $id ---"
-            curl -s -w ' -> HTTP %{http_code}\n' -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/$id" \
+          del() { # del <fqdn> <id>
+            echo "--- deleting id $2 at $1 ---"
+            curl -s -w ' -> HTTP %{http_code}\n' -X DELETE "https://api.timeweb.cloud/api/v2/domains/$1/dns-records/$2" \
               -H "Authorization: Bearer $TOKEN"
-          done
+          }
+          del gulyaly.com 92919695
+          del www.gulyaly.com 92919713
+          del api.gulyaly.com 92919721
 
       - name: Restore secondary's A records (apex/www/api) after cert issuance
         if: inputs.step == 'resume-secondary'
