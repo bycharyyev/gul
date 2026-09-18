@@ -1,0 +1,18 @@
+name: tmp mail log
+on:
+  workflow_dispatch:
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts
+      - name: Mail log
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "grep -h -i elekmail /var/log/mail.log | tail -15; echo ---; tail -25 /var/log/mail.log; echo ---; postqueue -p | tail -8"
+          ' < /dev/null
