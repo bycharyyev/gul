@@ -22,6 +22,7 @@ on:
           - dns-publish-dkim
           - update-env-and-recreate
           - show-dkim-public-key
+          - list-dkim-records
 
 jobs:
   setup:
@@ -136,6 +137,12 @@ jobs:
           BODY=$(python -c "import json,sys; print(json.dumps({'type':'TXT','value':sys.argv[1],'ttl':600}))" "$VALUE")
           curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/mail._domainkey.gulyaly.com/dns-records" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$BODY"
+
+      - name: List all DKIM-related records at the apex to check for a duplicate/stale entry
+        if: inputs.step == 'list-dkim-records'
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python -m json.tool
 
       - name: Point the app's sending identity at gulyaly.com and recreate api on both nodes
         if: inputs.step == 'update-env-and-recreate'
