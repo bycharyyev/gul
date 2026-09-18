@@ -14,5 +14,5 @@ jobs:
       - name: Mail log
         run: |
           ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
-            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "grep -h -i elekmail /var/log/mail.log | tail -15; echo ---; tail -25 /var/log/mail.log; echo ---; postqueue -p | tail -8"
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "journalctl -u postfix@- -u postfix --since \"2 hours ago\" --no-pager | grep -i -E \"elekmail|status=|reject|warning\" | tail -25"
           ' < /dev/null
