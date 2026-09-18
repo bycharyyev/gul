@@ -8,14 +8,26 @@ on:
     inputs:
       value:
         description: 'Full TXT record value'
-        required: true
+        required: false
         type: string
+      list_only:
+        description: 'Just list apex records instead of adding one'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   add:
     runs-on: ubuntu-latest
     steps:
+      - name: List apex records
+        if: inputs.list_only == true
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
+            "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" | python -m json.tool
+
       - name: Add TXT record at gulyaly.com apex
+        if: inputs.list_only != true
         run: |
           BODY=$(python -c "import json,sys; print(json.dumps({'type':'TXT','value':sys.argv[1],'ttl':600}))" "${{ inputs.value }}")
           curl -s -w '\nHTTP %{http_code}\n' -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
