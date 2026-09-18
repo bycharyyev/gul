@@ -1,83 +1,90 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import type { Metadata } from "next";
 import type { GalleryProductDto } from "@topup-hub/types";
-import { useTranslation } from "@topup-hub/i18n";
-import { api } from "@/lib/api";
-import { trackViewItem } from "@/lib/analytics";
-import { Card } from "@/components/ui/card";
-import { GalleryOrderModal } from "@/components/gallery-order-modal";
+import { ProductView } from "./product-view";
 
-/**
- * The web landing a product's own Share sheet (and a managed link pointed at a product) falls
- * back to when the app isn't installed. A real page, not a redirect: someone who followed a
- * shared product link wants to see the product, and ordering works here too -- the same
- * GalleryOrderModal the shop page uses -- so this is never a dead end for someone without the app.
- */
-export default function ProductLandingPage() {
-  const { t } = useTranslation();
-  const params = useParams<{ id: string }>();
-  const [product, setProduct] = useState<GalleryProductDto | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [ordering, setOrdering] = useState(false);
+const SITE_URL = "https://gulyaly.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.gulyaly.com/api";
 
-  useEffect(() => {
-    api
-      .getGalleryProduct(params.id)
-      .then((p) => {
-        setProduct(p);
-        trackViewItem({ item_id: p.id, item_name: p.name, price: p.priceTmt });
-      })
-      .catch(() => setNotFound(true));
-  }, [params.id]);
-
-  if (notFound) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <p className="text-lg font-semibold">{t("web.productPage.notFoundTitle")}</p>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t("web.productPage.notFoundBody")}</p>
-      </div>
-    );
+// Best-effort, same pattern as sitemap.ts: a slow or unreachable API degrades to generic
+// metadata and no structured data, never a failed page load. The visible page (ProductView)
+// fetches its own copy independently, so this never blocks or duplicates that render.
+async function fetchProduct(id: string): Promise<GalleryProductDto | null> {
+  try {
+    const res = await fetch(`${API_URL}/gallery/products/${id}`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    return (await res.json()) as GalleryProductDto;
+  } catch {
+    return null;
   }
+}
 
-  if (!product) {
-    return <div className="mx-auto max-w-3xl px-4 py-16 text-sm text-slate-400">{t("common.loading")}</div>;
-  }
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const product = await fetchProduct(id);
+  if (!product) return {};
+
+  const title = product.name;
+  const description =
+    product.description || `${product.name} — ${product.priceTmt} TMT. Заказ и доставка через Gulyaly.`;
+  const url = `${SITE_URL}/gallery/product/${product.id}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      url,
+      title,
+      description,
+      images: [{ url: product.imageUrl, alt: product.name }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [product.imageUrl],
+    },
+  };
+}
+
+export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const product = await fetchProduct(id);
+
+  // Availability is binary in this catalog (no stock count), so InStock/OutOfStock is the
+  // whole picture -- enabled products are always orderable on demand, there's no backorder or
+  // preorder state to represent.
+  const productJsonLd = product && {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description || undefined,
+    image: product.imageUrl,
+    sku: product.sku,
+    url: `${SITE_URL}/gallery/product/${product.id}`,
+    ...(product.seller ? { brand: { "@type": "Brand", name: product.seller.shopName } } : {}),
+    offers: {
+      "@type": "Offer",
+      url: `${SITE_URL}/gallery/product/${product.id}`,
+      priceCurrency: "TMT",
+      price: product.priceTmt,
+      availability: product.isEnabled
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+    },
+  };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <Card className="grid gap-6 overflow-hidden p-6 sm:grid-cols-2 sm:p-8">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          className="aspect-square w-full rounded-xl2 object-cover"
+    <>
+      {productJsonLd && (
+        <script
+          type="application/ld+json"
+          // Server-fetched from our own API, never user input -- safe to inline.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
         />
-        <div className="flex flex-col">
-          <h1 className="text-xl font-bold leading-snug">{product.name}</h1>
-          <p className="mt-1 text-xs text-slate-400">{t("web.shopPage.sku", { sku: product.sku })}</p>
-          {product.seller && (
-            <a href={`/@${product.seller.handle}`} className="mt-2 text-sm text-brand-600 dark:text-brand-300">
-              {product.seller.shopName}
-            </a>
-          )}
-          {product.description && (
-            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">{product.description}</p>
-          )}
-          <div className="mt-auto flex items-center justify-between pt-6">
-            <span className="text-xl font-bold">{product.priceTmt} TMT</span>
-            <button
-              onClick={() => setOrdering(true)}
-              className="bg-gradient-brand cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-            >
-              {t("web.shopPage.orderButton")}
-            </button>
-          </div>
-        </div>
-      </Card>
-
-      {ordering && <GalleryOrderModal product={product} onClose={() => setOrdering(false)} />}
-    </div>
+      )}
+      <ProductView id={id} />
+    </>
   );
 }
