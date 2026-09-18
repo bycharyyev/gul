@@ -1,0 +1,39 @@
+name: Disable the leftover test gallery product
+
+# TEST-NOTIFY-1 was created earlier this session to verify order notifications end to end. It's
+# still isEnabled:true under the real "gulyaly" seller, with a dead gulyaly.pro image link -- now
+# that Product structured data is live, a real crawler would index it as a real, broken product.
+# Disables it via the same NestFactory bootstrap pattern used to create it. One-off, deleted after
+# use.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  disable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Disable the product
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            docker compose exec -T api node -e "
+              const { PrismaClient } = require(\"@prisma/client\");
+              (async () => {
+                const prisma = new PrismaClient();
+                const updated = await prisma.galleryProduct.update({
+                  where: { sku: \"TEST-NOTIFY-1\" },
+                  data: { isEnabled: false },
+                });
+                console.log(\"disabled:\", updated.id, updated.sku, updated.isEnabled);
+                await prisma.\$disconnect();
+              })().catch((e) => { console.error(e); process.exit(1); });
+            " < /dev/null
+          '
