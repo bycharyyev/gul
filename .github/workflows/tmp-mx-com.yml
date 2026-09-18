@@ -11,7 +11,7 @@ jobs:
         run: |
           set -e
           API=https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records
-          LIST=$(curl -s "$API" -H "Authorization: Bearer $T")
+          LIST=$(curl -s "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/dns-records" -H "Authorization: Bearer $T")
           echo "$LIST" | cut -c1-300
           echo "$LIST" | jq -r '.dns_records[]|select(.type=="MX" or (.type=="TXT" and (.data.value|startswith("v=spf1"))))|"\(.id) \(.type) \(.data.value // .data.target)"'
           for id in $(echo "$LIST" | jq -r '.dns_records[]|select(.type=="MX" and (.data.value|test("timeweb")))|.id'); do
