@@ -49,6 +49,11 @@ on:
         required: false
         type: string
         default: '@'
+      txt_zone:
+        description: 'add-txt-record only: the DNS zone the record belongs to'
+        required: false
+        type: string
+        default: 'gulyaly.com'
       txt_value:
         description: 'add-txt-record only: the record value (e.g. a google-site-verification token)'
         required: false
@@ -470,6 +475,7 @@ jobs:
         if: inputs.step == 'add-txt-record'
         env:
           TXT_NAME: ${{ inputs.txt_name }}
+          TXT_ZONE: ${{ inputs.txt_zone }}
           TXT_VALUE: ${{ inputs.txt_value }}
         run: |
           set -e
@@ -482,11 +488,11 @@ jobs:
           # to it -- otherwise the record create fails with 404 domain_not_found. The apex needs
           # no such registration. Registering an already-registered subdomain is harmless.
           if [ "$TXT_NAME" = "@" ]; then
-            FQDN="gulyaly.pro"
+            FQDN="$TXT_ZONE"
           else
-            FQDN="${TXT_NAME}.gulyaly.pro"
+            FQDN="${TXT_NAME}.${TXT_ZONE}"
             echo "Registering subdomain $TXT_NAME"
-            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.pro/subdomains/${TXT_NAME}" \
+            curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/${TXT_ZONE}/subdomains/${TXT_NAME}" \
               -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}"
             echo
           fi
