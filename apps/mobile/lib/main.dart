@@ -11,13 +11,18 @@ import 'app/providers.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Explicit, not decorative: with no call here at all, a single screen that once asked for a
-  // preferred orientation (a barcode scanner, a fullscreen video) leaves that restriction on the
-  // whole app for the rest of the session, because Flutter has no other place that ever resets
-  // it back. This runs once, before anything else can set one, and its value is "no restriction"
-  // -- every orientation allowed -- which is the same as saying the phone's own auto-rotate
-  // switch decides, not this app.
-  await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+  // Locked to portrait: the catalog, topup wizard, chat and every other screen are laid out for
+  // it, none of them adapt to landscape, and letting the phone's auto-rotate flip the app while
+  // browsing broke that UI rather than improving anything. Explicit, not decorative: with no call
+  // here at all, a single screen that once asked for its own orientation (a barcode scanner, a
+  // fullscreen video) would leave that restriction on the whole app for the rest of the session,
+  // because Flutter has no other place that ever resets it back. This runs once, before anything
+  // else can set one, so any such screen-specific override still gets undone when that screen
+  // closes rather than sticking.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   // Month names for `ru` and `en`. Without this, the first `DateFormat('d MMM', 'ru')` throws —
   // `intl` ships no locale data until it is loaded. Awaited because it is local work measured in
