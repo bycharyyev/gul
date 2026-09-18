@@ -99,6 +99,12 @@ function LayoutChrome({ children }: { children: ReactNode }) {
   const navItems = useNavItems();
   const navigate = useNavigate();
   const [user, setUser] = useState(getCurrentUser());
+  const [navQuery, setNavQuery] = useState("");
+  const [navOrder, setNavOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("gulyaly.admin.nav-order") ?? "[]"); } catch { return []; }
+  });
+  const [draggedNav, setDraggedNav] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const { pendingOrdersCount, unreadChatCount } = useNotifications();
 
   useEffect(() => {
@@ -106,6 +112,31 @@ function LayoutChrome({ children }: { children: ReactNode }) {
     window.addEventListener(USER_UPDATED_EVENT, onUserUpdated);
     return () => window.removeEventListener(USER_UPDATED_EVENT, onUserUpdated);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const orderedNavItems = [...navItems].sort((a, b) => {
+    const ai = navOrder.indexOf(a.to); const bi = navOrder.indexOf(b.to);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }).filter((item) => item.label.toLowerCase().includes(navQuery.trim().toLowerCase()));
+
+  function moveNav(target: string) {
+    if (!draggedNav || draggedNav === target) return;
+    const base = [...navItems.map((item) => item.to)].sort((a, b) => {
+      const ai = navOrder.indexOf(a); const bi = navOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+    const from = base.indexOf(draggedNav); const to = base.indexOf(target);
+    if (from < 0 || to < 0) return;
+    base.splice(from, 1); base.splice(to, 0, draggedNav);
+    setNavOrder(base); localStorage.setItem("gulyaly.admin.nav-order", JSON.stringify(base));
+  }
 
   function logout() {
     api.logout();
@@ -121,18 +152,31 @@ function LayoutChrome({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
-        <div className="flex shrink-0 items-center gap-2 px-6 pb-4 pt-6 text-lg font-extrabold">
+        <div className="shrink-0 border-b border-slate-100 px-6 pb-4 pt-5">
+          <div className="flex items-center gap-2 text-lg font-extrabold">
           <img src="/brand/gulyaly.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-full" />
           <span className="text-gradient">Gulyaly</span>
+          </div>
+          <p className="mt-2 pl-10 text-[11px] font-medium text-slate-400">{now.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })} · {now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</p>
         </div>
         {/* Independently scrollable: the nav list alone can exceed the viewport, the logo above
             and the account/logout block below stay put instead of scrolling away with it. */}
-        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4">
-          {navItems.map((item) => (
+        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="mb-2 flex items-center gap-2">
+            <input value={navQuery} onChange={(e) => setNavQuery(e.target.value)} placeholder="Найти раздел…" className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100" aria-label="Поиск раздела" />
+            {navOrder.length > 0 && <button type="button" onClick={() => { setNavOrder([]); localStorage.removeItem("gulyaly.admin.nav-order"); }} className="text-[10px] font-semibold text-slate-400 hover:text-brand-600" title="Сбросить порядок">Сбросить</button>}
+          </div>
+          <p className="mb-2 px-1 text-[10px] uppercase tracking-wider text-slate-400">Перетаскивайте разделы для сортировки</p>
+          <div className="space-y-1">
+          {orderedNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
+              draggable
+              onDragStart={() => setDraggedNav(item.to)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => moveNav(item.to)}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
                   isActive
@@ -146,6 +190,7 @@ function LayoutChrome({ children }: { children: ReactNode }) {
               <NavBadge count={badgeFor(item.to)} />
             </NavLink>
           ))}
+          </div>
         </nav>
         <div className="shrink-0 border-t border-slate-200 px-4 pb-6 pt-3">
           <NavLink
