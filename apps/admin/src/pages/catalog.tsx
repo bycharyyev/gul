@@ -67,7 +67,7 @@ export default function CatalogPage() {
   const serviceStats = services.map((service) => {
     const serviceOrders = orders.filter((order) => order.serviceId === service.id);
     const completed = serviceOrders.filter((order) => order.status === "COMPLETED");
-    return { service, total: serviceOrders.length, completed: completed.length, volume: completed.reduce((sum, order) => sum + order.amountTmt, 0) };
+    return { service, total: serviceOrders.length, completed: completed.length, volume: completed.reduce((sum, order) => sum + Number(order.amountTmt), 0) };
   }).sort((a, b) => b.total - a.total);
   const neverOrdered = serviceStats.filter((item) => item.total === 0).length;
 
@@ -114,7 +114,7 @@ export default function CatalogPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <CatalogMetric label="Всего сервисов" value={services.length} detail={`${activeServices} активных`} />
         <CatalogMetric label="Заказов выполнено" value={completedOrders.length} detail="по всем сервисам" tone="green" />
-        <CatalogMetric label="Объём продаж" value={`${completedOrders.reduce((sum, order) => sum + order.amountTmt, 0).toFixed(0)} TMT`} detail="по выполненным заказам" />
+        <CatalogMetric label="Объём продаж" value={`${completedOrders.reduce((sum, order) => sum + Number(order.amountTmt), 0).toFixed(0)} TMT`} detail="по выполненным заказам" />
         <CatalogMetric label="Без заказов" value={neverOrdered} detail="сервисов требуют продвижения" tone={neverOrdered ? "amber" : "green"} />
       </div>
 

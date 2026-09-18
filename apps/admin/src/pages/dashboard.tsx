@@ -59,7 +59,7 @@ export default function DashboardPage() {
       }))
     : [];
 
-  const totalVolume = series.reduce((sum, p) => sum + p.volumeTmt, 0);
+  const totalVolume = series.reduce((sum, p) => sum + Number(p.volumeTmt), 0);
   const totalOrdersInPeriod = series.reduce((sum, p) => sum + p.orderCount, 0);
   const completedOrders = stats?.ordersByStatus.COMPLETED ?? 0;
   const pendingOrders = (stats?.ordersByStatus.PENDING_PAYMENT ?? 0) + (stats?.ordersByStatus.PAID ?? 0) + (stats?.ordersByStatus.PROCESSING ?? 0);
