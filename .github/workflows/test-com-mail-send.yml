@@ -30,8 +30,8 @@ jobs:
             cd /opt/gul
             docker compose exec -T -e TEST_TO_EMAIL="${{ inputs.to_email }}" api node -e "
               const { NestFactory } = require(\"@nestjs/core\");
-              const { AppModule } = require(\"./dist/app.module\");
-              const { EmailService } = require(\"./dist/email/email.service\");
+              const { AppModule } = require(\"./dist/src/app.module\");
+              const { EmailService } = require(\"./dist/src/email/email.service\");
               (async () => {
                 const app = await NestFactory.createApplicationContext(AppModule, { logger: [\"error\", \"warn\"] });
                 const email = app.get(EmailService);
