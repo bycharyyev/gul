@@ -17,6 +17,7 @@ on:
           - show-current
           - update-primary
           - update-secondary
+          - retry-recreate-secondary-api
 
 jobs:
   fix:
@@ -72,4 +73,20 @@ jobs:
                 ;;
             esac
             docker compose -f docker-compose.secondary.yml up -d api
+          '
+
+      - name: Retry recreating the api container on secondary once the compose file name is known
+        if: inputs.step == 'retry-recreate-secondary-api'
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            set -e
+            cd /opt/gul-secondary
+            echo "--- what is actually here ---"
+            ls -la
+            echo "--- trying docker compose ps to find the right compose file ---"
+            for f in *.yml *.yaml; do
+              [ -f "$f" ] || continue
+              echo "=== $f ==="
+              docker compose -f "$f" config --services 2>&1 | head -5
+            done
           '
