@@ -1,4 +1,4 @@
-# DNS changelog — gulyaly.pro
+# DNS changelog — gulyaly.pro / gulyaly.com
 
 Record of every DNS change made via `manage-dns.yml` (Timeweb Cloud API). This is **not** an
 approval log — during the current pre-launch test phase, DNS changes are made without a
@@ -74,6 +74,35 @@ Confirmed via authoritative NS: `_dmarc.gulyaly.pro` now returns the correct DMA
 carries only the correct SPF, no stray record either place. See CLAUDE.md's DNS management
 section for the documented gotcha — PATCH is only safe for a record's value when the record is
 already sitting at the exact name it should stay at; relocating anything means delete + recreate.
+
+## 2026-09-18 — gulyaly.com domain migration: mail identity
+
+Part of the site-wide `gulyaly.pro` → `gulyaly.com` migration. The relay itself (Postfix on the
+secondary, port 587, SASL) is transport-only and domain-agnostic, so it needed no changes; only
+what's actually domain-bound moved:
+
+- **`mail.gulyaly.com`** A record → secondary VPS, mirroring `mail.gulyaly.pro`.
+- **SPF** — PATCHed the same apex TXT record Timeweb auto-created when `gulyaly.com` was added to
+  the account (`v=spf1 include:_spf.timeweb.ru ~all`) to add `a:mail.gulyaly.com`, same
+  merge-not-replace pattern as 2026-08-27.
+- **DKIM** — a *new* keypair (a DKIM key is tied to its `d=` domain, so the `.pro` key could not be
+  reused): selector `mail`, added to OpenDKIM's `KeyTable`/`SigningTable` **alongside** the
+  existing `gulyaly.pro` entries rather than replacing them, so nothing about `.pro`'s signing
+  broke. Public key published at `mail._domainkey.gulyaly.com`.
+- **DMARC** — Timeweb's own default (`_dmarc.gulyaly.com`, `p=none`) was already created when the
+  domain was added; left as-is, the correct safe starting posture (matches how `.pro` started).
+- **App sending identity** — `MAIL_FROM` and `MAIL_SENDER_DOMAIN` in both `/opt/gul/.env` and
+  `/opt/gul-secondary/.env` repointed to `gulyaly.com`; the api container recreated on both nodes
+  to pick it up. Transactional mail (order confirmations, password resets) now sends as
+  `noreply@gulyaly.com`.
+
+**Deliberately not touched**: the `alerts@` sending identity (`infra/alerts/*.sh`,
+`install-disk-alert.yml`) still sends as `alerts@gulyaly.pro` — it uses its own dedicated SASL
+account (`alerts`) with its own `sender_login_maps` entry, separate from DKIM signing, and
+migrating it needs the same SASL/sender-login-map work as the original setup, not just a domain
+swap. Left as-is since it's an internal ops signal, not user-facing; can be migrated as a small
+follow-up if wanted. The `newsletter.gulyaly.pro` marketing identity is likewise untouched for now
+— broadcast mail wasn't part of this pass.
 
 ## Test-phase autonomy note
 

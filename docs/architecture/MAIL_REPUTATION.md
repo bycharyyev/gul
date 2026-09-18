@@ -17,8 +17,8 @@ Neither of these can be done by the agent — both require signing into an accou
 ownership of the domain/IP, which only the account holder can do.
 
 **Google Postmaster Tools** (postmaster.google.com) — shows Gmail-specific reputation, spam rate,
-and delivery errors for `gulyaly.pro` and `newsletter.gulyaly.pro` separately:
-1. Sign in with a Google account, add each domain (both `gulyaly.pro` and
+and delivery errors for `gulyaly.com` and `newsletter.gulyaly.pro` separately:
+1. Sign in with a Google account, add each domain (both `gulyaly.com` and
    `newsletter.gulyaly.pro` — they're separate sending identities as of the mail-split work).
 2. Verify ownership via a DNS TXT record it gives you (same domain the DKIM/SPF records already
    live in — Timeweb NS). Add it the same way as the other records (`manage-dns.yml`) once you

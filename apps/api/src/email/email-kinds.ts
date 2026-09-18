@@ -31,7 +31,7 @@ export type EmailPriority = "critical" | "transactional" | "marketing";
 export interface EmailKindSpec {
   category: EmailCategory;
   priority: EmailPriority;
-  /** Mailbox this kind sends as -- the local part, at gulyaly.pro. */
+  /** Mailbox this kind sends as -- the local part, at gulyaly.com. */
   sender: "noreply" | "orders" | "seller" | "info" | "news";
   /**
    * Whether the recipient must have opted in. Security and transactional mail is sent
@@ -368,7 +368,7 @@ export const EMAIL_KINDS: Record<EmailKind, EmailKindSpec> = {
  */
 export function senderAddress(kind: EmailKind): string {
   const spec = EMAIL_KINDS[kind];
-  const domain = process.env.MAIL_SENDER_DOMAIN || "gulyaly.pro";
+  const domain = process.env.MAIL_SENDER_DOMAIN || "gulyaly.com";
   if (spec.sender === "news" && process.env.MAIL_FROM_MARKETING) {
     return process.env.MAIL_FROM_MARKETING;
   }
