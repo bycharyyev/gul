@@ -26,10 +26,10 @@ jobs:
             docker compose up -d --force-recreate --no-deps api && break
             sleep $((attempt * 10))
           done
-          for i in $(seq 1 20); do
+          for i in $(seq 1 90); do
             curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo "healthy: $1" && break
             sleep 2
-            [ "$i" = "20" ] && { echo "NOT healthy: $1" >&2; exit 1; }
+            [ "$i" = "90" ] && { echo "NOT healthy: $1" >&2; exit 1; }
           done
           grep "^MAIL_REPLY_TO=" .env
           SCRIPT
