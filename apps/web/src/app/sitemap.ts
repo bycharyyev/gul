@@ -11,6 +11,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/cargo`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/track`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE_URL}/become-seller`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${SITE_URL}/contact`, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.3 },
   ];
 
   // Best-effort: a sitemap missing this round's new products is a rounding error a search

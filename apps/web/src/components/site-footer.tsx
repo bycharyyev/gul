@@ -10,9 +10,11 @@ export function SiteFooter() {
   const footerLinks = [
     { href: "/track", label: t("web.footer.trackOrder") },
     { href: "/pages/faq", label: t("web.footer.faq") },
+    { href: "/about", label: t("web.footer.about") },
+    { href: "/contact", label: t("web.footer.contact") },
     { href: "/become-seller", label: t("web.footer.becomeSeller") },
-    { href: "/pages/privacy", label: t("web.footer.privacy") },
-    { href: "/pages/offer", label: t("web.footer.offer") },
+    { href: "/privacy", label: t("web.footer.privacy") },
+    { href: "/terms", label: t("web.footer.offer") },
   ];
 
   return (
