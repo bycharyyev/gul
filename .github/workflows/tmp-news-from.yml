@@ -1,0 +1,36 @@
+name: tmp news from
+on:
+  workflow_dispatch:
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Set MAIL_FROM_MARKETING and restart api
+        run: |
+          cat > /tmp/set.sh <<'SCRIPT'
+          set -e
+          cd "$1"
+          sed -i 's#^MAIL_FROM_MARKETING=.*#MAIL_FROM_MARKETING="Gulyaly News <news@gulyaly.com>"#' .env
+          for attempt in 1 2 3; do
+            docker compose up -d --force-recreate --no-deps api && break
+            sleep $((attempt * 10))
+          done
+          for i in $(seq 1 90); do
+            curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo "healthy: $1" && break
+            sleep 2
+            [ "$i" = "90" ] && { echo "NOT healthy: $1" >&2; exit 1; }
+          done
+          grep "^MAIL_FROM_MARKETING=" .env
+          SCRIPT
+          for h in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/gul" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/opt/gul-secondary"; do
+            target="${h%%:*}"; dir="${h##*:}"
+            scp -i ~/.ssh/id_ed25519 /tmp/set.sh "$target:/tmp/set.sh"
+            ssh -i ~/.ssh/id_ed25519 "$target" "bash /tmp/set.sh $dir && rm -f /tmp/set.sh" < /dev/null
+          done
