@@ -1,0 +1,25 @@
+name: tmp alert to
+on:
+  workflow_dispatch:
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Point alert scripts at support@gulyaly.com
+        run: |
+          cat > /tmp/a.sh <<'SCRIPT'
+          set -e
+          for f in /etc/gul-*alert*.env; do [ -f "$f" ] || continue; sed -i 's#^MAIL_ALERT_TO=.*#MAIL_ALERT_TO=support@gulyaly.com#' "$f"; echo "$f -> $(grep -c '^MAIL_ALERT_TO=support@gulyaly.com' "$f")"; done
+          SCRIPT
+          for h in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+            scp -i ~/.ssh/k /tmp/a.sh "$h:/tmp/a.sh"
+            ssh -i ~/.ssh/k "$h" 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/a.sh:/host/tmp/a.sh alpine chroot /host /bin/bash /tmp/a.sh; s=$?; rm -f /tmp/a.sh; exit $s' < /dev/null
+          done
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'docker run --rm --pid=host --privileged --network=host -v /:/host alpine chroot /host /bin/bash -c "/usr/local/bin/gul-disk-alert.sh --test; echo exit=\$?"' < /dev/null
