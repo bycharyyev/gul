@@ -1,0 +1,29 @@
+name: tmp postfix hostname
+on:
+  workflow_dispatch:
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts
+      - name: Change Postfix myhostname to mail.gulyaly.com
+        run: |
+          cat > /tmp/pf.sh <<'SCRIPT'
+          set -e
+          cp /etc/postfix/main.cf /etc/postfix/main.cf.bak-hostname
+          echo "before:"; postconf myhostname mydestination smtp_helo_name smtpd_sasl_local_domain
+          postconf -e "myhostname = mail.gulyaly.com"
+          echo "mail.gulyaly.com" > /etc/mailname
+          if ! postfix check; then cp /etc/postfix/main.cf.bak-hostname /etc/postfix/main.cf; echo "check failed, restored"; exit 1; fi
+          postfix reload
+          sleep 3
+          echo "after:"; postconf myhostname mydestination smtp_helo_name smtpd_sasl_local_domain
+          systemctl is-active postfix
+          SCRIPT
+          scp -i ~/.ssh/deploy_key /tmp/pf.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/pf.sh
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/pf.sh:/host/tmp/pf.sh alpine chroot /host /bin/sh /tmp/pf.sh; rm -f /tmp/pf.sh' < /dev/null
