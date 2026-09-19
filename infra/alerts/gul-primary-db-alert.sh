@@ -14,7 +14,7 @@ send_alert() {
   message=$(mktemp)
   trap 'rm -f "$message"' RETURN
   {
-    echo "From: Gulyaly Alerts <alerts@gulyaly.pro>"
+    echo "From: Gulyaly Alerts <alerts@gulyaly.com>"
     echo "To: $MAIL_ALERT_TO"
     echo "Subject: $subject"
     echo "Date: $(date -R)"
@@ -26,7 +26,7 @@ send_alert() {
   } >"$message"
   curl --fail --silent --show-error --max-time 20 \
     --url "smtp://${MAIL_RELAY_HOST}:587" --ssl-reqd \
-    --mail-from "alerts@gulyaly.pro" --mail-rcpt "$MAIL_ALERT_TO" \
+    --mail-from "alerts@gulyaly.com" --mail-rcpt "$MAIL_ALERT_TO" \
     --user "${MAIL_ALERT_USER}:${MAIL_ALERT_PASS}" --upload-file "$message"
 }
 
