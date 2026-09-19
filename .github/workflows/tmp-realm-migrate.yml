@@ -1,0 +1,124 @@
+name: tmp realm migrate
+on:
+  workflow_dispatch:
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Generate fresh passwords (masked, never stored)
+        run: |
+          for n in PN PNL PA; do v=$(openssl rand -hex 24); echo "::add-mask::$v"; echo "$n=$v" >> "$GITHUB_ENV"; done
+      - name: Relay -- new certificate and realm mail.gulyaly.com
+        run: |
+          cat > /tmp/relay.sh <<'SCRIPT'
+          set -e
+          cd /etc/postfix
+          rm -rf bak-realm; mkdir bak-realm
+          cp main.cf sender_login_maps ssl/cert.pem ssl/key.pem bak-realm/
+          cp /etc/sasldb2 bak-realm/sasldb2
+          openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout ssl/key.new -out ssl/cert.new -subj "/CN=mail.gulyaly.com" -addext "subjectAltName=DNS:mail.gulyaly.com" 2>/dev/null
+          chmod 600 ssl/key.new
+          mv ssl/key.new ssl/key.pem
+          mv ssl/cert.new ssl/cert.pem
+          echo '__PN__' | saslpasswd2 -p -c -u mail.gulyaly.com noreply
+          echo '__PNL__' | saslpasswd2 -p -c -u mail.gulyaly.com newsletter
+          echo '__PA__' | saslpasswd2 -p -c -u mail.gulyaly.com alerts
+          chgrp sasl /etc/sasldb2
+          chmod 640 /etc/sasldb2
+          postconf -e "smtpd_sasl_local_domain = mail.gulyaly.com"
+          sed -i 's/@mail\.gulyaly\.pro/@mail.gulyaly.com/' sender_login_maps
+          postmap hash:/etc/postfix/sender_login_maps
+          postfix check
+          systemctl restart postfix
+          sleep 2
+          systemctl is-active postfix
+          echo "--- CERT PEM ---"
+          cat ssl/cert.pem
+          SCRIPT
+          sed -i "s#__PN__#$PN#; s#__PNL__#$PNL#; s#__PA__#$PA#" /tmp/relay.sh
+          scp -i ~/.ssh/k /tmp/relay.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/relay.sh
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/relay.sh:/host/tmp/relay.sh alpine chroot /host /bin/bash /tmp/relay.sh; s=$?; rm -f /tmp/relay.sh; exit $s' < /dev/null > /tmp/relay-out.txt
+          grep -E "^active$" /tmp/relay-out.txt
+          awk '/-----BEGIN CERTIFICATE-----/{f=1} f; /-----END CERTIFICATE-----/{f=0}' /tmp/relay-out.txt > /tmp/cert.pem
+          test -s /tmp/cert.pem
+          base64 -w0 /tmp/cert.pem > /tmp/cert.b64
+          echo "::add-mask::$(cat /tmp/cert.b64)"
+      - name: App env on both nodes and alert env on both hosts
+        run: |
+          CA=$(cat /tmp/cert.b64)
+          cat > /tmp/env.sh <<'SCRIPT'
+          set -e
+          cd "$1"
+          cp .env .env.bak-realm
+          set_kv() { if grep -q "^$1=" .env; then sed -i "s#^$1=.*#$1=\"$2\"#" .env; else echo "$1=\"$2\"" >> .env; fi; }
+          if [ "$2" = primary ]; then
+            set_kv MAIL_PASS '__PN__'
+            set_kv MAIL_TLS_CA_BASE64 '__CA__'
+            set_kv MAIL_TLS_SERVERNAME 'mail.gulyaly.com'
+          fi
+          set_kv MAIL_PASS_MARKETING '__PNL__'
+          set_kv MAIL_TLS_CA_BASE64_MARKETING '__CA__'
+          set_kv MAIL_TLS_SERVERNAME_MARKETING 'mail.gulyaly.com'
+          for attempt in 1 2 3; do docker compose up -d --force-recreate --no-deps api && break; sleep $((attempt*10)); done
+          for i in $(seq 1 90); do curl -fsS http://127.0.0.1:4000/api/health/ready >/dev/null && echo "healthy: $1" && break; sleep 2; [ "$i" = 90 ] && { echo "NOT healthy: $1"; exit 1; }; done
+          SCRIPT
+          sed -i "s#__PN__#$PN#; s#__PNL__#$PNL#; s#__CA__#$CA#g" /tmp/env.sh
+          scp -i ~/.ssh/k /tmp/env.sh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/env.sh
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash /tmp/env.sh /opt/gul primary; s=$?; rm -f /tmp/env.sh; exit $s' < /dev/null
+          scp -i ~/.ssh/k /tmp/env.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/env.sh
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'bash /tmp/env.sh /opt/gul-secondary secondary; s=$?; rm -f /tmp/env.sh; exit $s' < /dev/null
+          cat > /tmp/al.sh <<'SCRIPT'
+          set -e
+          for f in /etc/gul-*alert*.env; do [ -f "$f" ] || continue; sed -i 's#^MAIL_ALERT_PASS=.*#MAIL_ALERT_PASS=__PA__#' "$f"; echo "updated $f"; done
+          SCRIPT
+          sed -i "s#__PA__#$PA#" /tmp/al.sh
+          for h in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+            scp -i ~/.ssh/k /tmp/al.sh "$h:/tmp/al.sh"
+            ssh -i ~/.ssh/k "$h" 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/al.sh:/host/tmp/al.sh alpine chroot /host /bin/bash /tmp/al.sh; s=$?; rm -f /tmp/al.sh; exit $s' < /dev/null
+          done
+      - name: Verify with a real mail and a real alert
+        run: |
+          cat > /tmp/v.sh <<'SCRIPT'
+          cd /opt/gul
+          docker compose exec -T -e TEST_TO_EMAIL=malobiznes@gmail.com api node -e "
+            const { NestFactory } = require('@nestjs/core');
+            const { AppModule } = require('./dist/src/app.module');
+            const { EmailService } = require('./dist/src/email/email.service');
+            (async () => {
+              const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error','warn'] });
+              await app.get(EmailService).sendTest(process.env.TEST_TO_EMAIL);
+              console.log('sent-ok');
+              await app.close(); process.exit(0);
+            })().catch((e) => { console.error(String(e).slice(0,300)); process.exit(1); });
+          " < /dev/null || true
+          docker run --rm --pid=host --privileged --network=host -v /:/host alpine chroot /host /bin/bash -c "/usr/local/bin/gul-disk-alert.sh --test; echo alert-exit=\$?"
+          SCRIPT
+          scp -i ~/.ssh/k /tmp/v.sh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/v.sh
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash /tmp/v.sh; rm -f /tmp/v.sh' < /dev/null
+      - name: Roll back relay and env if anything above failed
+        if: failure()
+        run: |
+          cat > /tmp/rb.sh <<'SCRIPT'
+          cd /etc/postfix
+          cp bak-realm/main.cf main.cf
+          cp bak-realm/sender_login_maps sender_login_maps
+          cp bak-realm/cert.pem ssl/cert.pem
+          cp bak-realm/key.pem ssl/key.pem
+          cp bak-realm/sasldb2 /etc/sasldb2
+          chgrp sasl /etc/sasldb2
+          chmod 640 /etc/sasldb2
+          postmap hash:/etc/postfix/sender_login_maps
+          systemctl restart postfix
+          echo relay-restored
+          SCRIPT
+          scp -i ~/.ssh/k /tmp/rb.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/rb.sh
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/rb.sh:/host/tmp/rb.sh alpine chroot /host /bin/bash /tmp/rb.sh; rm -f /tmp/rb.sh' < /dev/null || true
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'cd /opt/gul && [ -f .env.bak-realm ] && cp .env.bak-realm .env && docker compose up -d --force-recreate --no-deps api && echo env-restored' < /dev/null || true
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'cd /opt/gul-secondary && [ -f .env.bak-realm ] && cp .env.bak-realm .env && docker compose up -d --force-recreate --no-deps api && echo env-restored' < /dev/null || true
