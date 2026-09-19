@@ -1,0 +1,23 @@
+name: tmp mail scope
+on:
+  workflow_dispatch:
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Read-only scope check
+        run: |
+          for h in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} /opt/gul" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} /opt/gul-secondary"; do
+            set -- $h
+            echo "=== $1 $2"
+            ssh -i ~/.ssh/k $1 "grep -E '^MAIL_(HOST|PORT|USER|FROM|TLS_SERVERNAME|SECURE)' $2/.env | sed -E 's/(PASS[^=]*=).*/\1***/'; grep -c -E '^MAIL_PASS|^MAIL_TLS_CA' $2/.env; grep -o -E '^MAIL_[A-Z_]*(CRITICAL|TRANSACTIONAL|MARKETING)[A-Z_]*=' $2/.env | tr '\n' ' '" < /dev/null
+          done
+          echo "=== relay"
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh -c "sasldblistusers2 2>&1; openssl x509 -in /etc/postfix/ssl/cert.pem -noout -subject -enddate -ext subjectAltName 2>&1 | head -5"' < /dev/null
