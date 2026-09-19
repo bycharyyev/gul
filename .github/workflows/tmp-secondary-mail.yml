@@ -1,0 +1,53 @@
+name: tmp secondary mail
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      P: ${{ secrets.NOREPLY_COM_SMTP_PASS }}
+    steps:
+      - name: Verify the mailbox login works before touching anything
+        run: |
+          python3 - <<'PY'
+          import os, smtplib
+          s = smtplib.SMTP_SSL("mail.hosting.reg.ru", 465, timeout=30)
+          s.login("noreply@gulyaly.com", os.environ["P"])
+          print("login ok")
+          s.quit()
+          PY
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Point secondary at the noreply@gulyaly.com mailbox
+        run: |
+          cat > /tmp/sec.sh <<'SCRIPT'
+          set -e
+          cd /opt/gul-secondary
+          cp .env .env.bak-mail
+          set_kv() { if grep -q "^$1=" .env; then sed -i "s#^$1=.*#$1=\"$2\"#" .env; else echo "$1=\"$2\"" >> .env; fi; }
+          set_kv MAIL_HOST 'mail.hosting.reg.ru'
+          set_kv MAIL_PORT '465'
+          set_kv MAIL_SECURE 'true'
+          set_kv MAIL_USER 'noreply@gulyaly.com'
+          set_kv MAIL_PASS '__P__'
+          for attempt in 1 2 3; do docker compose up -d --force-recreate --no-deps api && break; sleep $((attempt*10)); done
+          for i in $(seq 1 90); do curl -fsS http://127.0.0.1:4000/api/health/ready >/dev/null && echo healthy && break; sleep 2; [ "$i" = 90 ] && { echo NOT healthy; cp .env.bak-mail .env; docker compose up -d --force-recreate --no-deps api; exit 1; }; done
+          docker compose exec -T -e TEST_TO_EMAIL=malobiznes@gmail.com api node -e "
+            const { NestFactory } = require('@nestjs/core');
+            const { AppModule } = require('./dist/src/app.module');
+            const { EmailService } = require('./dist/src/email/email.service');
+            (async () => {
+              const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error','warn'] });
+              await app.get(EmailService).sendTest(process.env.TEST_TO_EMAIL);
+              console.log('sent-from-secondary');
+              await app.close(); process.exit(0);
+            })().catch((e) => { console.error(String(e).slice(0,300)); process.exit(1); });
+          " < /dev/null
+          SCRIPT
+          sed -i "s#__P__#$P#" /tmp/sec.sh
+          scp -i ~/.ssh/k /tmp/sec.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/sec.sh
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'bash /tmp/sec.sh; s=$?; rm -f /tmp/sec.sh; exit $s' < /dev/null
