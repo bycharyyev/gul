@@ -70,4 +70,4 @@ jobs:
 
       - name: Confirm the login endpoint responds (not a functional test, just "is it up")
         run: |
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" -m 10 https://admin.gulyaly.pro/netdata-login || true
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" -m 10 https://admin.gulyaly.com/netdata-login || true

@@ -37,10 +37,10 @@ jobs:
           MAIL_HOST: mail.hosting.reg.ru
           MAIL_PORT: "465"
           MAIL_SECURE: "true"
-          MAIL_USER: noreply@gulyaly.pro
+          MAIL_USER: noreply@gulyaly.com
           MAIL_PASS: ${{ secrets.MAIL_PASS_REGRU }}
-          MAIL_FROM: Gulyaly <noreply@gulyaly.pro>
-          MAIL_REPLY_TO: support@gulyaly.pro
+          MAIL_FROM: Gulyaly <noreply@gulyaly.com>
+          MAIL_REPLY_TO: support@gulyaly.com
           SMTP_TEST_RECIPIENT: ${{ inputs.recipient }}
         working-directory: apps/api
         run: npx jest email.smtp-integration --verbose

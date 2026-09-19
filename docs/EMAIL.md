@@ -137,9 +137,10 @@ Flutter/Web -> Gulyaly API -> business transaction ---+--> EmailOutbox row (same
   kinds enqueue directly. Three BullMQ queues share the Redis instance that already ran
   `topup-queue` — no second queue technology was introduced.
 - **Two independent transporters**: "main" (transactional — order mail, REG.RU) and "marketing"
-  (newsletter — kept on the old self-hosted Postfix relay, its own SASL login and DKIM
-  (`news2026._domainkey.newsletter.gulyaly.pro`), so spam complaints on a broadcast can't affect
-  transactional deliverability). Every `MAIL_*_MARKETING` env var falls back to its non-marketing
+  (newsletter — kept on the old self-hosted Postfix relay, its own SASL login; sent as
+  `news@gulyaly.com`, signed with the same `mail._domainkey.gulyaly.com` DKIM key as everything
+  else, so broadcast complaints and transactional mail share one domain reputation -- acceptable
+  while volumes are tiny, revisit if broadcasts grow). Every `MAIL_*_MARKETING` env var falls back to its non-marketing
   counterpart when unset. `sendMarketingBroadcast` is explicitly the only marketing feature —
   no campaign/segmentation system was added; a real ESP is the right tool if that's ever needed.
 
