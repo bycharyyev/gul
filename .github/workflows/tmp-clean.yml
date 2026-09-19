@@ -1,0 +1,28 @@
+name: tmp clean
+on:
+  workflow_dispatch:
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Remove leftover backup files from this session
+        run: |
+          for d in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} /opt/gul" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} /opt/gul-secondary"; do
+            set -- $d
+            echo "=== $1"
+            ssh -i ~/.ssh/k $1 "ls $2/.env.bak* 2>/dev/null; rm -f $2/.env.bak-mail $2/.env.bak-realm; echo '--- left:'; ls $2/.env.bak* 2>/dev/null || echo none; echo '--- tmp:'; ls -A /tmp | head -30; df -h / | tail -1" < /dev/null
+          done
+          cat > /tmp/relay-clean.sh <<'SCRIPT'
+          ls /etc/postfix | grep -E "bak" || true
+          rm -rf /etc/postfix/bak-realm /etc/postfix/main.cf.bak-hostname /etc/postfix/sender_login_maps.bak-pro
+          ls /etc/postfix | grep -E "bak" || echo "no bak left"
+          SCRIPT
+          scp -i ~/.ssh/k /tmp/relay-clean.sh ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}:/tmp/relay-clean.sh
+          ssh -i ~/.ssh/k ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} 'docker run --rm --pid=host --privileged -v /:/host -v /tmp/relay-clean.sh:/host/tmp/relay-clean.sh alpine chroot /host /bin/bash /tmp/relay-clean.sh; rm -f /tmp/relay-clean.sh' < /dev/null
