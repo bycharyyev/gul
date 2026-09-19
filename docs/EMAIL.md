@@ -512,13 +512,11 @@ Everything needed for mail to work is done. What is left is optional and deliber
 4. **`p=reject`** — DMARC is at `p=quarantine`. Tightening should follow a period of clean
    aggregate reports, not precede it.
 
-## Relay internals still named `mail.gulyaly.pro`
+## Relay identity
 
-The live relay's SASL realm (`noreply@mail.gulyaly.pro`, `alerts@...`, `newsletter@...`) and its
-self-signed certificate CN are historical labels, not DNS dependencies: the API and the alert
-scripts connect by IP / by `mail.gulyaly.com`, and the certificate is pinned via
-`MAIL_TLS_CA_BASE64` with a `MAIL_TLS_SERVERNAME` override. Nothing resolves `gulyaly.pro`. The
-setup workflows in this repo are written for `gulyaly.com`, so a freshly built relay gets `.com`
-labels; migrating the live realm would mean re-creating every SASL user and re-pinning the CA on
-both nodes, for no functional gain. Sender addresses (`noreply@`, `news@`, `alerts@gulyaly.com`)
-are mapped to those logins in `/etc/postfix/sender_login_maps`.
+The relay's certificate CN/SAN, SASL realm (`noreply@mail.gulyaly.com`, `alerts@...`,
+`newsletter@...`) and Postfix hostname are all `mail.gulyaly.com` (migrated 2026-09-19; old
+`mail.gulyaly.pro` realm users remain in `sasldb2` unused and can be deleted with
+`saslpasswd2 -d -u mail.gulyaly.pro <user>`). The certificate is self-signed and pinned via
+`MAIL_TLS_CA_BASE64` with `MAIL_TLS_SERVERNAME=mail.gulyaly.com`. Sender addresses (`noreply@`,
+`news@`, `alerts@gulyaly.com`) are mapped to those logins in `/etc/postfix/sender_login_maps`.
