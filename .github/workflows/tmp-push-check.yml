@@ -17,3 +17,10 @@ jobs:
             cd /opt/gul
             docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"select platform, count(*) as devices, max(\\\"lastSeenAt\\\") as last_seen from \\\"PushToken\\\" group by platform\""
           ' < /dev/null
+      - name: API request log for the devices route
+        run: |
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            docker compose logs api --since 30m 2>&1 | grep -i "notifications/devices" | tail -8 | cut -c1-260
+            echo "--- secondary:"
+          ' < /dev/null
