@@ -45,11 +45,12 @@ Future<void> main() async {
     if (next.status == AuthStatus.authenticated &&
         previous?.status != AuthStatus.authenticated) {
       unawaited(push.syncForAuthenticatedUser());
-    } else if (previous?.status == AuthStatus.authenticated &&
-        next.status != AuthStatus.authenticated) {
-      unawaited(push.unregister());
     }
   });
+  // Detach the device while the session is still valid: by the time the status flips to signed
+  // out the credentials are gone and the request would be rejected.
+  container.read(authControllerProvider.notifier).beforeSignOut =
+      push.unregister;
 
   // Session restore is started, not awaited. Awaiting it would hold the native splash for the
   // duration of an `/auth/me` round-trip — up to the 30s receive timeout on a bad connection —

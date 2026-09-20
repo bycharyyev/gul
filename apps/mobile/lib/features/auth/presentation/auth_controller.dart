@@ -61,6 +61,21 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthRepository _repository;
 
+  /// Runs while the session is still valid, just before signing out, so a device can be detached
+  /// from the account (push tokens) with an authenticated request. Best effort with a short
+  /// timeout: signing out must never wait on it.
+  Future<void> Function()? beforeSignOut;
+
+  Future<void> _runBeforeSignOut() async {
+    final hook = beforeSignOut;
+    if (hook == null) return;
+    try {
+      await hook().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Intentionally swallowed; see [beforeSignOut].
+    }
+  }
+
   /// Called once at startup, before the first frame decides where to route.
   Future<void> restore() async {
     state = state.copyWith(status: AuthStatus.unknown, clearError: true);
@@ -99,6 +114,7 @@ class AuthController extends StateNotifier<AuthState> {
   /// the app still drops the session — leaving someone stuck on a screen they asked to leave is
   /// worse than a stale entry the next write overwrites.
   Future<void> logout() async {
+    await _runBeforeSignOut();
     try {
       await _repository.logout();
     } catch (_) {
@@ -110,6 +126,7 @@ class AuthController extends StateNotifier<AuthState> {
   /// Ends every session on every device. Local credentials go regardless of whether the server
   /// call succeeded — see [logout].
   Future<void> logoutEverywhere() async {
+    await _runBeforeSignOut();
     try {
       await _repository.logoutEverywhere();
     } catch (_) {

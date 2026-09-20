@@ -210,6 +210,27 @@ void main() {
       expect(controller.state.user, isNull);
     });
 
+    test('the device is detached before the credentials are cleared', () async {
+      final order = <String>[];
+      when(() => repository.logout()).thenAnswer((_) async {
+        order.add('logout');
+      });
+      controller.beforeSignOut = () async => order.add('detach');
+
+      await controller.logout();
+
+      expect(order, ['detach', 'logout']);
+    });
+
+    test('a failing or hanging detach never blocks signing out', () async {
+      when(() => repository.logout()).thenAnswer((_) async {});
+      controller.beforeSignOut = () async => throw Exception('offline');
+
+      await controller.logout();
+
+      expect(controller.state.status, AuthStatus.unauthenticated);
+    });
+
     test('onSessionExpired drops the user', () async {
       when(
         () => repository.restoreSession(),

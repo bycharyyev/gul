@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:ui' show Color;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -52,7 +53,7 @@ class PushService {
     await Firebase.initializeApp();
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('ic_stat_notification');
     const ios = DarwinInitializationSettings();
     await _local.initialize(
       settings: const InitializationSettings(android: android, iOS: ios),
@@ -99,11 +100,16 @@ class PushService {
     }
   }
 
+  /// Detaches this device from the account that is signing out, so the next person to use the
+  /// phone never receives the previous person's notifications. After an app restart the token is
+  /// not remembered in memory, so it is read back from Firebase instead of being skipped.
   Future<void> unregister() async {
-    final token = _registeredToken;
-    _registeredToken = null;
-    if (token == null) return;
+    if (!_ready) return;
     try {
+      final token =
+          _registeredToken ?? await FirebaseMessaging.instance.getToken();
+      _registeredToken = null;
+      if (token == null) return;
       await _repository.remove(token);
     } catch (_) {
       developer.log('Could not unregister push token', name: 'push');
@@ -136,6 +142,8 @@ class PushService {
           channelDescription: 'Orders, messages and account notifications',
           importance: Importance.high,
           priority: Priority.high,
+          icon: 'ic_stat_notification',
+          color: Color(0xFF6C47FF),
         ),
         iOS: DarwinNotificationDetails(),
       ),
