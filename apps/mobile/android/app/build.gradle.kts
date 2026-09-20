@@ -7,6 +7,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// The config is supplied outside Git. Keeping the plugin conditional lets contributors and CI
+// build the app without receiving production Firebase credentials.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Release signing is read from android/key.properties, which is git-ignored and lives only on
 // the machine that cuts releases. When it is absent -- every CI checkout, every other
 // developer -- the release build type simply has no signing config, and Gradle fails loudly
@@ -25,6 +31,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -72,6 +79,10 @@ android {
             )
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 flutter {

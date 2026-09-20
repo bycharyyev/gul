@@ -9,6 +9,7 @@
          elsewhere). Requested only at the moment someone opens the scanner, never at launch;
          see barcode_scan_screen.dart. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- required="false": a phone with no camera still installs the app, it just can't use this
          one feature, the same reasoning as the optional-hardware entries mobile_scanner itself
          documents. -->
@@ -24,6 +25,9 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules">
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="gulyaly_general" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
