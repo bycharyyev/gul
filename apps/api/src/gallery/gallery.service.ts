@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TelegramBotService } from "../telegram-bot/telegram-bot.service";
 import { AdminTelegramBotService } from "../admin-telegram-bot/admin-telegram-bot.service";
@@ -35,6 +36,7 @@ export class GalleryService {
     private email: EmailService,
     private auditLog: AuditLogService,
     private ledger: SellerLedgerService,
+    @Optional() private push?: PushEventsService,
   ) {}
 
   // ---- Public ----
@@ -115,6 +117,8 @@ export class GalleryService {
       },
       include: ORDER_INCLUDE,
     });
+
+    void this.push?.galleryOrderCreated(order.id);
 
     if (product.sellerId) {
       void this.telegramBot.notifyNewOrder(product.sellerId, {
@@ -305,6 +309,7 @@ export class GalleryService {
           amountTmt: updated.amountTmt.toString(),
         });
       }
+      void this.push?.galleryOrderStatus(id);
       return updated;
     }
 
@@ -339,6 +344,7 @@ export class GalleryService {
       });
     }
 
+    void this.push?.galleryOrderStatus(id);
     return this.prisma.galleryOrder.findUniqueOrThrow({ where: { id } });
   }
 

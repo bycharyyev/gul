@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditLogService } from "../audit-log/audit-log.service";
 import { EmailService } from "../email/email.service";
@@ -58,6 +59,7 @@ export class CargoService {
     private prisma: PrismaService,
     private auditLog: AuditLogService,
     private email: EmailService,
+    @Optional() private push?: PushEventsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -622,6 +624,7 @@ export class CargoService {
 
     if (dto.status === "PAID") await this.sendShipmentEmail(shipment, "CARGO_SHIPMENT_CREATED");
     if (dto.status === "DELIVERED") await this.sendShipmentEmail(shipment, "CARGO_SHIPMENT_DELIVERED");
+    void this.push?.shipmentStatus(id);
 
     return this.findOneAdmin(id);
   }

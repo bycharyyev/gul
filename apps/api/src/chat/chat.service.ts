@@ -3,8 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
+import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
@@ -96,6 +98,7 @@ export class ChatService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    @Optional() private push?: PushEventsService,
   ) {}
 
   /** The shop this account owns, if it owns one. Null for everybody else. */
@@ -606,6 +609,7 @@ export class ChatService {
         data: { lastReadAt: new Date() },
       }),
     ]);
+    void this.push?.roomMessage(roomId, userId, clean, columns.attachmentUrl);
     return message;
   }
 
@@ -735,6 +739,7 @@ export class ChatService {
         data: { lastMessageAt: new Date() },
       }),
     ]);
+    void this.push?.threadMessage(threadId, !asShop, clean, columns.attachmentUrl);
     return message;
   }
 
@@ -908,6 +913,7 @@ export class ChatService {
         data: { lastMessageAt: new Date() },
       }),
     ]);
+    void this.push?.threadMessage(threadId, false, clean);
     return message;
   }
 

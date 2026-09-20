@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
@@ -18,6 +19,7 @@ export class SupportService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    @Optional() private push?: PushEventsService,
   ) {}
 
   private async getOrCreateThread(userId: string, sellerId: string | null) {
@@ -60,6 +62,7 @@ export class SupportService {
       where: { id: thread.id },
       data: { lastMessageAt: new Date(), status: "OPEN" },
     });
+    void this.push?.threadMessage(thread.id, true, body.trim(), columns.attachmentUrl);
     return message;
   }
 
@@ -170,6 +173,7 @@ export class SupportService {
       where: { id: threadId },
       data: { lastMessageAt: new Date() },
     });
+    void this.push?.threadMessage(threadId, false, body.trim(), columns.attachmentUrl);
     return message;
   }
 }
