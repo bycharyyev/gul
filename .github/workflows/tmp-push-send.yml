@@ -31,8 +31,8 @@ jobs:
               for (const c of list) console.log('campaign ' + c.name + ' ' + c.status + ' ' + JSON.stringify(c.stats));
               const detail = await svc.getCampaign(list[0].id);
               console.log('by country ' + JSON.stringify(detail.byCountry));
-              const rows = await prisma.pushDelivery.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true, category: true, campaignId: true, createdAt: true, openedAt: true, accepted: true } });
-              rows.forEach((r) => console.log('delivery ' + r.id.slice(-6) + ' camp=' + String(r.campaignId).slice(-6) + ' created=' + r.createdAt.toISOString().slice(11, 19) + ' opened=' + (r.openedAt ? r.openedAt.toISOString().slice(11, 19) : '-')));
+              const deliveries = await prisma.pushDelivery.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true, category: true, campaignId: true, createdAt: true, openedAt: true, accepted: true } });
+              deliveries.forEach((r) => console.log('delivery ' + r.id.slice(-6) + ' camp=' + String(r.campaignId).slice(-6) + ' created=' + r.createdAt.toISOString().slice(11, 19) + ' opened=' + (r.openedAt ? r.openedAt.toISOString().slice(11, 19) : '-')));
               const overview = await svc.overview(7);
               console.log('overview ' + JSON.stringify(overview.totals) + ' ' + JSON.stringify(overview.byCategory));
               await app.close();
