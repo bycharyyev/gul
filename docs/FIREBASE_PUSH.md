@@ -85,3 +85,38 @@ flutter build apk --debug
 Production deployment also runs `prisma migrate deploy`, creating the `PushToken` table before the
 new API starts serving traffic. Invalid and unregistered FCM tokens are removed after a failed send;
 token values are never written to application logs.
+
+## Notification format and events
+
+Every push carries `category`, `title`, `body`, `route`, and optionally `imageUrl` and `tag`
+(`apps/api/src/notifications/push-message.ts`). Android receives a **data-only** message and the app
+draws the notification itself (`push_notification_builder.dart`): the picture becomes a round
+centre-cropped large icon, the Gulyaly mark is the status-bar icon, and there is one channel per
+category so a person can silence one section. A system-drawn notification cannot show a round
+contact-style picture, which is why the `notification` block is not used. iOS receives a normal
+alert with `mutable-content`; showing the picture there needs a notification service extension
+(not built yet).
+
+| Category | Who is notified | Picture |
+|---|---|---|
+| `orders` | the buyer, when a top-up order completes or fails | service logo (e.g. PUBG Mobile UC) |
+| `gallery` | the buyer on status change; the shop owner on a new order | product photo |
+| `cargo` | the shipment owner on meaningful status changes | Gulyaly logo |
+| `support` | the customer, on a reply from platform support | Gulyaly logo |
+| `chat` | other members of a group or channel; either side of a shop conversation | group picture or sender avatar |
+| `feed` | a post's author on a like, or on a comment once moderation publishes it | commenter avatar |
+
+Producers call one fire-and-forget method on `PushEventsService` after their own write succeeds; it
+never throws. Every event has a unit test; only the top-up order path has been exercised on a real
+phone so far.
+
+## Things that stop a notification arriving on Android
+
+- **A freshly installed app is in the "stopped" state** until it is opened once; Android delivers
+  nothing to it before that.
+- **Swiping the app away is fine, "Force stop" is not.** A force-stopped app receives no push until
+  the user opens it again.
+- **Xiaomi/MIUI and some other vendors** restrict background apps. On those phones the user may need
+  to enable "Autostart" and set battery saver to "No restrictions" for Gulyaly, otherwise data
+  messages can be held back. This is a reason to keep a `notification` block fallback under review
+  if delivery on such phones proves unreliable.
