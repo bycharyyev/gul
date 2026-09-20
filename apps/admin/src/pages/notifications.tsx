@@ -6,18 +6,57 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { openTelegramDeepLink } from "@/lib/open-telegram";
+import { CampaignsTab } from "@/pages/push/campaigns-tab";
+import { OneTab } from "@/pages/push/one-tab";
+import { StatsTab } from "@/pages/push/stats-tab";
+import { TemplatesTab } from "@/pages/push/templates-tab";
+
+type TabKey = "stats" | "campaigns" | "templates" | "one" | "telegram";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "stats", label: "Статистика" },
+  { key: "campaigns", label: "Рассылки" },
+  { key: "templates", label: "Шаблоны" },
+  { key: "one", label: "Одному человеку" },
+  { key: "telegram", label: "Telegram" },
+];
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
+  const [tab, setTab] = useState<TabKey>("stats");
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold">{t("admin.notifications.title")}</h1>
-        <p className="mt-1 text-sm text-slate-500">{t("admin.notifications.hint")}</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Push-уведомления в приложении: рассылки, шаблоны, личные сообщения и статистика. Telegram-бот для
+          служебных алертов вынесен в отдельную вкладку.
+        </p>
       </div>
 
-      <TelegramCard />
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
+        {TABS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setTab(item.key)}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-semibold ${
+              tab === item.key
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "stats" && <StatsTab />}
+      {tab === "campaigns" && <CampaignsTab />}
+      {tab === "templates" && <TemplatesTab />}
+      {tab === "one" && <OneTab />}
+      {tab === "telegram" && <TelegramCard />}
     </div>
   );
 }
