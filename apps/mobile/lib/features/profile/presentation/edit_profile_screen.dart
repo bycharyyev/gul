@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../core/l10n/countries.dart';
 import '../../../core/l10n/strings.dart';
 import '../../auth/presentation/login_screen.dart' show validatePhone;
 import 'widgets/form_scaffold.dart';
@@ -21,6 +22,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _fullName;
   late final TextEditingController _phone;
+  String? _country;
   bool _busy = false;
   AppException? _error;
 
@@ -32,6 +34,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final user = ref.read(authControllerProvider).user;
     _fullName = TextEditingController(text: user?.fullName ?? '');
     _phone = TextEditingController(text: user?.phone ?? '');
+    _country = user?.country;
   }
 
   @override
@@ -55,6 +58,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           .updateProfile(
             fullName: _fullName.text.trim(),
             phone: _phone.text.trim(),
+            country: _country,
           );
       ref.read(authControllerProvider.notifier).applyUser(user);
       if (!mounted) return;
@@ -108,6 +112,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           onFieldSubmitted: (_) => _submit(),
           decoration: InputDecoration(labelText: strings.get('edit.phone')),
           validator: (v) => validatePhone(v, strings),
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          initialValue: countryOptions.any((c) => c.code == _country)
+              ? _country
+              : null,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: strings.get('edit.country'),
+            helperText: strings.get('edit.countryHint'),
+            helperMaxLines: 3,
+          ),
+          items: [
+            for (final c in countryOptions)
+              DropdownMenuItem(
+                value: c.code,
+                child: Text(c.name(strings.locale)),
+              ),
+          ],
+          onChanged: _busy ? null : (value) => setState(() => _country = value),
         ),
       ],
     );

@@ -578,6 +578,9 @@ class Strings {
       'edit.title': 'Данные профиля',
       'edit.fullName': 'Имя',
       'edit.phone': 'Телефон',
+      'edit.country': 'Страна',
+      'edit.countryHint':
+          'Определилась по номеру телефона. От неё зависят уведомления и акции для вашей страны.',
       'edit.saved': 'Изменения сохранены',
 
       'password.title': 'Смена пароля',
@@ -1124,6 +1127,9 @@ class Strings {
       'edit.title': 'Profile details',
       'edit.fullName': 'Name',
       'edit.phone': 'Phone',
+      'edit.country': 'Country',
+      'edit.countryHint':
+          'Worked out from your phone number. It decides which notifications and offers you receive.',
       'edit.saved': 'Changes saved',
 
       'password.title': 'Change password',
@@ -1665,6 +1671,9 @@ class Strings {
       'edit.title': 'Profil maglumatlary',
       'edit.fullName': 'Ady',
       'edit.phone': 'Telefon',
+      'edit.country': 'Ýurt',
+      'edit.countryHint':
+          'Telefon belgiňizden kesgitlenildi. Ol size haýsy habarnamalaryň we aksiýalaryň gelýändigini kesgitleýär.',
       'edit.saved': 'Üýtgeşmeler ýatda saklandy',
 
       'password.title': 'Paroly çalyşmak',

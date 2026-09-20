@@ -46,6 +46,11 @@ class PushService {
   StreamSubscription<RemoteMessage>? _openedSubscription;
   String? _registeredToken;
   bool _ready = false;
+  bool _signedIn = false;
+
+  /// Taps that happened before the session was restored (a cold start from a notification) are
+  /// reported once the person is signed in, when the request can be authenticated.
+  final List<String> _pendingOpened = [];
 
   /// Never throws: a build without the Firebase config files (CI, a contributor's machine) or a
   /// device without Google services must still start the app, just without push.
@@ -67,10 +72,8 @@ class PushService {
         android: _androidIcon,
         iOS: DarwinInitializationSettings(),
       ),
-      onDidReceiveNotificationResponse: (response) {
-        final route = response.payload;
-        if (route != null) _openRoute(route);
-      },
+      onDidReceiveNotificationResponse: (response) =>
+          _handleTap(decodePushPayload(response.payload)),
     );
     await createPushChannels(_local);
 
@@ -93,9 +96,8 @@ class PushService {
     final initial = await messaging.getInitialMessage();
     if (initial != null) _openMessage(initial);
     final launch = await _local.getNotificationAppLaunchDetails();
-    final launchRoute = launch?.notificationResponse?.payload;
-    if (launch?.didNotificationLaunchApp == true && launchRoute != null) {
-      _openRoute(launchRoute);
+    if (launch?.didNotificationLaunchApp == true) {
+      _handleTap(decodePushPayload(launch?.notificationResponse?.payload));
     }
     _ready = true;
   }
@@ -114,6 +116,8 @@ class PushService {
       if (settings.authorizationStatus == AuthorizationStatus.denied) return;
       final token = await messaging.getToken();
       if (token != null) await _register(token);
+      _signedIn = true;
+      _flushPendingOpened();
     } catch (error) {
       developer.log('Push sync failed: ${error.runtimeType}', name: 'push');
     }
@@ -123,6 +127,7 @@ class PushService {
   /// phone never receives the previous person's notifications. After an app restart the token is
   /// not remembered in memory, so it is read back from Firebase instead of being skipped.
   Future<void> unregister() async {
+    _signedIn = false;
     if (!_ready) return;
     try {
       final token =
@@ -170,9 +175,38 @@ class PushService {
     }
   }
 
-  void _openMessage(RemoteMessage message) {
-    final route = message.data['route'];
+  void _openMessage(RemoteMessage message) => _handleTap((
+    route: message.data['route'] as String?,
+    deliveryId: message.data['deliveryId'] as String?,
+  ));
+
+  /// Opens the screen and, separately, tells the server the push was tapped. The two are
+  /// independent: a failed report never delays or blocks the navigation.
+  void _handleTap(({String? route, String? deliveryId}) tap) {
+    final deliveryId = tap.deliveryId;
+    if (deliveryId != null) {
+      if (_signedIn) {
+        _reportOpened(deliveryId);
+      } else {
+        _pendingOpened.add(deliveryId);
+      }
+    }
+    final route = tap.route;
     if (route != null) _openRoute(route);
+  }
+
+  void _reportOpened(String deliveryId) {
+    unawaited(
+      _repository.markOpened(deliveryId).catchError((Object _) {
+        developer.log('Could not report an opened push', name: 'push');
+      }),
+    );
+  }
+
+  void _flushPendingOpened() {
+    final pending = List<String>.of(_pendingOpened);
+    _pendingOpened.clear();
+    pending.forEach(_reportOpened);
   }
 
   /// Only paths inside the app: the value arrives from the network, so a link to somewhere else

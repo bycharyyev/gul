@@ -11,6 +11,12 @@ class PushRepository {
         body: {'token': token, 'platform': platform},
       );
 
+  /// The person tapped a push. Best effort: a statistics call must never get in the way.
+  Future<void> markOpened(String deliveryId) => _api.post<void>(
+    '/notifications/opened',
+    body: {'deliveryId': deliveryId},
+  );
+
   Future<void> remove(String token) =>
       _api.delete<void>('/notifications/devices/${Uri.encodeComponent(token)}');
 }

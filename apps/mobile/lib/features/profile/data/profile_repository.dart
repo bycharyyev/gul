@@ -52,6 +52,7 @@ class ProfileRepository {
     required String fullName,
     String? phone,
     String? locale,
+    String? country,
   }) async {
     final data = await _api.patch<Map<String, dynamic>>(
       '/auth/me',
@@ -59,6 +60,7 @@ class ProfileRepository {
         'fullName': fullName,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (locale != null) 'locale': locale,
+        if (country != null) 'country': country,
       },
     );
     return User.fromJson(data);
