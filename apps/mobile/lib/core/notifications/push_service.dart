@@ -1,17 +1,33 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'dart:ui' show Color;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'push_notification_builder.dart';
 import 'push_repository.dart';
 
+const _androidIcon = AndroidInitializationSettings('ic_stat_notification');
+
+/// Runs in a background isolate when a data message arrives while the app is not in the
+/// foreground (backgrounded or terminated). It has to set up everything itself, because none of
+/// the main isolate's state exists here.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  // A message that still carries a `notification` block was already drawn by the system.
+  if (message.notification != null) return;
+  final plugin = FlutterLocalNotificationsPlugin();
+  await plugin.initialize(
+    settings: const InitializationSettings(
+      android: _androidIcon,
+      iOS: DarwinInitializationSettings(),
+    ),
+  );
+  await createPushChannels(plugin);
+  await showPushNotification(plugin, message.data);
 }
 
 class PushService {
@@ -20,13 +36,6 @@ class PushService {
     required void Function(String route) onRoute,
   }) : _repository = repository,
        _onRoute = onRoute;
-
-  static const _channel = AndroidNotificationChannel(
-    'gulyaly_general',
-    'Gulyaly notifications',
-    description: 'Orders, messages and account notifications',
-    importance: Importance.high,
-  );
 
   final PushRepository _repository;
   final void Function(String route) _onRoute;
@@ -53,22 +62,25 @@ class PushService {
     await Firebase.initializeApp();
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    const android = AndroidInitializationSettings('ic_stat_notification');
-    const ios = DarwinInitializationSettings();
     await _local.initialize(
-      settings: const InitializationSettings(android: android, iOS: ios),
+      settings: const InitializationSettings(
+        android: _androidIcon,
+        iOS: DarwinInitializationSettings(),
+      ),
       onDidReceiveNotificationResponse: (response) {
         final route = response.payload;
         if (route != null) _openRoute(route);
       },
     );
-    await _local
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(_channel);
+    await createPushChannels(_local);
 
     final messaging = FirebaseMessaging.instance;
+    // iOS draws the banner itself, also while the app is open; Android is drawn by us.
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
     _refreshSubscription = messaging.onTokenRefresh.listen(_register);
     _foregroundSubscription = FirebaseMessaging.onMessage.listen(
       _showForeground,
@@ -76,8 +88,15 @@ class PushService {
     _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
       _openMessage,
     );
+
+    // Terminated state: the app was started by tapping a notification.
     final initial = await messaging.getInitialMessage();
     if (initial != null) _openMessage(initial);
+    final launch = await _local.getNotificationAppLaunchDetails();
+    final launchRoute = launch?.notificationResponse?.payload;
+    if (launch?.didNotificationLaunchApp == true && launchRoute != null) {
+      _openRoute(launchRoute);
+    }
     _ready = true;
   }
 
@@ -129,26 +148,26 @@ class PushService {
   }
 
   Future<void> _showForeground(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
-    await _local.show(
-      id: message.hashCode,
-      title: notification.title,
-      body: notification.body,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'gulyaly_general',
-          'Gulyaly notifications',
-          channelDescription: 'Orders, messages and account notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: 'ic_stat_notification',
-          color: Color(0xFF6C47FF),
-        ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      payload: message.data['route'],
-    );
+    // iOS already presented the banner (see the presentation options above).
+    if (Platform.isIOS) return;
+    try {
+      final notification = message.notification;
+      if (notification != null && message.data['title'] == null) {
+        // A plain notification message (sent from the Firebase console, for instance).
+        await showPushNotification(_local, {
+          ...message.data,
+          'title': notification.title,
+          'body': notification.body,
+        });
+        return;
+      }
+      await showPushNotification(_local, message.data);
+    } catch (error) {
+      developer.log(
+        'Foreground notification failed: ${error.runtimeType}',
+        name: 'push',
+      );
+    }
   }
 
   void _openMessage(RemoteMessage message) {
@@ -156,6 +175,8 @@ class PushService {
     if (route != null) _openRoute(route);
   }
 
+  /// Only paths inside the app: the value arrives from the network, so a link to somewhere else
+  /// must never be followed.
   void _openRoute(String route) {
     if (route.startsWith('/') && !route.startsWith('//')) _onRoute(route);
   }
