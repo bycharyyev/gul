@@ -4,7 +4,7 @@ import { Reflector } from "@nestjs/core";
 import { ROLES_KEY } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { PushAdminController } from "./push-admin.controller";
-import { PushCampaignService } from "./push-campaign.service";
+import { PushCampaignService, nextOccurrence } from "./push-campaign.service";
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -143,6 +143,65 @@ describe("PushCampaignService", () => {
     });
   });
 
+  describe("platforms, delivery options and repeats", () => {
+    it("filters the audience and the device count by platform", async () => {
+      const { prisma, service } = setup();
+      expect(service.audienceWhere({ type: "ALL", platforms: ["IOS"] })).toEqual({
+        isBlocked: false,
+        pushTokens: { some: { platform: { in: ["IOS"] } } },
+      });
+      prisma.user.count.mockResolvedValue(3);
+      prisma.pushToken.count.mockResolvedValue(3);
+      await service.previewAudience({ type: "ALL", platforms: ["ANDROID"] });
+      expect(prisma.pushToken.count).toHaveBeenCalledWith({
+        where: { user: expect.anything(), platform: { in: ["ANDROID"] } },
+      });
+    });
+
+    it("stores priority and lifetime, and marks a repeating campaign as the start of a series", async () => {
+      const { prisma, service } = setup();
+      prisma.pushCampaign.create.mockImplementation(({ data }) => Promise.resolve({ id: "c1", ...data }));
+      const first = new Date(Date.now() + 3_600_000).toISOString();
+      await service.createCampaign(
+        { name: "x", content, audience: { type: "ALL" }, scheduledAt: first, priority: "normal", ttlHours: 6, repeat: "WEEKLY" },
+        "a",
+      );
+      expect(prisma.pushCampaign.create.mock.calls[0][0].data).toMatchObject({ priority: "normal", ttlHours: 6, repeat: "WEEKLY" });
+      expect(prisma.pushCampaign.update).toHaveBeenCalledWith({ where: { id: "c1" }, data: { seriesId: "c1" } });
+    });
+
+    it("refuses a repeat without a start time or with an end before the start", async () => {
+      const { service } = setup();
+      await expect(
+        service.createCampaign({ name: "x", content, audience: { type: "ALL" }, repeat: "DAILY" }, "a"),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      const first = new Date(Date.now() + 3_600_000);
+      await expect(
+        service.createCampaign(
+          { name: "x", content, audience: { type: "ALL" }, scheduledAt: first.toISOString(), repeat: "DAILY", repeatUntil: new Date(first.getTime() - 1000).toISOString() },
+          "a",
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("cancelling one occurrence stops the whole series", async () => {
+      const { prisma, service } = setup();
+      prisma.pushCampaign.updateMany.mockResolvedValue({ count: 1 });
+      prisma.pushCampaign.findUnique.mockResolvedValue({ seriesId: "s1" });
+      await service.cancel("c2", "a");
+      expect(prisma.pushCampaign.updateMany).toHaveBeenLastCalledWith({
+        where: { seriesId: "s1", status: { in: ["DRAFT", "SCHEDULED"] } },
+        data: { status: "CANCELLED" },
+      });
+    });
+
+    it("computes the next occurrence, clamping the month end", () => {
+      expect(nextOccurrence(new Date("2026-01-10T09:00:00Z"), "DAILY").toISOString()).toBe("2026-01-11T09:00:00.000Z");
+      expect(nextOccurrence(new Date("2026-01-10T09:00:00Z"), "WEEKLY").toISOString()).toBe("2026-01-17T09:00:00.000Z");
+      expect(nextOccurrence(new Date("2026-01-31T09:00:00Z"), "MONTHLY").toISOString()).toBe("2026-02-28T09:00:00.000Z");
+    });
+  });
+
   describe("sending", () => {
     it("starts a draft exactly once", async () => {
       const { prisma, service } = setup();
@@ -188,7 +247,7 @@ describe("PushCampaignService", () => {
       const titles = Object.fromEntries(notifications.sendToUser.mock.calls.map(([id, message]) => [id, message.title]));
       expect(titles).toEqual({ u1: "Привет", u2: "Hello", u3: "Привет" });
       expect(notifications.sendToUser.mock.calls[0][1]).toMatchObject({ category: "feed", route: "/feed", tag: "campaign:c1" });
-      expect(notifications.sendToUser.mock.calls[0][2]).toEqual({ campaignId: "c1" });
+      expect(notifications.sendToUser.mock.calls[0][2]).toMatchObject({ campaignId: "c1", priority: "high" });
       expect(prisma.pushCampaign.update).toHaveBeenCalledWith({
         where: { id: "c1" },
         data: expect.objectContaining({ status: "SENT", recipientCount: 2 }),

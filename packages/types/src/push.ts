@@ -44,7 +44,13 @@ export interface PushAudience {
   locales?: string[];
   roles?: string[];
   userIds?: string[];
+  /** Only these kinds of phone; missing means all. */
+  platforms?: PushPlatformKind[];
 }
+
+export type PushPlatformKind = "ANDROID" | "IOS";
+export type PushRepeat = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+export type PushPriority = "high" | "normal";
 
 export interface PushAudiencePreviewDto {
   users: number;
@@ -96,6 +102,11 @@ export interface PushCampaignDto {
   recipientCount: number;
   lastError: string | null;
   createdAt: string;
+  priority: PushPriority;
+  ttlHours: number;
+  repeat: PushRepeat;
+  repeatUntil: string | null;
+  seriesId: string | null;
   stats?: PushStatsDto;
 }
 
@@ -113,6 +124,12 @@ export interface CreatePushCampaignInput {
   scheduledAt?: string;
   /** Send immediately. */
   sendNow?: boolean;
+  priority?: PushPriority;
+  /** Hours the push service keeps trying an offline phone (1..672). */
+  ttlHours?: number;
+  /** Repeat a scheduled campaign; needs scheduledAt. */
+  repeat?: PushRepeat;
+  repeatUntil?: string;
 }
 
 export interface PushUserHitDto {
