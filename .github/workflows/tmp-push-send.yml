@@ -27,19 +27,12 @@ jobs:
               const rows = await prisma.pushToken.findMany({ select: { userId: true } });
               const users = [...new Set(rows.map((r) => r.userId))];
               console.log('devices=' + rows.length + ' users=' + users.length);
-              if (users.length !== 1) { console.log('ABORT: expected exactly one registered user, found ' + users.length); await app.close(); process.exit(0); }
-              const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } });
-              const me = await prisma.user.findUnique({ where: { id: users[0] }, select: { country: true, locale: true, phone: true } });
-              console.log('recipient country=' + me.country + ' locale=' + me.locale);
-              const campaign = await svc.createCampaign({
-                name: 'Тест управления push',
-                content: { category: 'gallery', titleRu: 'Тест из админки', bodyRu: 'Рассылка с сервера дошла. Нажмите, чтобы открыть Букеты.', titleEn: 'Admin test', bodyEn: 'Campaign delivered.', imageUrl: 'https://open.s3.regru.cloud/uploads/d9ad75f7-72dc-4bfc-97db-e10c2847b166.png', route: '/gallery' },
-                audience: { type: 'USERS', userIds: [users[0]] },
-                sendNow: true,
-              }, admin.id);
-              console.log('campaign=' + campaign.id + ' status=' + campaign.status);
-              await new Promise((r) => setTimeout(r, 6000));
-              console.log('stats ' + JSON.stringify((await svc.getCampaign(campaign.id)).stats));
+                            const list = await svc.listCampaigns(3);
+              for (const c of list) console.log('campaign ' + c.name + ' ' + c.status + ' ' + JSON.stringify(c.stats));
+              const detail = await svc.getCampaign(list[0].id);
+              console.log('by country ' + JSON.stringify(detail.byCountry));
+              const overview = await svc.overview(7);
+              console.log('overview ' + JSON.stringify(overview.totals) + ' ' + JSON.stringify(overview.byCategory));
               await app.close();
               process.exit(0);
             })().catch((e) => { console.error('ERR ' + String(e).slice(0, 300)); process.exit(1); });
