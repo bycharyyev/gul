@@ -7,6 +7,10 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'app/app.dart';
 import 'app/providers.dart';
+import 'app/router.dart';
+import 'core/notifications/push_repository.dart';
+import 'core/notifications/push_service.dart';
+import 'features/auth/presentation/auth_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +35,21 @@ Future<void> main() async {
   await initializeDateFormatting('en');
 
   final container = ProviderContainer();
+
+  final push = PushService(
+    repository: PushRepository(container.read(apiClientProvider)),
+    onRoute: (route) => container.read(routerProvider).go(route),
+  );
+  await push.initialize();
+  container.listen<AuthState>(authControllerProvider, (previous, next) {
+    if (next.status == AuthStatus.authenticated &&
+        previous?.status != AuthStatus.authenticated) {
+      unawaited(push.syncForAuthenticatedUser());
+    } else if (previous?.status == AuthStatus.authenticated &&
+        next.status != AuthStatus.authenticated) {
+      unawaited(push.unregister());
+    }
+  });
 
   // Session restore is started, not awaited. Awaiting it would hold the native splash for the
   // duration of an `/auth/me` round-trip — up to the 30s receive timeout on a bad connection —
