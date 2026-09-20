@@ -63,6 +63,18 @@ import type {
   SellerMeDto,
   SellerStatsDto,
   SellerTelegramStatusDto,
+  CountryOptionDto,
+  CreatePushCampaignInput,
+  CreatePushTemplateInput,
+  PushAudience,
+  PushAudiencePreviewDto,
+  PushCampaignDetailDto,
+  PushCampaignDto,
+  PushContentInput,
+  PushOverviewDto,
+  PushTemplateDto,
+  PushUserHitDto,
+  UpdatePushTemplateInput,
   SellerTelegramLinkCodeDto,
   SellerTimeseriesPoint,
   SellerTopProductDto,
@@ -1321,6 +1333,70 @@ export class ApiClient {
 
   unlinkPlatformTelegram() {
     return this.request<void>("/admin/platform-settings/telegram", { method: "DELETE" });
+  }
+
+  // ---- Push notifications (staff) ----
+
+  listPushCountries() {
+    return this.request<CountryOptionDto[]>("/admin/push/countries");
+  }
+
+  listPushTemplates() {
+    return this.request<PushTemplateDto[]>("/admin/push/templates");
+  }
+
+  createPushTemplate(input: CreatePushTemplateInput) {
+    return this.request<PushTemplateDto>("/admin/push/templates", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  updatePushTemplate(id: string, input: UpdatePushTemplateInput) {
+    return this.request<PushTemplateDto>(`/admin/push/templates/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  }
+
+  deletePushTemplate(id: string) {
+    return this.request<{ deleted: boolean }>(`/admin/push/templates/${id}`, { method: "DELETE" });
+  }
+
+  previewPushAudience(audience: PushAudience) {
+    return this.request<PushAudiencePreviewDto>("/admin/push/audience/preview", {
+      method: "POST",
+      body: JSON.stringify(audience),
+    });
+  }
+
+  listPushCampaigns(limit = 50) {
+    return this.request<PushCampaignDto[]>(`/admin/push/campaigns?limit=${limit}`);
+  }
+
+  getPushCampaign(id: string) {
+    return this.request<PushCampaignDetailDto>(`/admin/push/campaigns/${id}`);
+  }
+
+  createPushCampaign(input: CreatePushCampaignInput) {
+    return this.request<PushCampaignDto>("/admin/push/campaigns", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  sendPushCampaign(id: string) {
+    return this.request<PushCampaignDto>(`/admin/push/campaigns/${id}/send`, { method: "POST" });
+  }
+
+  cancelPushCampaign(id: string) {
+    return this.request<{ cancelled: boolean }>(`/admin/push/campaigns/${id}/cancel`, { method: "POST" });
+  }
+
+  searchPushUsers(query: string) {
+    return this.request<PushUserHitDto[]>(`/admin/push/users?q=${encodeURIComponent(query)}`);
+  }
+
+  sendPushToOne(target: string, content: PushContentInput) {
+    return this.request<PushCampaignDto>("/admin/push/send-one", {
+      method: "POST",
+      body: JSON.stringify({ target, content }),
+    });
+  }
+
+  getPushStats(days = 30) {
+    return this.request<PushOverviewDto>(`/admin/push/stats?days=${days}`);
   }
 
   // ---- Seller applications (public self-signup, admin-moderated) ----
