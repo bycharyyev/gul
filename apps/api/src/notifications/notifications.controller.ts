@@ -47,10 +47,13 @@ export class NotificationsController {
   @Roles("ADMIN")
   @Throttle({ default: { ttl: 60_000, limit: 3 } })
   test(@Body() dto: TestPushDto) {
-    return this.notifications.sendToUser(
-      dto.userId,
-      { title: dto.title, body: dto.body },
-      dto.data,
-    );
+    return this.notifications.sendToUser(dto.userId, {
+      category: dto.category ?? "orders",
+      title: dto.title,
+      body: dto.body,
+      route: dto.route ?? "/home",
+      imageUrl: dto.imageUrl,
+      data: dto.data,
+    });
   }
 }
