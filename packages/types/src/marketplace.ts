@@ -278,6 +278,7 @@ export type ReviewApplicationInput = z.infer<typeof reviewApplicationSchema>;
 export interface SellerApplicationDto {
   id: string;
   phone: string;
+  email: string;
   fullName: string | null;
   handle: string;
   shopName: string;

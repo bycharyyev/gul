@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { SellersService } from "./sellers.service";
 import { CreateSellerDto } from "./dto/create-seller.dto";
@@ -114,6 +115,8 @@ export class SellersController {
 
   // ---- Seller applications (public self-signup, admin-moderated) ----
 
+  // Public applications are a high-value abuse target: keep retries bounded per client.
+  @Throttle({ default: { limit: 3, ttl: 60 * 60 * 1000 } })
   @Post("apply")
   applyForSeller(@Body() dto: CreateSellerApplicationDto) {
     return this.sellers.applyForSeller(dto);

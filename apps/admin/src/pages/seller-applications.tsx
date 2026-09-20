@@ -35,6 +35,7 @@ export default function SellerApplicationsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SellerApplicationStatus | "ALL">("PENDING");
+  const [selected, setSelected] = useState<SellerApplicationAdminDto | null>(null);
 
   function load() {
     setLoading(true);
@@ -48,10 +49,12 @@ export default function SellerApplicationsPage() {
   useEffect(load, []);
 
   async function approve(id: string) {
+    if (!window.confirm("Одобрить заявку и создать продавца?")) return;
     setBusyId(id);
     setError(null);
     try {
       await api.approveSellerApplication(id);
+      setSelected(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("admin.sellerApplications.approveError"));
@@ -66,6 +69,7 @@ export default function SellerApplicationsPage() {
     setError(null);
     try {
       await api.rejectSellerApplication(id, { note });
+      setSelected(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("admin.sellerApplications.rejectError"));
@@ -135,7 +139,7 @@ export default function SellerApplicationsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {visible.map((a) => (
-              <tr key={a.id}>
+              <tr key={a.id} className="transition-colors hover:bg-slate-50/80">
                 <td className="px-4 py-3 font-medium">{a.shopName}</td>
                 <td className="px-4 py-3 text-brand-600">@{a.handle}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{a.phone}</td>
@@ -151,8 +155,12 @@ export default function SellerApplicationsPage() {
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-500">{a.reviewNote ?? "—"}</td>
                 <td className="px-4 py-3 text-right">
-                  {a.status === "PENDING" && (
-                    <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setSelected(a)}>
+                      Подробнее
+                    </Button>
+                    {a.status === "PENDING" && (
+                      <>
                       <Button size="sm" onClick={() => approve(a.id)} disabled={busyId === a.id}>
                         {t("admin.sellerApplications.approve")}
                       </Button>
@@ -165,8 +173,9 @@ export default function SellerApplicationsPage() {
                       >
                         {t("admin.sellerApplications.reject")}
                       </Button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -180,6 +189,46 @@ export default function SellerApplicationsPage() {
           </tbody>
         </table>
       </Card>
+
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelected(null);
+        }}>
+          <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="seller-application-title">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Заявка продавца</p>
+                <h2 id="seller-application-title" className="mt-1 text-xl font-bold text-slate-900">{selected.shopName}</h2>
+                <p className="text-sm text-brand-600">@{selected.handle}</p>
+              </div>
+              <button className="rounded-lg px-3 py-1 text-2xl text-slate-400 hover:bg-slate-100" onClick={() => setSelected(null)} aria-label="Закрыть">×</button>
+            </div>
+            <div className="grid gap-4 py-5 sm:grid-cols-2">
+              {[
+                ["Контактное лицо", selected.fullName ?? "Не указано"],
+                ["Телефон", selected.phone],
+                ["Email", selected.email],
+                ["Подана", new Date(selected.createdAt).toLocaleString(LOCALE_BCP47[locale])],
+                ["Статус", STATUS_LABEL[selected.status].text],
+                ["Рассмотрена", selected.reviewedAt ? new Date(selected.reviewedAt).toLocaleString(LOCALE_BCP47[locale]) : "Не рассмотрена"],
+              ].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{value}</p></div>)}
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-sm font-semibold text-slate-800">Описание магазина</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{selected.description || "Описание не заполнено — рекомендуется ручная проверка."}</p>
+            </div>
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Проверка перед решением</p>
+              <p className="mt-1">Сверьте телефон, email, профиль и описание. Автоматическая проверка не доказывает, что заявка является спамом.</p>
+            </div>
+            {selected.reviewNote && <p className="mt-4 text-sm text-slate-500"><span className="font-semibold">Комментарий модератора:</span> {selected.reviewNote}</p>}
+            {selected.status === "PENDING" && <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <Button variant="ghost" className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" onClick={() => reject(selected.id)} disabled={busyId === selected.id}>{t("admin.sellerApplications.reject")}</Button>
+              <Button onClick={() => approve(selected.id)} disabled={busyId === selected.id}>{t("admin.sellerApplications.approve")}</Button>
+            </div>}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

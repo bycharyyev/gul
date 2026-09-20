@@ -428,6 +428,7 @@ export class SellersService {
       select: {
         id: true,
         phone: true,
+        email: true,
         fullName: true,
         handle: true,
         shopName: true,
