@@ -33,6 +33,12 @@ export class PushAdminController {
     return this.push.listTemplates();
   }
 
+  @Post("templates/defaults")
+  @HttpCode(200)
+  installDefaultTemplates(@CurrentUser() user: { userId: string }) {
+    return this.push.installDefaultTemplates(user.userId);
+  }
+
   @Post("templates")
   createTemplate(@CurrentUser() user: { userId: string }, @Body() dto: CreateTemplateDto) {
     return this.push.createTemplate(dto, user.userId);

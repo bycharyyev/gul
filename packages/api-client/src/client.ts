@@ -1353,6 +1353,12 @@ export class ApiClient {
     return this.request<PushTemplateDto>(`/admin/push/templates/${id}`, { method: "PATCH", body: JSON.stringify(input) });
   }
 
+  installDefaultPushTemplates() {
+    return this.request<{ created: number; existing: number; total: number }>("/admin/push/templates/defaults", {
+      method: "POST",
+    });
+  }
+
   deletePushTemplate(id: string) {
     return this.request<{ deleted: boolean }>(`/admin/push/templates/${id}`, { method: "DELETE" });
   }
