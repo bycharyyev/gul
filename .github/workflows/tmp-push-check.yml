@@ -1,0 +1,19 @@
+name: tmp push check
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k
+          chmod 600 ~/.ssh/k
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Count registered push devices (no token values)
+        run: |
+          ssh -i ~/.ssh/k ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} '
+            cd /opt/gul
+            docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"select platform, count(*) as devices, max(\\\"lastSeenAt\\\") as last_seen from \\\"PushToken\\\" group by platform\""
+          ' < /dev/null
