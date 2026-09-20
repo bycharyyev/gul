@@ -11,6 +11,10 @@ function makePrisma(claimed: unknown[] = []) {
   };
 }
 
+function makePush() {
+  return { notifyOrderStatus: jest.fn().mockResolvedValue(undefined) };
+}
+
 function makeEmail() {
   return {
     sendOrderCreated: jest.fn().mockResolvedValue(undefined),
@@ -22,7 +26,7 @@ describe("EmailOutboxService", () => {
   describe("record", () => {
     it("writes through the caller's transaction client, not its own connection", async () => {
       const prisma = makePrisma();
-      const service = new EmailOutboxService(prisma as never, makeEmail() as never);
+      const service = new EmailOutboxService(prisma as never, makeEmail() as never, makePush() as never);
       const tx = { emailOutbox: { createMany: jest.fn().mockResolvedValue({ count: 1 }) } };
 
       await service.record(tx as never, {
@@ -38,7 +42,7 @@ describe("EmailOutboxService", () => {
     });
 
     it("ignores a duplicate key, so a replayed event records the obligation once", async () => {
-      const service = new EmailOutboxService(makePrisma() as never, makeEmail() as never);
+      const service = new EmailOutboxService(makePrisma() as never, makeEmail() as never, makePush() as never);
       const tx = { emailOutbox: { createMany: jest.fn().mockResolvedValue({ count: 0 }) } };
 
       await service.record(tx as never, { kind: "ORDER_CREATED", orderId: "o1", idempotencyKey: "k" });
@@ -52,7 +56,7 @@ describe("EmailOutboxService", () => {
   describe("dispatchPending", () => {
     it("claims rows with SKIP LOCKED so two hosts take disjoint batches", async () => {
       const prisma = makePrisma([]);
-      const service = new EmailOutboxService(prisma as never, makeEmail() as never);
+      const service = new EmailOutboxService(prisma as never, makeEmail() as never, makePush() as never);
 
       await service.dispatchPending();
 
@@ -67,7 +71,7 @@ describe("EmailOutboxService", () => {
         { id: "ob1", kind: "ORDER_CREATED", orderId: "o1", idempotencyKey: "k", attempts: 1 },
       ]);
       const email = makeEmail();
-      const service = new EmailOutboxService(prisma as never, email as never);
+      const service = new EmailOutboxService(prisma as never, email as never, makePush() as never);
 
       expect(await service.dispatchPending()).toBe(1);
       expect(email.sendOrderCreated).toHaveBeenCalledWith("o1");
@@ -81,7 +85,7 @@ describe("EmailOutboxService", () => {
         { id: "ob2", kind: "ORDER_COMPLETED", orderId: "o2", idempotencyKey: "k2", attempts: 1 },
       ]);
       const email = makeEmail();
-      const service = new EmailOutboxService(prisma as never, email as never);
+      const service = new EmailOutboxService(prisma as never, email as never, makePush() as never);
 
       await service.dispatchPending();
       expect(email.sendOrderStatusUpdate).toHaveBeenCalledWith("o2");
@@ -93,7 +97,7 @@ describe("EmailOutboxService", () => {
       ]);
       const email = makeEmail();
       email.sendOrderCreated.mockRejectedValue(new Error("db down"));
-      const service = new EmailOutboxService(prisma as never, email as never);
+      const service = new EmailOutboxService(prisma as never, email as never, makePush() as never);
 
       await service.dispatchPending();
       expect(prisma.emailOutbox.update).toHaveBeenCalledWith(
@@ -109,7 +113,7 @@ describe("EmailOutboxService", () => {
       ]);
       const email = makeEmail();
       email.sendOrderCreated.mockRejectedValue(new Error("still broken"));
-      const service = new EmailOutboxService(prisma as never, email as never);
+      const service = new EmailOutboxService(prisma as never, email as never, makePush() as never);
 
       await service.dispatchPending();
       expect(prisma.emailOutbox.update).toHaveBeenCalledWith(
@@ -124,7 +128,7 @@ describe("EmailOutboxService", () => {
       ]);
       const email = makeEmail();
       email.sendOrderCreated.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(undefined);
-      const service = new EmailOutboxService(prisma as never, email as never);
+      const service = new EmailOutboxService(prisma as never, email as never, makePush() as never);
 
       expect(await service.dispatchPending()).toBe(2);
       expect(email.sendOrderCreated).toHaveBeenCalledTimes(2);

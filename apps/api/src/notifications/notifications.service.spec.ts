@@ -10,7 +10,8 @@ describe("NotificationsService", () => {
     deleteMany: jest.fn(),
     findMany: jest.fn(),
   };
-  const prisma = { pushToken } as never;
+  const order = { findUnique: jest.fn() };
+  const prisma = { pushToken, order } as never;
   const firebase = { enabled: true, send: jest.fn() };
   let service: NotificationsService;
 
@@ -139,6 +140,69 @@ describe("NotificationsService", () => {
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(firebase.send).not.toHaveBeenCalled();
+  });
+
+  describe("notifyOrderStatus", () => {
+    const completed = {
+      id: "order-1",
+      status: "COMPLETED",
+      userId: "user-1",
+      service: { name: "Tmcell" },
+      user: { locale: "en" },
+    };
+
+    beforeEach(() => {
+      pushToken.findMany.mockResolvedValue([{ token: "a" }]);
+      firebase.send.mockResolvedValue({
+        successCount: 1,
+        failureCount: 0,
+        responses: [{ success: true }],
+      });
+    });
+
+    it("sends a localized push to the order's own user with a route to the order", async () => {
+      order.findUnique.mockResolvedValue(completed);
+
+      await service.notifyOrderStatus("order-1");
+
+      expect(pushToken.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }));
+      const message = firebase.send.mock.calls[0][0];
+      expect(message.notification.title).toBe("Order completed");
+      expect(message.data).toEqual({ route: "/home/orders/detail/order-1", orderId: "order-1" });
+    });
+
+    it("keeps personal details off the lock screen", async () => {
+      order.findUnique.mockResolvedValue({ ...completed, user: { locale: "ru" } });
+      await service.notifyOrderStatus("order-1");
+      const { notification } = firebase.send.mock.calls[0][0];
+      expect(JSON.stringify(notification)).not.toMatch(/\d{6,}/);
+    });
+
+    it("falls back to Russian for an unknown locale", async () => {
+      order.findUnique.mockResolvedValue({ ...completed, user: { locale: "fr" } });
+      await service.notifyOrderStatus("order-1");
+      expect(firebase.send.mock.calls[0][0].notification.title).toBe("Заказ выполнен");
+    });
+
+    it("does nothing for an order without an account or a final status", async () => {
+      order.findUnique.mockResolvedValueOnce({ ...completed, userId: null });
+      await service.notifyOrderStatus("order-1");
+      order.findUnique.mockResolvedValueOnce({ ...completed, status: "PROCESSING" });
+      await service.notifyOrderStatus("order-1");
+      expect(firebase.send).not.toHaveBeenCalled();
+    });
+
+    it("never throws when Firebase fails", async () => {
+      order.findUnique.mockResolvedValue(completed);
+      firebase.send.mockRejectedValue(new Error("fcm down"));
+      await expect(service.notifyOrderStatus("order-1")).resolves.toBeUndefined();
+    });
+
+    it("does nothing while Firebase is not configured", async () => {
+      firebase.enabled = false;
+      await service.notifyOrderStatus("order-1");
+      expect(order.findUnique).not.toHaveBeenCalled();
+    });
   });
 
   it("fails closed when Firebase credentials are unavailable", async () => {

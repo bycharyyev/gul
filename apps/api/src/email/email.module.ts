@@ -15,8 +15,10 @@ import { EmailRetentionProcessor } from "./email-retention.processor";
 import { EmailVerificationService } from "./email-verification.service";
 import { EmailVerificationController } from "./email-verification.controller";
 import { EmailTemplateController } from "./email-template.controller";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [EmailController, UnsubscribeController, EmailVerificationController, EmailTemplateController],
   providers: [EmailService, EmailProcessor, EmailTemplateService, EmailVerificationService, EmailQuotaService, EmailSuppressionService, EmailOutboxService, EmailOutboxProcessor, EmailAlertService, EmailAlertProcessor, EmailPreferenceService, EmailRetentionProcessor],
   exports: [EmailService, EmailTemplateService, EmailQuotaService, EmailSuppressionService, EmailOutboxService, EmailAlertService],

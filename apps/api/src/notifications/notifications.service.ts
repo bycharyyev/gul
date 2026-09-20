@@ -8,6 +8,23 @@ import { PushPlatform } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { FirebasePushGateway } from "./firebase-push.gateway";
 
+type OrderPushCopy = { title: string; body: (service: string) => string };
+
+// Lock-screen text: deliberately no phone number, amount or account id -- anyone holding the
+// phone can read it. The order screen behind the tap has the details.
+const ORDER_PUSH_COPY: Record<"COMPLETED" | "FAILED", Record<string, OrderPushCopy>> = {
+  COMPLETED: {
+    ru: { title: "Заказ выполнен", body: (s) => `Пополнение «${s}» выполнено.` },
+    en: { title: "Order completed", body: (s) => `Your ${s} top-up is complete.` },
+    tkm: { title: "Sargyt ýerine ýetirildi", body: (s) => `«${s}» dolduryşy tamamlandy.` },
+  },
+  FAILED: {
+    ru: { title: "Заказ не выполнен", body: (s) => `Не удалось выполнить заказ «${s}». Подробности в приложении.` },
+    en: { title: "Order failed", body: (s) => `We could not complete your ${s} order. Details are in the app.` },
+    tkm: { title: "Sargyt ýerine ýetirilmedi", body: (s) => `«${s}» sargydy ýerine ýetirilmedi. Jikme-jiklikler programmada.` },
+  },
+};
+
 const INVALID_TOKEN_CODES = new Set([
   "messaging/invalid-registration-token",
   "messaging/registration-token-not-registered",
@@ -50,6 +67,40 @@ export class NotificationsService {
     await this.prisma.pushToken.deleteMany({
       where: { id: { in: stale.map((device) => device.id) } },
     });
+  }
+
+  /**
+   * Tells the person who placed an order that it finished or failed. Called from the email outbox
+   * dispatcher, so every path that completes an order (operator worker, admin override) is
+   * covered. Never throws: push is a courtesy on top of the email, and a Firebase or database
+   * problem must not make the outbox retry the row.
+   */
+  async notifyOrderStatus(orderId: string) {
+    try {
+      if (!this.firebase.enabled) return;
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: {
+          id: true,
+          status: true,
+          userId: true,
+          service: { select: { name: true } },
+          user: { select: { locale: true } },
+        },
+      });
+      if (!order?.userId) return;
+      if (order.status !== "COMPLETED" && order.status !== "FAILED") return;
+      const copies = ORDER_PUSH_COPY[order.status];
+      const copy = copies[order.user?.locale ?? "ru"] ?? copies.ru;
+      if (!copy) return;
+      await this.sendToUser(
+        order.userId,
+        { title: copy.title, body: copy.body(order.service.name) },
+        { route: `/home/orders/detail/${order.id}`, orderId: order.id },
+      );
+    } catch (err) {
+      this.logger.warn(`Order push failed for ${orderId}: ${err instanceof Error ? err.constructor.name : "error"}`);
+    }
   }
 
   async remove(userId: string, token: string) {
