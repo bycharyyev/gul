@@ -28,6 +28,7 @@ import { SellerApiModule } from "./seller-api/seller-api.module";
 import { SellersModule } from "./sellers/sellers.module";
 import { TelegramBotModule } from "./telegram-bot/telegram-bot.module";
 import { AdminTelegramBotModule } from "./admin-telegram-bot/admin-telegram-bot.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 import { WithdrawalsModule } from "./withdrawals/withdrawals.module";
 import { HomeSlidesModule } from "./home-slides/home-slides.module";
 import { SocialLinksModule } from "./social-links/social-links.module";
@@ -97,6 +98,7 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
     SocialFeedModule,
     SentryAlertsModule,
     PlatformSettingsModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
