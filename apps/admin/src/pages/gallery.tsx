@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { confirmAction } from "@/lib/confirm";
 
 const NEW_PRODUCT_ID = "__new__";
 
@@ -45,7 +46,7 @@ export default function GalleryPage() {
   }
 
   async function deleteCategory(id: string) {
-    if (!confirm(t("admin.gallery.deleteCategoryConfirm"))) return;
+    if (!(await confirmAction(t("admin.gallery.deleteCategoryConfirm")))) return;
     try {
       await api.deleteGalleryCategory(id);
       setCategories((prev) => prev.filter((c) => c.id !== id));
@@ -66,7 +67,7 @@ export default function GalleryPage() {
   }
 
   async function handleDeleteProduct(id: string) {
-    if (!confirm(t("admin.gallery.deleteProductConfirm"))) return;
+    if (!(await confirmAction(t("admin.gallery.deleteProductConfirm")))) return;
     await api.deleteGalleryProduct(id);
     setProducts((prev) => prev.filter((p) => p.id !== id));
     setSelectedProductId(null);

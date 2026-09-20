@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 /// Everywhere the site itself already builds these -- referral, group-invite. Kept in one
 /// place so this page and AppConfig on mobile never disagree about the shape of the URL.
@@ -55,7 +56,7 @@ export default function ManagedLinksPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm(t("admin.managedLinks.deleteConfirm"))) return;
+    if (!(await confirmAction(t("admin.managedLinks.deleteConfirm")))) return;
     await api.deleteManagedLink(id);
     setLinks((prev) => prev.filter((l) => l.id !== id));
   }

@@ -26,6 +26,7 @@ import {
   formatDateTime,
   type ContentDraft,
 } from "./shared";
+import { confirmAction } from "@/lib/confirm";
 
 function StatusPill({ status }: { status: PushCampaignDto["status"] }) {
   const meta = STATUS_LABELS[status];
@@ -124,7 +125,7 @@ function CampaignForm({
   async function submit() {
     if (when === "now") {
       const who = preview ? `${preview.users} чел. (${preview.devices} устройств)` : "выбранной аудитории";
-      if (!window.confirm(`Отправить сейчас ${who}? Отменить после отправки нельзя.`)) return;
+      if (!(await confirmAction(`Отправить сейчас ${who}? Отменить после отправки нельзя.`))) return;
     }
     setBusy(true);
     setError(null);
@@ -280,7 +281,7 @@ function CampaignDetail({ id, names, onBack }: { id: string; names: Map<string, 
   }, [campaign?.status]);
 
   async function act(action: () => Promise<unknown>, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirmAction(confirmText))) return;
     setBusy(true);
     setError(null);
     try {

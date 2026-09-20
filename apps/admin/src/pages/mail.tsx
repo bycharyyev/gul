@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
+import { confirmAction } from "@/lib/confirm";
 
 const KIND_KEYS: Record<string, string> = {
   ORDER_CREATED: "admin.mail.kind.orderCreated",
@@ -109,7 +110,7 @@ export default function MailPage() {
 
   async function sendBroadcast(e: React.FormEvent) {
     e.preventDefault();
-    if (!confirm(t("admin.mail.broadcastConfirm"))) return;
+    if (!(await confirmAction(t("admin.mail.broadcastConfirm")))) return;
     setBroadcastBusy(true);
     setBroadcastStatus(null);
     try {

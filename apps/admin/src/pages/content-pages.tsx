@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 const NEW_PAGE_ID = "__new__";
 
@@ -47,7 +48,7 @@ export default function ContentPagesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("admin.contentPages.deleteConfirm"))) return;
+    if (!(await confirmAction(t("admin.contentPages.deleteConfirm")))) return;
     await api.deleteContentPage(id);
     setPages((prev) => prev.filter((p) => p.id !== id));
     setSelectedId(null);

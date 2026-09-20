@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { confirmAction } from "@/lib/confirm";
 
 function usePlatformLabels(): Record<SocialPlatform, string> {
   const { t } = useTranslation();
@@ -68,7 +69,7 @@ export default function SocialLinksPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm(t("admin.socialLinks.deleteConfirm"))) return;
+    if (!(await confirmAction(t("admin.socialLinks.deleteConfirm")))) return;
     await api.deleteSocialLink(id);
     setLinks((prev) => prev.filter((l) => l.id !== id));
   }

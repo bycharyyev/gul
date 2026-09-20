@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ContentEditor } from "./content-editor";
 import { CATEGORY_LABELS, type ContentDraft, draftFrom, draftIsValid, draftToInput, emptyDraft, errorText } from "./shared";
+import { confirmAction } from "@/lib/confirm";
 
 export function TemplatesTab() {
   const [templates, setTemplates] = useState<PushTemplateDto[]>([]);
@@ -52,7 +53,7 @@ export function TemplatesTab() {
   }
 
   async function remove(template: PushTemplateDto) {
-    if (!window.confirm(`Удалить шаблон «${template.name}»? Уже отправленные рассылки не изменятся.`)) return;
+    if (!(await confirmAction(`Удалить шаблон «${template.name}»? Уже отправленные рассылки не изменятся.`))) return;
     await api.deletePushTemplate(template.id).catch((err) => setError(errorText(err)));
     load();
   }

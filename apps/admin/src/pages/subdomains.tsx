@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 const STATUS_STYLES: Record<ManagedSubdomainDto["status"], string> = {
   PENDING: "text-amber-600 dark:text-amber-400",
@@ -55,7 +56,7 @@ export default function SubdomainsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm(t("admin.subdomains.deleteConfirm"))) return;
+    if (!(await confirmAction(t("admin.subdomains.deleteConfirm")))) return;
     await api.deleteSubdomain(id);
     load();
   }

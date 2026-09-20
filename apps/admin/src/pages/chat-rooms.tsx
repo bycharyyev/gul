@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm";
 
 /**
  * Every room on the platform, and who answers for it.
@@ -113,7 +114,7 @@ export default function ChatRoomsPage() {
   async function remove(room: ChatRoomAdminDto) {
     // Deleting takes the messages with it, and there is no undo — so the confirmation names the
     // room and says what goes, rather than asking "are you sure".
-    const ok = window.confirm(
+    const ok = await confirmAction(
       `Удалить чат «${room.title}» и все ${room._count.messages} сообщений в нём? Это необратимо.`,
     );
     if (!ok) return;
@@ -397,7 +398,7 @@ function OfficialChannels({ rooms, onChanged }: { rooms: ChatRoomAdminDto[]; onC
   const [notice, setNotice] = useState<string | null>(null);
 
   async function open(item: (typeof officialCategories)[number]) {
-    if (body.trim() && !window.confirm("Перейти в другой канал? Неопубликованный текст будет потерян.")) return;
+    if (body.trim() && !(await confirmAction("Перейти в другой канал? Неопубликованный текст будет потерян."))) return;
     setBusy(true);
     setSelected(item);
     setRoomId(null);

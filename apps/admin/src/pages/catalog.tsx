@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { useNavigate } from "react-router-dom";
+import { confirmAction } from "@/lib/confirm";
 
 const NEW_SERVICE_ID = "__new__";
 
@@ -98,7 +99,7 @@ export default function CatalogPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("admin.catalog.deleteServiceConfirm"))) return;
+    if (!(await confirmAction(t("admin.catalog.deleteServiceConfirm")))) return;
     await api.deleteService(id);
     setServices((prev) => prev.filter((s) => s.id !== id));
     setSelectedId(null);
