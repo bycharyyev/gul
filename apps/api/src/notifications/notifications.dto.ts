@@ -25,6 +25,12 @@ export class RegisterPushTokenDto {
   platform!: PushPlatformDto;
 }
 
+export class PushOpenedDto {
+  @IsString()
+  @Length(10, 40)
+  deliveryId!: string;
+}
+
 export class TestPushDto {
   @IsString()
   userId!: string;

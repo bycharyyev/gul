@@ -19,13 +19,16 @@ describe("NotificationsService", () => {
     findMany: jest.fn(),
   };
   const order = { findUnique: jest.fn() };
-  const prisma = { pushToken, order } as never;
+  const pushDelivery = { create: jest.fn(), update: jest.fn(), updateMany: jest.fn() };
+  const prisma = { pushToken, order, pushDelivery } as never;
   const firebase = { enabled: true, send: jest.fn() };
   let service: NotificationsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     pushToken.findMany.mockResolvedValue([]);
+    pushDelivery.create.mockResolvedValue({ id: "delivery-1" });
+    pushDelivery.update.mockResolvedValue({});
     firebase.enabled = true;
     service = new NotificationsService(prisma, firebase as never);
   });
@@ -91,7 +94,7 @@ describe("NotificationsService", () => {
         responses: [{ success: true }, { success: true }],
       });
 
-      await expect(service.sendToUser("user-1", message)).resolves.toEqual({
+      await expect(service.sendToUser("user-1", message)).resolves.toMatchObject({
         requested: 2,
         delivered: 2,
         failed: 0,
@@ -123,6 +126,31 @@ describe("NotificationsService", () => {
         imageUrl: "https://api.gulyaly.com/api/avatar/a.jpg",
       });
       expect(payload.apns.payload.aps.mutableContent).toBe(true);
+    });
+
+    it("records every push and puts its id inside the message so a tap can be counted", async () => {
+      pushToken.findMany.mockResolvedValue([{ token: "a" }, { token: "b" }]);
+      firebase.send.mockResolvedValue({
+        successCount: 1,
+        failureCount: 1,
+        responses: [{ success: true }, { success: false, error: { code: "messaging/internal-error" } }],
+      });
+
+      const result = await service.sendToUser("user-1", message, { campaignId: "camp-1" });
+
+      expect(pushDelivery.create).toHaveBeenCalledWith({
+        data: { userId: "user-1", campaignId: "camp-1", category: "orders", devices: 2 },
+        select: { id: true },
+      });
+      expect(firebase.send.mock.calls[0][0].data.deliveryId).toBe("delivery-1");
+      expect(pushDelivery.update).toHaveBeenCalledWith({ where: { id: "delivery-1" }, data: { accepted: 1 } });
+      expect(result).toMatchObject({ requested: 2, delivered: 1, failed: 1, deliveryId: "delivery-1" });
+    });
+
+    it("writes nothing for a person with no devices", async () => {
+      pushToken.findMany.mockResolvedValue([]);
+      await service.sendToUser("user-1", message);
+      expect(pushDelivery.create).not.toHaveBeenCalled();
     });
 
     it("refuses a route that leaves the app", async () => {
@@ -170,7 +198,7 @@ describe("NotificationsService", () => {
         }),
       );
 
-      await expect(service.sendToUser("user-1", message)).resolves.toEqual({
+      await expect(service.sendToUser("user-1", message)).resolves.toMatchObject({
         requested: 501,
         delivered: 501,
         failed: 0,
@@ -194,6 +222,20 @@ describe("NotificationsService", () => {
         service.sendToUser("user-1", message),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(pushToken.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("markOpened", () => {
+    it("counts only the person's own delivery, and only the first tap", async () => {
+      pushDelivery.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.markOpened("user-1", "delivery-1")).resolves.toEqual({ opened: true });
+      expect(pushDelivery.updateMany).toHaveBeenCalledWith({
+        where: { id: "delivery-1", userId: "user-1", openedAt: null },
+        data: { openedAt: expect.any(Date) },
+      });
+
+      pushDelivery.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.markOpened("user-1", "delivery-1")).resolves.toEqual({ opened: false });
     });
   });
 

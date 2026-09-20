@@ -21,6 +21,7 @@ describe("NotificationsController security", () => {
     const proto = NotificationsController.prototype;
     expect(limit(proto.register)).toBe(20);
     expect(limit(proto.remove)).toBe(20);
+    expect(limit(proto.opened)).toBe(120);
     expect(limit(proto.test)).toBe(3);
   });
 

@@ -13,7 +13,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
-import { RegisterPushTokenDto, TestPushDto } from "./notifications.dto";
+import { PushOpenedDto, RegisterPushTokenDto, TestPushDto } from "./notifications.dto";
 import { NotificationsService } from "./notifications.service";
 
 @ApiTags("notifications")
@@ -31,6 +31,13 @@ export class NotificationsController {
     @Body() dto: RegisterPushTokenDto,
   ) {
     return this.notifications.register(user.userId, dto.token, dto.platform);
+  }
+
+  @Post("opened")
+  @HttpCode(200)
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  opened(@CurrentUser() user: { userId: string }, @Body() dto: PushOpenedDto) {
+    return this.notifications.markOpened(user.userId, dto.deliveryId);
   }
 
   @Delete("devices/:token")

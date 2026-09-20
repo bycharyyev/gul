@@ -137,7 +137,7 @@ export class NotificationsService {
     }
   }
 
-  async sendToUser(userId: string, message: PushMessage) {
+  async sendToUser(userId: string, message: PushMessage, options: { campaignId?: string } = {}) {
     if (!this.firebase.enabled) {
       throw new ServiceUnavailableException(
         "Firebase push delivery is not configured",
@@ -156,7 +156,22 @@ export class NotificationsService {
     });
     if (devices.length === 0) return { requested: 0, delivered: 0, failed: 0 };
 
-    const payload = toFcmMessage({ ...message, imageUrl: absoluteImageUrl(message.imageUrl) });
+    // The row exists before the send so its id can travel inside the push: when the person taps
+    // it, the app reports that id back and the statistics know which push was opened.
+    const delivery = await this.prisma.pushDelivery.create({
+      data: {
+        userId,
+        campaignId: options.campaignId,
+        category: message.category,
+        devices: devices.length,
+      },
+      select: { id: true },
+    });
+    const payload = toFcmMessage({
+      ...message,
+      imageUrl: absoluteImageUrl(message.imageUrl),
+      data: { ...(message.data ?? {}), deliveryId: delivery.id },
+    });
 
     let delivered = 0;
     let failed = 0;
@@ -184,6 +199,19 @@ export class NotificationsService {
       });
       this.logger.log(`Removed ${invalid.length} invalid push token(s)`);
     }
-    return { requested: devices.length, delivered, failed };
+    await this.prisma.pushDelivery.update({
+      where: { id: delivery.id },
+      data: { accepted: delivered },
+    });
+    return { requested: devices.length, delivered, failed, deliveryId: delivery.id };
+  }
+
+  /** The person tapped a notification. Only their own delivery counts, and only the first tap. */
+  async markOpened(userId: string, deliveryId: string) {
+    const result = await this.prisma.pushDelivery.updateMany({
+      where: { id: deliveryId, userId, openedAt: null },
+      data: { openedAt: new Date() },
+    });
+    return { opened: result.count > 0 };
   }
 }
