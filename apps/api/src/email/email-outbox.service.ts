@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { EmailKind, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
 
 /** How many rows one dispatch pass claims. Small: a pass runs every few seconds. */
@@ -29,6 +30,7 @@ export class EmailOutboxService {
   constructor(
     private prisma: PrismaService,
     private email: EmailService,
+    private notifications: NotificationsService,
   ) {}
 
   /**
@@ -105,6 +107,8 @@ export class EmailOutboxService {
     }
     if (row.kind === "ORDER_COMPLETED" || row.kind === "ORDER_FAILED") {
       await this.email.sendOrderStatusUpdate(row.orderId);
+      // Best-effort and never throws, so a push problem cannot make the outbox retry the email.
+      await this.notifications.notifyOrderStatus(row.orderId);
       return;
     }
     throw new Error(`No outbox dispatcher for kind ${row.kind}`);
