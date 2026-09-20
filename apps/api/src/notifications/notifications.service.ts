@@ -7,6 +7,8 @@ import {
 import { PushPlatform } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { FirebasePushGateway } from "./firebase-push.gateway";
+import { absoluteImageUrl } from "./image-url";
+import { PushMessage, toFcmMessage } from "./push-message";
 
 type OrderPushCopy = { title: string; body: (service: string) => string };
 
@@ -69,11 +71,39 @@ export class NotificationsService {
     });
   }
 
+  async remove(userId: string, token: string) {
+    const result = await this.prisma.pushToken.deleteMany({
+      where: { userId, token },
+    });
+    return { removed: result.count > 0 };
+  }
+
+  /**
+   * Fire-and-forget delivery used by the product code (orders, chat, cargo, ...). Never throws:
+   * push is a courtesy on top of the real state change, so a Firebase or database problem must not
+   * fail the request or make a retry loop resend an email. `imageUrl` may be any stored picture
+   * reference; it is normalised to an absolute https URL here so callers can pass what they have.
+   */
+  async notify(userId: string | null | undefined, message: PushMessage) {
+    if (!userId || !this.firebase.enabled) return;
+    try {
+      await this.sendToUser(userId, message);
+    } catch (err) {
+      this.logger.warn(
+        `Push (${message.category}) failed: ${err instanceof Error ? err.constructor.name : "error"}`,
+      );
+    }
+  }
+
+  /** Same as {@link notify} for several recipients (a chat room, a shop's staff). */
+  async notifyMany(userIds: Iterable<string>, message: PushMessage) {
+    for (const userId of new Set(userIds)) await this.notify(userId, message);
+  }
+
   /**
    * Tells the person who placed an order that it finished or failed. Called from the email outbox
    * dispatcher, so every path that completes an order (operator worker, admin override) is
-   * covered. Never throws: push is a courtesy on top of the email, and a Firebase or database
-   * problem must not make the outbox retry the row.
+   * covered.
    */
   async notifyOrderStatus(orderId: string) {
     try {
@@ -84,7 +114,7 @@ export class NotificationsService {
           id: true,
           status: true,
           userId: true,
-          service: { select: { name: true } },
+          service: { select: { name: true, logoUrl: true } },
           user: { select: { locale: true } },
         },
       });
@@ -93,54 +123,40 @@ export class NotificationsService {
       const copies = ORDER_PUSH_COPY[order.status];
       const copy = copies[order.user?.locale ?? "ru"] ?? copies.ru;
       if (!copy) return;
-      await this.sendToUser(
-        order.userId,
-        { title: copy.title, body: copy.body(order.service.name) },
-        { route: `/home/orders/detail/${order.id}`, orderId: order.id },
-      );
+      await this.notify(order.userId, {
+        category: "orders",
+        title: copy.title,
+        body: copy.body(order.service.name),
+        route: `/home/orders/detail/${order.id}`,
+        imageUrl: order.service.logoUrl ?? undefined,
+        tag: `order:${order.id}`,
+        data: { orderId: order.id },
+      });
     } catch (err) {
       this.logger.warn(`Order push failed for ${orderId}: ${err instanceof Error ? err.constructor.name : "error"}`);
     }
   }
 
-  async remove(userId: string, token: string) {
-    const result = await this.prisma.pushToken.deleteMany({
-      where: { userId, token },
-    });
-    return { removed: result.count > 0 };
-  }
-
-  async sendToUser(
-    userId: string,
-    notification: { title: string; body: string },
-    data: Record<string, string> = {},
-  ) {
+  async sendToUser(userId: string, message: PushMessage) {
     if (!this.firebase.enabled) {
       throw new ServiceUnavailableException(
         "Firebase push delivery is not configured",
       );
+    }
+    if (!message.route.startsWith("/") || message.route.startsWith("//")) {
+      throw new BadRequestException("Push route must be an in-app path");
+    }
+    if (Object.values(message.data ?? {}).some((value) => typeof value !== "string")) {
+      // FCM rejects the whole message when a data value is not a string.
+      throw new BadRequestException("Push data values must be strings");
     }
     const devices = await this.prisma.pushToken.findMany({
       where: { userId },
       select: { token: true },
     });
     if (devices.length === 0) return { requested: 0, delivered: 0, failed: 0 };
-    if (Object.values(data).some((value) => typeof value !== "string")) {
-      // FCM rejects the whole message when a data value is not a string.
-      throw new BadRequestException("Push data values must be strings");
-    }
 
-    const message = {
-      notification,
-      data,
-      android: {
-        priority: "high" as const,
-        notification: { channelId: "gulyaly_general" },
-      },
-      apns: {
-        payload: { aps: { sound: "default", contentAvailable: true } },
-      },
-    };
+    const payload = toFcmMessage({ ...message, imageUrl: absoluteImageUrl(message.imageUrl) });
 
     let delivered = 0;
     let failed = 0;
@@ -148,7 +164,7 @@ export class NotificationsService {
     for (let start = 0; start < devices.length; start += FCM_BATCH_SIZE) {
       const batch = devices.slice(start, start + FCM_BATCH_SIZE);
       const response = await this.firebase.send(
-        message,
+        payload,
         batch.map((device) => device.token),
       );
       delivered += response.successCount;

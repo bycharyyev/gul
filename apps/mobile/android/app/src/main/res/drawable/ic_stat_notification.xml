@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status-bar icon for push notifications. Android draws it as a flat silhouette (alpha only),
-     so it must be a single-colour shape on transparency; a full-colour launcher icon turns into
-     a white square. -->
+<!-- Status-bar icon for push notifications: the Gulyaly mark as a flat white silhouette. Android
+     draws small icons from the alpha channel only, so the two-colour logo is reduced to one
+     colour on transparency (a full-colour icon turns into a white square). The source artwork
+     (apps/web/public/brand/gulyaly.svg) uses matrix(.1 0 0 -.1 0 300); the group below reproduces
+     that flip and scale so the path data is copied verbatim. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.9,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z" />
+    android:viewportWidth="300"
+    android:viewportHeight="300">
+    <group
+        android:scaleX="0.1"
+        android:scaleY="-0.1"
+        android:translateY="300">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M985 2205c-36-18-107-84-157-145-75-94-132-216-162-347l-16-72v-236l25-93 25-94 35-69c44-88 97-158 177-235 143-139 304-214 501-234l97-10 93 10 93 9 70 22c82 25 168 67 244 119 65 44 180 161 203 207l17 32v65l-22 32c-28 41-56 54-114 54h-45l-87-88-87-88-48-28c-26-15-78-39-115-53l-67-27h-130l-130-1-55 19c-132 45-229 112-308 214-54 70-74 108-101 196l-21 68v197l25 79 25 79 39 59c21 32 62 82 91 109 28 28 58 62 66 77l14 27v66l-20 33-20 33-35 15c-43 18-62 17-100-1z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M1250 1727l-34-22-20-34-19-34v-84l19-34 19-34 45-22 44-23h553l43 23 43 22 18 35 19 35v77l-16 35-17 34-36 25-36 24h-592l-33-23z" />
+    </group>
 </vector>
