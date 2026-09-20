@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent tint Android applies to the notification icon and app name in the shade. -->
+    <color name="notification_accent">#FF6C47FF</color>
+</resources>
