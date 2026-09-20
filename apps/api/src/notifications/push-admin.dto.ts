@@ -5,12 +5,15 @@ import {
   IsBoolean,
   IsDateString,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUrl,
   Length,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { COUNTRY_CODES } from "../common/phone-country";
@@ -157,6 +160,13 @@ export class AudienceDto {
   @ArrayMaxSize(500)
   @IsString({ each: true })
   userIds?: string[];
+
+  /** Only phones of these kinds. Empty or missing means every platform. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2)
+  @IsIn(["ANDROID", "IOS"], { each: true })
+  platforms?: ("ANDROID" | "IOS")[];
 }
 
 export class CreateCampaignDto {
@@ -187,6 +197,28 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsBoolean()
   sendNow?: boolean;
+
+  /** "high" wakes a sleeping phone at once; "normal" may wait until it is awake. Default high. */
+  @IsOptional()
+  @IsIn(["high", "normal"])
+  priority?: "high" | "normal";
+
+  /** How long to keep trying an offline phone, 1 hour to 28 days. Default 24. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24 * 28)
+  ttlHours?: number;
+
+  /** Repeat a scheduled campaign. Needs `scheduledAt`. */
+  @IsOptional()
+  @IsIn(["NONE", "DAILY", "WEEKLY", "MONTHLY"])
+  repeat?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+
+  /** Last moment a repeat may start; without it the series continues until stopped. */
+  @IsOptional()
+  @IsDateString()
+  repeatUntil?: string;
 }
 
 export class SendOneDto {

@@ -162,12 +162,22 @@ model PushCampaign {
   finishedAt     DateTime?
   recipientCount Int                @default(0)
   lastError      String?            @db.VarChar(300)
+  /// "high" wakes a sleeping phone at once; "normal" may wait for the phone to be awake.
+  priority       String             @default("high") @db.VarChar(8)
+  /// How long the push service keeps trying to reach an offline phone.
+  ttlHours       Int                @default(24)
+  /// NONE | DAILY | WEEKLY | MONTHLY. A run creates the next occurrence in the same series.
+  repeat         String             @default("NONE") @db.VarChar(8)
+  repeatUntil    DateTime?
+  seriesId       String?
   createdById    String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
   deliveries PushDelivery[]
 
+  @@unique([seriesId, scheduledAt])
+  @@index([seriesId])
   @@index([status, scheduledAt])
   @@index([createdAt])
 }

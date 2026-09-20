@@ -150,7 +150,9 @@ export class PushCampaignService {
    */
   audienceWhere(audience: AudienceDto, options: { requireApp?: boolean } = {}): Prisma.UserWhereInput {
     const where: Prisma.UserWhereInput = { isBlocked: false };
-    if (options.requireApp !== false) where.pushTokens = { some: {} };
+    if (options.requireApp !== false) {
+      where.pushTokens = { some: audience.platforms?.length ? { platform: { in: audience.platforms } } : {} };
+    }
     if (audience.type === "USERS") {
       where.id = { in: audience.userIds ?? [] };
     } else if (audience.type === "FILTER") {
@@ -177,7 +179,9 @@ export class PushCampaignService {
     const anyone = this.audienceWhere(audience, { requireApp: false });
     const [users, devices, matching] = await Promise.all([
       this.prisma.user.count({ where: reachable }),
-      this.prisma.pushToken.count({ where: { user: reachable } }),
+      this.prisma.pushToken.count({
+        where: { user: reachable, ...(audience.platforms?.length ? { platform: { in: audience.platforms } } : {}) },
+      }),
       this.prisma.user.count({ where: anyone }),
     ]);
     return { users, devices, withoutApp: Math.max(matching - users, 0) };
@@ -230,6 +234,14 @@ export class PushCampaignService {
     if (scheduledAt && scheduledAt.getTime() <= Date.now() && !dto.sendNow) {
       throw new BadRequestException("Schedule a time in the future, or send now");
     }
+    const repeat = dto.repeat ?? "NONE";
+    const repeatUntil = dto.repeatUntil ? new Date(dto.repeatUntil) : null;
+    if (repeat !== "NONE") {
+      if (!scheduledAt || dto.sendNow) throw new BadRequestException("A repeating campaign needs a start time");
+      if (repeatUntil && repeatUntil.getTime() <= scheduledAt.getTime()) {
+        throw new BadRequestException("The end of the repeat must be after the first send");
+      }
+    }
     const campaign = await this.prisma.pushCampaign.create({
       data: {
         name: dto.name.trim(),
@@ -237,9 +249,16 @@ export class PushCampaignService {
         audience: dto.audience as unknown as Prisma.InputJsonValue,
         status: scheduledAt && !dto.sendNow ? "SCHEDULED" : "DRAFT",
         scheduledAt: dto.sendNow ? null : scheduledAt,
+        priority: dto.priority ?? "high",
+        ttlHours: dto.ttlHours ?? 24,
+        repeat,
+        repeatUntil: repeat === "NONE" ? null : repeatUntil,
         createdById: adminId,
       },
     });
+    if (repeat !== "NONE") {
+      await this.prisma.pushCampaign.update({ where: { id: campaign.id }, data: { seriesId: campaign.id } });
+    }
     this.audit.record(adminId, "push.campaign.create", "PushCampaign", campaign.id, { audience: dto.audience.type });
     return dto.sendNow ? this.send(campaign.id, adminId) : campaign;
   }
@@ -270,6 +289,14 @@ export class PushCampaignService {
       data: { status: "CANCELLED" },
     });
     if (result.count === 0) throw new BadRequestException("Only a draft or scheduled campaign can be cancelled");
+    // Stopping one occurrence of a repeating campaign stops the whole series.
+    const campaign = await this.prisma.pushCampaign.findUnique({ where: { id }, select: { seriesId: true } });
+    if (campaign?.seriesId) {
+      await this.prisma.pushCampaign.updateMany({
+        where: { seriesId: campaign.seriesId, status: { in: ["DRAFT", "SCHEDULED"] } },
+        data: { status: "CANCELLED" },
+      });
+    }
     this.audit.record(adminId, "push.campaign.cancel", "PushCampaign", id);
     return { cancelled: true };
   }
@@ -278,7 +305,9 @@ export class PushCampaignService {
   private async run(id: string) {
     try {
       const campaign = await this.prisma.pushCampaign.findUniqueOrThrow({ where: { id } });
-      const where = this.audienceWhere(campaign.audience as unknown as AudienceDto);
+      const audience = campaign.audience as unknown as AudienceDto;
+      const audiencePlatforms = audience.platforms?.length ? audience.platforms : undefined;
+      const where = this.audienceWhere(audience);
       let cursor: string | undefined;
       let recipients = 0;
 
@@ -307,7 +336,12 @@ export class PushCampaignService {
                 data: { campaignId: campaign.id },
               };
               try {
-                const result = await this.notifications.sendToUser(user.id, message, { campaignId: campaign.id });
+                const result = await this.notifications.sendToUser(user.id, message, {
+                  campaignId: campaign.id,
+                  platforms: audiencePlatforms,
+                  priority: campaign.priority === "normal" ? "normal" : "high",
+                  ttlHours: campaign.ttlHours,
+                });
                 if (result.requested > 0) recipients += 1;
               } catch (err) {
                 this.logger.warn(`Campaign ${id}: send failed (${err instanceof Error ? err.constructor.name : "error"})`);
@@ -322,6 +356,7 @@ export class PushCampaignService {
         where: { id },
         data: { status: "SENT", finishedAt: new Date(), recipientCount: recipients },
       });
+      await this.scheduleNextOccurrence(id);
     } catch (err) {
       this.logger.error(`Campaign ${id} failed: ${err instanceof Error ? err.message : "error"}`);
       await this.prisma.pushCampaign
@@ -330,6 +365,51 @@ export class PushCampaignService {
           data: { status: "FAILED", finishedAt: new Date(), lastError: (err instanceof Error ? err.message : "error").slice(0, 300) },
         })
         .catch(() => undefined);
+      await this.scheduleNextOccurrence(id).catch(() => undefined);
+    }
+  }
+
+  /** A repeating campaign queues its next run once this one is done, unless the series was stopped. */
+  private async scheduleNextOccurrence(id: string) {
+    const current = await this.prisma.pushCampaign.findUnique({ where: { id } });
+    if (!current || current.repeat === "NONE" || !current.seriesId || !current.scheduledAt) return;
+    const stopped = await this.prisma.pushCampaign.count({
+      where: { seriesId: current.seriesId, status: "CANCELLED" },
+    });
+    if (stopped > 0) return;
+
+    let next = nextOccurrence(current.scheduledAt, current.repeat);
+    // If the server was down for a while, skip the runs that were missed rather than sending them all.
+    while (next.getTime() <= Date.now()) next = nextOccurrence(next, current.repeat);
+    if (current.repeatUntil && next.getTime() > current.repeatUntil.getTime()) return;
+
+    try {
+      await this.prisma.pushCampaign.create({
+        data: {
+          name: current.name,
+          category: current.category,
+          titleRu: current.titleRu,
+          bodyRu: current.bodyRu,
+          titleEn: current.titleEn,
+          bodyEn: current.bodyEn,
+          titleTkm: current.titleTkm,
+          bodyTkm: current.bodyTkm,
+          imageUrl: current.imageUrl,
+          route: current.route,
+          templateId: current.templateId,
+          audience: current.audience as Prisma.InputJsonValue,
+          status: "SCHEDULED",
+          scheduledAt: next,
+          priority: current.priority,
+          ttlHours: current.ttlHours,
+          repeat: current.repeat,
+          repeatUntil: current.repeatUntil,
+          seriesId: current.seriesId,
+          createdById: current.createdById,
+        },
+      });
+    } catch {
+      // The unique (series, time) pair means another node already queued this occurrence.
     }
   }
 
@@ -527,4 +607,18 @@ function toStats(row: { sent: bigint | number; delivered: bigint | number; opene
 
 function toCountryRow(row: { country: string | null; sent: bigint; delivered: bigint; opened: bigint }) {
   return { country: row.country ?? "—", ...toStats(row) };
+}
+
+export function nextOccurrence(from: Date, repeat: string): Date {
+  const next = new Date(from.getTime());
+  if (repeat === "DAILY") next.setUTCDate(next.getUTCDate() + 1);
+  else if (repeat === "WEEKLY") next.setUTCDate(next.getUTCDate() + 7);
+  else if (repeat === "MONTHLY") {
+    const day = from.getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, last));
+  } else next.setUTCDate(next.getUTCDate() + 1);
+  return next;
 }

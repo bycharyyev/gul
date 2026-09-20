@@ -28,7 +28,19 @@ export interface PushMessage {
  * draws it (see push_service.dart). iOS has no such handler, so it gets a normal alert with
  * `mutable-content` so a notification service extension can attach the picture.
  */
-export function toFcmMessage(message: PushMessage): Omit<MulticastMessage, "tokens"> {
+export interface DeliveryOptions {
+  /** "high" wakes a sleeping phone immediately; "normal" may wait until it is awake. */
+  priority?: "high" | "normal";
+  /** How long the push service keeps trying to reach an offline phone. */
+  ttlHours?: number;
+}
+
+export function toFcmMessage(
+  message: PushMessage,
+  options: DeliveryOptions = {},
+): Omit<MulticastMessage, "tokens"> {
+  const priority = options.priority ?? "high";
+  const ttlMs = Math.min(Math.max(options.ttlHours ?? 24, 1), 24 * 28) * 60 * 60 * 1000;
   const data: Record<string, string> = {
     ...(message.data ?? {}),
     category: message.category,
@@ -41,9 +53,9 @@ export function toFcmMessage(message: PushMessage): Omit<MulticastMessage, "toke
 
   return {
     data,
-    android: { priority: "high", ttl: 24 * 60 * 60 * 1000 },
+    android: { priority, ttl: ttlMs },
     apns: {
-      headers: { "apns-priority": "10" },
+      headers: { "apns-priority": priority === "high" ? "10" : "5" },
       payload: {
         aps: {
           alert: { title: message.title, body: message.body },

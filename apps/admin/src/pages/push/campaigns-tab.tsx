@@ -5,6 +5,9 @@ import type {
   PushAudiencePreviewDto,
   PushCampaignDetailDto,
   PushCampaignDto,
+  PushPlatformKind,
+  PushPriority,
+  PushRepeat,
   PushTemplateDto,
 } from "@topup-hub/types";
 import { api } from "@/lib/api";
@@ -34,13 +37,36 @@ function StatusPill({ status }: { status: PushCampaignDto["status"] }) {
 }
 
 function audienceLabel(audience: PushAudience, names: Map<string, string>): string {
-  if (audience.type === "ALL") return "Все с приложением";
-  if (audience.type === "USERS") return `Выбранные люди (${audience.userIds?.length ?? 0})`;
+  const platforms = audience.platforms?.length ? ` · ${audience.platforms.map((p) => PLATFORM_LABELS[p]).join(", ")}` : "";
+  if (audience.type === "ALL") return `Все с приложением${platforms}`;
+  if (audience.type === "USERS") return `Выбранные люди (${audience.userIds?.length ?? 0})${platforms}`;
   const parts: string[] = [];
   if (audience.countries?.length) parts.push(audience.countries.map((c) => countryName(c, names)).join(", "));
   if (audience.locales?.length) parts.push(audience.locales.join("/"));
   if (audience.roles?.length) parts.push(audience.roles.map((r) => ROLE_OPTIONS.find((o) => o.value === r)?.label ?? r).join(", "));
-  return parts.join(" · ") || "Фильтр";
+  return (parts.join(" · ") || "Фильтр") + platforms;
+}
+
+const PLATFORM_LABELS: Record<PushPlatformKind, string> = { ANDROID: "Android", IOS: "iPhone" };
+
+const REPEAT_OPTIONS: { value: PushRepeat; label: string }[] = [
+  { value: "NONE", label: "Один раз" },
+  { value: "DAILY", label: "Каждый день" },
+  { value: "WEEKLY", label: "Каждую неделю" },
+  { value: "MONTHLY", label: "Каждый месяц" },
+];
+
+const TTL_OPTIONS = [
+  { value: 1, label: "1 час" },
+  { value: 6, label: "6 часов" },
+  { value: 24, label: "1 день" },
+  { value: 72, label: "3 дня" },
+  { value: 168, label: "7 дней" },
+  { value: 672, label: "28 дней (максимум)" },
+];
+
+function repeatLabel(repeat: PushRepeat): string {
+  return REPEAT_OPTIONS.find((o) => o.value === repeat)?.label ?? repeat;
 }
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -82,22 +108,29 @@ function CampaignForm({
   const [selRoles, setSelRoles] = useState<string[]>([]);
   const [when, setWhen] = useState<"draft" | "now" | "later">("now");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [platforms, setPlatforms] = useState<PushPlatformKind[]>([]);
+  const [repeat, setRepeat] = useState<PushRepeat>("NONE");
+  const [repeatUntil, setRepeatUntil] = useState("");
+  const [priority, setPriority] = useState<PushPriority>("high");
+  const [ttlHours, setTtlHours] = useState(24);
   const [preview, setPreview] = useState<PushAudiencePreviewDto | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const audience: PushAudience = useMemo(
-    () =>
-      mode === "ALL"
-        ? { type: "ALL" }
+    () => ({
+      ...(mode === "ALL"
+        ? { type: "ALL" as const }
         : {
-            type: "FILTER",
+            type: "FILTER" as const,
             ...(selCountries.length ? { countries: selCountries } : {}),
             ...(selLocales.length ? { locales: selLocales } : {}),
             ...(selRoles.length ? { roles: selRoles } : {}),
-          },
-    [mode, selCountries, selLocales, selRoles],
+          }),
+      ...(platforms.length ? { platforms } : {}),
+    }),
+    [mode, selCountries, selLocales, selRoles, platforms],
   );
   const filterEmpty = mode === "FILTER" && !selCountries.length && !selLocales.length && !selRoles.length;
 
@@ -120,7 +153,12 @@ function CampaignForm({
   }, [audience, filterEmpty]);
 
   const scheduleValid = when !== "later" || (scheduledAt !== "" && new Date(scheduledAt).getTime() > Date.now());
-  const canSubmit = name.trim() !== "" && draftIsValid(draft) && !filterEmpty && scheduleValid && !busy;
+  const untilValid =
+    when !== "later" ||
+    repeat === "NONE" ||
+    repeatUntil === "" ||
+    (scheduledAt !== "" && new Date(repeatUntil).getTime() > new Date(scheduledAt).getTime());
+  const canSubmit = name.trim() !== "" && draftIsValid(draft) && !filterEmpty && scheduleValid && untilValid && !busy;
 
   async function submit() {
     if (when === "now") {
@@ -136,6 +174,11 @@ function CampaignForm({
         audience,
         ...(when === "later" ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
         ...(when === "now" ? { sendNow: true } : {}),
+        ...(when === "later" && repeat !== "NONE"
+          ? { repeat, ...(repeatUntil ? { repeatUntil: new Date(repeatUntil).toISOString() } : {}) }
+          : {}),
+        priority,
+        ttlHours,
       });
       onDone();
     } catch (err) {
@@ -208,6 +251,25 @@ function CampaignForm({
             <p className="text-xs text-slate-400">Условия из разных групп работают вместе («и»), внутри группы — «или».</p>
           </div>
         )}
+        <div className="rounded-xl bg-slate-50 p-4">
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Платформа</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip active={platforms.length === 0} onClick={() => setPlatforms([])}>
+              Все
+            </Chip>
+            {(Object.keys(PLATFORM_LABELS) as PushPlatformKind[]).map((p) => (
+              <Chip key={p} active={platforms.includes(p)} onClick={() => setPlatforms(toggleIn(platforms, p) as PushPlatformKind[])}>
+                {PLATFORM_LABELS[p]}
+              </Chip>
+            ))}
+            <span
+              title="Push в браузере пока не сделан: для него нужен сервис-воркер и подписка на сайте"
+              className="cursor-not-allowed rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-400 ring-1 ring-inset ring-slate-200"
+            >
+              Web · скоро
+            </span>
+          </div>
+        </div>
         <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm">
           {filterEmpty ? (
             <span className="text-slate-500">Выберите хотя бы одно условие.</span>
@@ -246,6 +308,63 @@ function CampaignForm({
             {scheduledAt && !scheduleValid && <span className="text-xs text-rose-600">Время должно быть в будущем.</span>}
           </label>
         )}
+        {when === "later" && (
+          <div className="space-y-2 rounded-xl bg-slate-50 p-4">
+            <p className="text-xs font-medium text-slate-500">Повтор</p>
+            <div className="flex flex-wrap gap-1.5">
+              {REPEAT_OPTIONS.map((o) => (
+                <Chip key={o.value} active={repeat === o.value} onClick={() => setRepeat(o.value)}>
+                  {o.label}
+                </Chip>
+              ))}
+            </div>
+            {repeat !== "NONE" && (
+              <label className="block max-w-xs text-sm">
+                <span className="mb-1 block font-medium text-slate-600">Повторять до (необязательно)</span>
+                <Input type="datetime-local" value={repeatUntil} onChange={(e) => setRepeatUntil(e.target.value)} />
+                {repeatUntil && !untilValid && <span className="text-xs text-rose-600">Должно быть позже первой отправки.</span>}
+                <span className="mt-1 block text-xs text-slate-400">
+                  Без даты рассылка идёт, пока вы её не остановите. Отмена любой из запланированных остановит всю серию.
+                </span>
+              </label>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase text-slate-500">4. Дополнительно</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-slate-500">Приоритет доставки</p>
+            <div className="flex gap-1.5">
+              <Chip active={priority === "high"} onClick={() => setPriority("high")}>
+                Высокий
+              </Chip>
+              <Chip active={priority === "normal"} onClick={() => setPriority("normal")}>
+                Обычный
+              </Chip>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Высокий будит телефон сразу. Обычный экономит батарею и может прийти позже.
+            </p>
+          </div>
+          <label className="block text-sm">
+            <span className="mb-1.5 block text-xs font-medium text-slate-500">Срок жизни, если телефон выключен</span>
+            <select
+              value={ttlHours}
+              onChange={(e) => setTtlHours(Number(e.target.value))}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              {TTL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-slate-400">Потом уведомление сгорает и уже не придёт.</span>
+          </label>
+        </div>
       </section>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
@@ -328,6 +447,13 @@ function CampaignDetail({ id, names, onBack }: { id: string; names: Map<string, 
           {campaign.scheduledAt && ` · запланирована на ${formatDateTime(campaign.scheduledAt)}`}
           {campaign.startedAt && ` · начата ${formatDateTime(campaign.startedAt)}`}
           {campaign.finishedAt && ` · закончена ${formatDateTime(campaign.finishedAt)}`}
+        </p>
+        <p className="text-xs text-slate-400">
+          Приоритет: {campaign.priority === "high" ? "высокий" : "обычный"} · срок жизни: {campaign.ttlHours} ч
+          {campaign.repeat !== "NONE" &&
+            ` · повтор: ${repeatLabel(campaign.repeat).toLowerCase()}${
+              campaign.repeatUntil ? ` до ${formatDateTime(campaign.repeatUntil)}` : ""
+            }`}
         </p>
         {campaign.lastError && <p className="text-sm text-rose-600">Ошибка: {campaign.lastError}</p>}
         {canStart && (

@@ -8,7 +8,7 @@ import { PushPlatform } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { FirebasePushGateway } from "./firebase-push.gateway";
 import { absoluteImageUrl } from "./image-url";
-import { PushMessage, toFcmMessage } from "./push-message";
+import { DeliveryOptions, PushMessage, toFcmMessage } from "./push-message";
 
 type OrderPushCopy = { title: string; body: (service: string) => string };
 
@@ -137,7 +137,11 @@ export class NotificationsService {
     }
   }
 
-  async sendToUser(userId: string, message: PushMessage, options: { campaignId?: string } = {}) {
+  async sendToUser(
+    userId: string,
+    message: PushMessage,
+    options: DeliveryOptions & { campaignId?: string; platforms?: PushPlatform[] } = {},
+  ) {
     if (!this.firebase.enabled) {
       throw new ServiceUnavailableException(
         "Firebase push delivery is not configured",
@@ -151,7 +155,7 @@ export class NotificationsService {
       throw new BadRequestException("Push data values must be strings");
     }
     const devices = await this.prisma.pushToken.findMany({
-      where: { userId },
+      where: { userId, ...(options.platforms?.length ? { platform: { in: options.platforms } } : {}) },
       select: { token: true },
     });
     if (devices.length === 0) return { requested: 0, delivered: 0, failed: 0 };
@@ -167,11 +171,14 @@ export class NotificationsService {
       },
       select: { id: true },
     });
-    const payload = toFcmMessage({
-      ...message,
-      imageUrl: absoluteImageUrl(message.imageUrl),
-      data: { ...(message.data ?? {}), deliveryId: delivery.id },
-    });
+    const payload = toFcmMessage(
+      {
+        ...message,
+        imageUrl: absoluteImageUrl(message.imageUrl),
+        data: { ...(message.data ?? {}), deliveryId: delivery.id },
+      },
+      { priority: options.priority, ttlHours: options.ttlHours },
+    );
 
     let delivered = 0;
     let failed = 0;
