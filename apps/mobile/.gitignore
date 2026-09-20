@@ -47,6 +47,8 @@ app.*.map.json
 # Release signing. The keystore and its passwords never enter the repository -- anyone holding
 # both can publish an update that Android will accept as genuinely ours.
 android/key.properties
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
 **/*.jks
 **/*.keystore
 
