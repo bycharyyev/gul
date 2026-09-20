@@ -103,6 +103,42 @@ async function checkDeclaredDependencies() {
 
 await checkDeclaredDependencies();
 
+// Native browser dialogs (confirm / alert / prompt) are not allowed in the two front-ends. Embedded
+// browsers -- the desktop app's built-in pane, in-app webviews -- suppress them and confirm()
+// returns false at once, so a guarded Delete or Send button silently does nothing there (found
+// 2026-09-21 on the admin's Social links page). Use `confirmAction` from "@/lib/confirm" instead
+// (both apps have one) and `await` it.
+async function checkNoNativeDialogs() {
+  const nativeDialog = /(?<![\w.$])(?:window\.|globalThis\.)?(confirm|alert|prompt)\s*\(/;
+  const dirs = [join(root, "apps", "admin", "src"), join(root, "apps", "web", "src")];
+
+  const scan = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await scan(path);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      const source = await readFile(path, "utf8");
+      // Comments explain the rule (lib/confirm.tsx does); only code counts.
+      const code = source
+        .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      code.split("\n").forEach((line, index) => {
+        if (nativeDialog.test(line)) {
+          violations.push(
+            `${relative(root, path)}:${index + 1}: native browser dialog -- use confirmAction from "@/lib/confirm" (embedded browsers suppress native dialogs)`,
+          );
+        }
+      });
+    }
+  };
+  for (const dir of dirs) await scan(dir);
+}
+
+await checkNoNativeDialogs();
+
 if (violations.length) {
   console.error("Architecture boundary violations:\n" + violations.map((item) => `- ${item}`).join("\n"));
   process.exitCode = 1;

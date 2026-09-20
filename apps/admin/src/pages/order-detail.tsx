@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
+import { promptAction } from "@/lib/confirm";
 
 const NEXT_ACTIONS: Partial<Record<OrderStatus, { labelKey: string; target: OrderStatus; variant: "secondary" | "danger"; needsReason?: boolean }[]>> = {
   PENDING_PAYMENT: [{ labelKey: "admin.orderDetail.actionCancel", target: "CANCELLED", variant: "danger", needsReason: true }],
@@ -95,7 +96,7 @@ export default function OrderDetailPage() {
 
   async function confirmPayment() {
     if (!id) return;
-    const reason = window.prompt("Основание ручного подтверждения (минимум 10 символов)");
+    const reason = await promptAction("Основание ручного подтверждения (минимум 10 символов)");
     if (!reason || reason.trim().length < 10) return;
     setBusy(true);
     setError(null);
@@ -127,7 +128,7 @@ export default function OrderDetailPage() {
     if (!id) return;
     let reason: string | undefined;
     if (needsReason) {
-      reason = prompt(t("admin.orderDetail.reasonPrompt")) ?? undefined;
+      reason = await promptAction(t("admin.orderDetail.reasonPrompt")) ?? undefined;
     }
     setBusy(true);
     setError(null);

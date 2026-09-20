@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,6 @@ import { Input } from "@/components/ui/input";
 interface DialogOptions {
   confirmLabel?: string;
   cancelLabel?: string;
-  danger?: boolean;
 }
 
 type Spec =
@@ -82,8 +83,8 @@ function Dialog({ spec, onClose }: { spec: Spec; onClose: (result: string | bool
         if (event.target === event.currentTarget) cancel();
       }}
     >
-      <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-xl2 bg-white p-5 shadow-xl">
-        <p className="whitespace-pre-line text-sm text-slate-800">{spec.message}</p>
+      <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-xl2 bg-white p-5 shadow-xl dark:bg-surface-dark">
+        <p className="whitespace-pre-line text-sm text-slate-800 dark:text-slate-100">{spec.message}</p>
         {spec.kind === "prompt" && (
           <Input
             autoFocus
@@ -97,11 +98,11 @@ function Dialog({ spec, onClose }: { spec: Spec; onClose: (result: string | bool
         )}
         <div className="mt-5 flex justify-end gap-2">
           {spec.kind !== "alert" && (
-            <Button variant="ghost" onClick={cancel}>
+            <Button variant="ghost" size="sm" onClick={cancel}>
               {options.cancelLabel ?? "Отмена"}
             </Button>
           )}
-          <Button autoFocus={spec.kind !== "prompt"} variant={options.danger ? "danger" : "primary"} onClick={accept}>
+          <Button autoFocus={spec.kind !== "prompt"} size="sm" onClick={accept}>
             {options.confirmLabel ?? (spec.kind === "alert" ? "Понятно" : spec.kind === "prompt" ? "OK" : "Подтвердить")}
           </Button>
         </div>

@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { confirmAction } from "@/lib/confirm";
 
 /**
  * The shop's own sections.
@@ -72,7 +73,7 @@ export default function SellerStorefrontsPage() {
   async function remove(section: StorefrontDto) {
     // Names what happens to the stock, not "are you sure": the products survive and move back to
     // the general list, and somebody who does not know that will not risk the click.
-    const ok = window.confirm(
+    const ok = await confirmAction(
       t("sellerCabinet.storefronts.deleteConfirm", {
         name: section.name,
         count: String(section._count.products),

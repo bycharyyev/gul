@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { confirmAction } from "@/lib/confirm";
+import { alertAction, confirmAction, promptAction } from "@/lib/confirm";
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/api$/, "") + "/api";
 
@@ -51,7 +51,7 @@ export default function ApiKeysPage() {
 
   async function editRateLimit(key: ApiKeyDto) {
     const current = key.rateLimitPerMin === null ? "" : String(key.rateLimitPerMin);
-    const answer = prompt(t("admin.apiKeys.rateLimitPrompt"), current);
+    const answer = await promptAction(t("admin.apiKeys.rateLimitPrompt"), current);
     if (answer === null) return;
 
     const trimmed = answer.trim();
@@ -73,7 +73,7 @@ export default function ApiKeysPage() {
   }
 
   async function editScopes(key: ApiKeyDto) {
-    const answer = prompt(t("admin.apiKeys.scopesPrompt"), key.scopes.join(", "));
+    const answer = await promptAction(t("admin.apiKeys.scopesPrompt"), key.scopes.join(", "));
     if (answer === null) return;
 
     const scopes = answer
@@ -92,7 +92,7 @@ export default function ApiKeysPage() {
 
   async function editExpiry(key: ApiKeyDto) {
     const current = key.expiresAt ? key.expiresAt.slice(0, 10) : "";
-    const answer = prompt(t("admin.apiKeys.expiryPrompt"), current);
+    const answer = await promptAction(t("admin.apiKeys.expiryPrompt"), current);
     if (answer === null) return;
 
     const trimmed = answer.trim();
@@ -130,7 +130,7 @@ export default function ApiKeysPage() {
       await api.deleteApiKey(key.id);
       setKeys((prev) => prev.filter((k) => k.id !== key.id));
     } catch (err) {
-      alert(err instanceof ApiError ? translateError(t, err.message) : t("admin.apiKeys.deleteError"));
+      void alertAction(err instanceof ApiError ? translateError(t, err.message) : t("admin.apiKeys.deleteError"));
     }
   }
 

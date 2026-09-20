@@ -13,6 +13,7 @@ import type {
 import { api, isAuthenticated } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/ui/image-with-fallback";
+import { confirmAction } from "@/lib/confirm";
 
 /** Mirrors MAX_UPLOAD_ATTACHMENT_SIZE_BYTES on the API -- checked here only to fail fast with a
  *  readable message instead of uploading 30MB to be refused. */
@@ -756,9 +757,9 @@ export default function ChatPage() {
                         <button
                           disabled={busy}
                           className={button}
-                          onClick={() => {
+                          onClick={async () => {
                             if (
-                              window.confirm(
+                              await confirmAction(
                                 "Заменить приглашение? Старая ссылка перестанет работать.",
                               )
                             )
@@ -796,9 +797,9 @@ export default function ChatPage() {
                   <button
                     disabled={busy}
                     className={cn(button, "mt-5 text-red-600")}
-                    onClick={() => {
+                    onClick={async () => {
                       if (
-                        window.confirm(
+                        await confirmAction(
                           group.isOwner
                             ? "Удалить группу и все сообщения для всех участников? Это нельзя отменить."
                             : "Выйти из группы? Вернуться можно по приглашению.",
@@ -865,8 +866,8 @@ export default function ChatPage() {
                     <button
                       disabled={busy}
                       className={button}
-                      onClick={() => {
-                        if (window.confirm("Отписаться от канала?"))
+                      onClick={async () => {
+                        if (await confirmAction("Отписаться от канала?"))
                           void action(async () => {
                             await api.unsubscribeChatChannel(
                               conversation.room.id,

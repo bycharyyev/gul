@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
-import { confirmAction } from "@/lib/confirm";
+import { alertAction, confirmAction } from "@/lib/confirm";
 
 export default function UsersPage() {
   const { t, locale } = useTranslation();
@@ -75,7 +75,7 @@ export default function UsersPage() {
       setCustomers((prev) => prev.filter((u) => u.id !== user.id));
       if (selectedId === user.id) setSelectedId(null);
     } catch (err) {
-      alert(err instanceof ApiError ? translateError(t, err.message) : t("admin.users.deleteError"));
+      void alertAction(err instanceof ApiError ? translateError(t, err.message) : t("admin.users.deleteError"));
     }
   }
 

@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 const DEFAULT_SCOPES: ShopApiKeyScope[] = ["products:read"];
 
@@ -72,7 +73,7 @@ export default function SellerApiKeysPage() {
   }
 
   async function rotate(key: SellerApiKeyDto) {
-    if (!confirm(t("sellerCabinet.apiKeys.rotateConfirm"))) return;
+    if (!(await confirmAction(t("sellerCabinet.apiKeys.rotateConfirm")))) return;
     setBusy(key.id);
     setError(null);
     try {
@@ -87,7 +88,7 @@ export default function SellerApiKeysPage() {
   }
 
   async function remove(key: SellerApiKeyDto) {
-    if (!confirm(t("sellerCabinet.apiKeys.deleteConfirm", { name: key.name }))) return;
+    if (!(await confirmAction(t("sellerCabinet.apiKeys.deleteConfirm", { name: key.name })))) return;
     setBusy(key.id);
     setError(null);
     try {

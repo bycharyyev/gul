@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
+import { promptAction } from "@/lib/confirm";
 
 function useStatusLabels(): Record<WithdrawalStatus, { text: string; className: string }> {
   const { t } = useTranslation();
@@ -61,7 +62,7 @@ export default function WithdrawalsPage() {
   }
 
   async function reject(id: string) {
-    const note = window.prompt(t("admin.withdrawals.rejectPrompt")) ?? undefined;
+    const note = await promptAction(t("admin.withdrawals.rejectPrompt")) ?? undefined;
     setBusyId(id);
     setError(null);
     try {
