@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
-import { confirmAction } from "@/lib/confirm";
+import { alertAction, confirmAction } from "@/lib/confirm";
 
 const NEW_PRODUCT_ID = "__new__";
 
@@ -51,7 +51,7 @@ export default function GalleryPage() {
       await api.deleteGalleryCategory(id);
       setCategories((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
-      alert(err instanceof ApiError ? translateError(t, err.message) : t("admin.gallery.deleteCategoryError"));
+      void alertAction(err instanceof ApiError ? translateError(t, err.message) : t("admin.gallery.deleteCategoryError"));
     }
   }
 

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { Select } from "@/components/ui/select";
+import { confirmAction } from "@/lib/confirm";
 
 const NEW_PRODUCT_ID = "__new__";
 
@@ -61,7 +62,7 @@ export default function SellerProductsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("sellerCabinet.products.deleteConfirm"))) return;
+    if (!(await confirmAction(t("sellerCabinet.products.deleteConfirm")))) return;
     await api.deleteMySellerProduct(id);
     setProducts((prev) => prev.filter((p) => p.id !== id));
     setSelectedId(null);

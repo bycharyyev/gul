@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { promptAction } from "@/lib/confirm";
 
 const STATUS_OPTIONS = [
   "",
@@ -58,7 +59,7 @@ export default function OrdersPage() {
 
   async function confirmPayment(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    const reason = window.prompt("Основание ручного подтверждения (минимум 10 символов)");
+    const reason = await promptAction("Основание ручного подтверждения (минимум 10 символов)");
     if (!reason || reason.trim().length < 10) return;
     setBusyId(id);
     try {

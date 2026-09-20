@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 function formatSize(bytes: number, t: (key: string) => string) {
   if (bytes < 1024) return `${bytes} ${t("common.bytesUnit")}`;
@@ -674,7 +675,7 @@ export default function AccountPage() {
   }
 
   async function handleDeleteDoc(doc: DocumentDto) {
-    if (!confirm(t("web.account.deleteDocConfirm", { name: doc.originalName }))) return;
+    if (!(await confirmAction(t("web.account.deleteDocConfirm", { name: doc.originalName })))) return;
 
     setDeletingId(doc.id);
     try {

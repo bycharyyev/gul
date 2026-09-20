@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
-import { confirmAction } from "@/lib/confirm";
+import { confirmAction, promptAction } from "@/lib/confirm";
 
 function useStatusLabels(): Record<SellerApplicationStatus, { text: string; className: string }> {
   const { t } = useTranslation();
@@ -65,7 +65,7 @@ export default function SellerApplicationsPage() {
   }
 
   async function reject(id: string) {
-    const note = window.prompt(t("admin.sellerApplications.rejectPrompt")) ?? undefined;
+    const note = await promptAction(t("admin.sellerApplications.rejectPrompt")) ?? undefined;
     setBusyId(id);
     setError(null);
     try {

@@ -9,6 +9,7 @@ import { useTranslation, LOCALE_BCP47 } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { alertAction } from "@/lib/confirm";
 
 const POLL_MS = 4000;
 /** Mirrors MAX_UPLOAD_ATTACHMENT_SIZE_BYTES on the API -- checked here only to fail fast. */
@@ -190,7 +191,7 @@ export default function SupportPage() {
                     e.target.value = "";
                     if (!file) return;
                     if (file.size > MAX_ATTACHMENT_BYTES) {
-                      window.alert(t("admin.support.attachTooLarge"));
+                      void alertAction(t("admin.support.attachTooLarge"));
                       return;
                     }
                     setUploading(true);

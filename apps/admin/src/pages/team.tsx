@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/badge";
-import { confirmAction } from "@/lib/confirm";
+import { alertAction, confirmAction } from "@/lib/confirm";
 
 const ROLES: UserRole[] = ["SUPPORT", "MANAGER", "ADMIN"];
 
@@ -67,7 +67,7 @@ export default function TeamPage() {
       await api.deleteStaffUser(user.id);
       setStaff((prev) => prev.filter((u) => u.id !== user.id));
     } catch (err) {
-      alert(err instanceof ApiError ? translateError(t, err.message) : t("admin.team.deleteError"));
+      void alertAction(err instanceof ApiError ? translateError(t, err.message) : t("admin.team.deleteError"));
     }
   }
 
