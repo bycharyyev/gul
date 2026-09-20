@@ -22,3 +22,5 @@ generated
 *.pem
 *.key
 .claude/settings.local.json
+# Graphify generates a local knowledge graph; keep it out of source control.
+graphify-out/
