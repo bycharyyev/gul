@@ -5,6 +5,7 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "./notifications.service";
 import type { AudienceDto, CreateCampaignDto, CreateTemplateDto, PushContentDto, SendOneDto, UpdateTemplateDto } from "./push-admin.dto";
+import { DEFAULT_TEMPLATES } from "./push-default-templates";
 import type { PushCategory, PushMessage } from "./push-message";
 
 /** How many people are sent to at the same time inside one campaign. */
@@ -107,6 +108,37 @@ export class PushCampaignService {
     if (result.count === 0) throw new NotFoundException("Template not found");
     this.audit.record(adminId, "push.template.delete", "PushTemplate", id);
     return { deleted: true };
+  }
+
+  /**
+   * Adds the ready-made templates that are not there yet, matched by name. Safe to press again: an
+   * existing template -- including one an admin edited or switched off -- is left exactly as it is.
+   */
+  async installDefaultTemplates(adminId: string) {
+    const existing = await this.prisma.pushTemplate.findMany({
+      where: { name: { in: DEFAULT_TEMPLATES.map((t) => t.name) } },
+      select: { name: true },
+    });
+    const have = new Set(existing.map((t) => t.name));
+    const missing = DEFAULT_TEMPLATES.filter((t) => !have.has(t.name));
+    if (missing.length) {
+      await this.prisma.pushTemplate.createMany({
+        data: missing.map((t) => ({
+          name: t.name,
+          category: t.category,
+          titleRu: t.ru.title,
+          bodyRu: t.ru.body,
+          titleEn: t.en.title,
+          bodyEn: t.en.body,
+          titleTkm: t.tkm.title,
+          bodyTkm: t.tkm.body,
+          route: t.route,
+          createdById: adminId,
+        })),
+      });
+      this.audit.record(adminId, "push.template.install-defaults", "PushTemplate", "defaults", { created: missing.length });
+    }
+    return { created: missing.length, existing: DEFAULT_TEMPLATES.length - missing.length, total: DEFAULT_TEMPLATES.length };
   }
 
   // ---- Audiences ----

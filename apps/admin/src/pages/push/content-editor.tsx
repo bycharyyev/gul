@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PushCategory, PushTemplateDto } from "@topup-hub/types";
 import { Input } from "@/components/ui/input";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { Select } from "@/components/ui/select";
 import { CATEGORY_OPTIONS, ROUTE_OPTIONS, type ContentDraft, draftFrom } from "./shared";
 
@@ -85,15 +86,14 @@ export function ContentEditor({
           </label>
         </div>
 
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium text-slate-600">Картинка (https-ссылка, необязательно)</span>
-          <Input
-            value={value.imageUrl}
-            placeholder="https://…/logo.png"
-            onChange={(e) => set("imageUrl", e.target.value)}
-          />
-          <span className="mt-1 block text-xs text-slate-400">Покажется круглой иконкой, как аватар в мессенджере.</span>
-        </label>
+        <ImageUploadField
+          label="Картинка (необязательно)"
+          value={value.imageUrl}
+          onChange={(url) => set("imageUrl", url)}
+          uploadLabel="Загрузить"
+          placeholder="https://…/logo.png или загрузите файл"
+          hint="Покажется круглой иконкой, как аватар в мессенджере. Лучше квадратная картинка."
+        />
 
         <div>
           <div className="mb-2 flex gap-1">
