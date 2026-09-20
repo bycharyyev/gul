@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
+import { confirmAction } from "@/lib/confirm";
 
 function useStatusLabels(): Record<SellerApplicationStatus, { text: string; className: string }> {
   const { t } = useTranslation();
@@ -49,7 +50,7 @@ export default function SellerApplicationsPage() {
   useEffect(load, []);
 
   async function approve(id: string) {
-    if (!window.confirm("Одобрить заявку и создать продавца?")) return;
+    if (!(await confirmAction("Одобрить заявку и создать продавца?"))) return;
     setBusyId(id);
     setError(null);
     try {

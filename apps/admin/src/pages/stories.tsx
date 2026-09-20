@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { confirmAction } from "@/lib/confirm";
 
 const NEW_STORY_ID = "__new__";
 
@@ -103,7 +104,7 @@ export default function StoriesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("admin.stories.deleteConfirm"))) return;
+    if (!(await confirmAction(t("admin.stories.deleteConfirm")))) return;
     await api.deleteStory(id);
     setStories((prev) => prev.filter((s) => s.id !== id));
     setSelectedId(null);

@@ -7,6 +7,7 @@ import { api, getCurrentUser, storeCurrentUser } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 export default function AccountPage() {
   const { t, locale } = useTranslation();
@@ -70,7 +71,7 @@ export default function AccountPage() {
   }
 
   async function logoutAll() {
-    if (!confirm(t("admin.account.logoutAllConfirm"))) return;
+    if (!(await confirmAction(t("admin.account.logoutAllConfirm")))) return;
     await api.logoutAllSessions();
     api.logout();
     navigate("/login");

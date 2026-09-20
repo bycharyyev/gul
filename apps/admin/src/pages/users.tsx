@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
+import { confirmAction } from "@/lib/confirm";
 
 export default function UsersPage() {
   const { t, locale } = useTranslation();
@@ -68,7 +69,7 @@ export default function UsersPage() {
   }
 
   async function removeUser(user: CustomerDto) {
-    if (!confirm(t("admin.users.deleteConfirm", { phone: user.phone }))) return;
+    if (!(await confirmAction(t("admin.users.deleteConfirm", { phone: user.phone })))) return;
     try {
       await api.deleteStaffUser(user.id);
       setCustomers((prev) => prev.filter((u) => u.id !== user.id));

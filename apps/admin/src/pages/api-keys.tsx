@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/lib/confirm";
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/api$/, "") + "/api";
 
@@ -110,7 +111,7 @@ export default function ApiKeysPage() {
   }
 
   async function rotate(key: ApiKeyDto) {
-    if (!confirm(t("admin.apiKeys.rotateConfirm", { name: key.name }))) return;
+    if (!(await confirmAction(t("admin.apiKeys.rotateConfirm", { name: key.name })))) return;
     try {
       const result = await api.rotateApiKey(key.id);
       setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...result } : k)));
@@ -124,7 +125,7 @@ export default function ApiKeysPage() {
   }
 
   async function removeKey(key: ApiKeyDto) {
-    if (!confirm(t("admin.apiKeys.deleteConfirm", { name: key.name }))) return;
+    if (!(await confirmAction(t("admin.apiKeys.deleteConfirm", { name: key.name })))) return;
     try {
       await api.deleteApiKey(key.id);
       setKeys((prev) => prev.filter((k) => k.id !== key.id));
