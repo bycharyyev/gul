@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
+import { PushEventsService } from "../notifications/push-events.service";
 import type {
   Prisma,
   SocialCommentStatus,
@@ -80,6 +82,7 @@ export class SocialFeedService {
     private prisma: PrismaService,
     private audit: AuditLogService,
     private storage: StorageService,
+    @Optional() private push?: PushEventsService,
   ) {}
 
   private trustedMedia(url: string | undefined) {
@@ -497,12 +500,14 @@ export class SocialFeedService {
     active: boolean,
   ) {
     await this.published(postId);
-    return this.prisma.$transaction(async (tx) => {
+    let newLike = false;
+    const outcome = await this.prisma.$transaction(async (tx) => {
       if (active) {
         const result = await tx.socialInteraction.createMany({
           data: [{ userId, postId, type }],
           skipDuplicates: true,
         });
+        newLike = type === "LIKE" && result.count > 0;
         if (result.count)
           await tx.socialPost.update({
             where: { id: postId },
@@ -526,6 +531,8 @@ export class SocialFeedService {
       }
       return { active };
     });
+    if (newLike) void this.push?.feedLike(postId, userId);
+    return outcome;
   }
 
   async record(userId: string, postId: string, type: "VIEW" | "PRODUCT_CLICK") {
@@ -665,6 +672,7 @@ export class SocialFeedService {
         });
       return comment;
     });
+    if (published) void this.push?.feedComment(old.postId, old.userId, old.body);
     this.audit.record(
       adminId,
       "social-feed.moderate-comment",
