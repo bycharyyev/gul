@@ -11,6 +11,7 @@ class User {
     required this.locale,
     this.fullName,
     this.avatarUrl,
+    this.country,
   });
 
   final String id;
@@ -28,6 +29,10 @@ class User {
   final String? fullName;
   final String? avatarUrl;
 
+  /// ISO 3166-1 alpha-2, worked out from the phone number at registration and editable in the
+  /// profile. Null for an account whose number did not identify a country.
+  final String? country;
+
   /// The username doubles as the user's referral code.
   String get referralCode => username;
 
@@ -39,9 +44,15 @@ class User {
     locale: json['locale'] as String? ?? 'ru',
     fullName: json['fullName'] as String?,
     avatarUrl: json['avatarUrl'] as String?,
+    country: json['country'] as String?,
   );
 
-  User copyWith({String? fullName, String? locale, String? avatarUrl}) => User(
+  User copyWith({
+    String? fullName,
+    String? locale,
+    String? avatarUrl,
+    String? country,
+  }) => User(
     id: id,
     phone: phone,
     username: username,
@@ -49,6 +60,7 @@ class User {
     locale: locale ?? this.locale,
     fullName: fullName ?? this.fullName,
     avatarUrl: avatarUrl ?? this.avatarUrl,
+    country: country ?? this.country,
   );
 
   @override
@@ -60,9 +72,18 @@ class User {
       other.role == role &&
       other.locale == locale &&
       other.fullName == fullName &&
-      other.avatarUrl == avatarUrl;
+      other.avatarUrl == avatarUrl &&
+      other.country == country;
 
   @override
-  int get hashCode =>
-      Object.hash(id, phone, username, role, locale, fullName, avatarUrl);
+  int get hashCode => Object.hash(
+    id,
+    phone,
+    username,
+    role,
+    locale,
+    fullName,
+    avatarUrl,
+    country,
+  );
 }

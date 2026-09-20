@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
@@ -128,8 +129,38 @@ Future<void> showPushNotification(
     title: title,
     body: body,
     notificationDetails: details,
-    payload: data['route'] as String?,
+    payload: encodePushPayload(
+      route: data['route'] as String?,
+      deliveryId: data['deliveryId'] as String?,
+    ),
   );
+}
+
+/// What a tap on a notification carries back into the app: where to go, and which push it was
+/// (so the server can count it as opened).
+String? encodePushPayload({String? route, String? deliveryId}) {
+  if (route == null && deliveryId == null) return null;
+  return jsonEncode({
+    if (route != null) 'route': route,
+    if (deliveryId != null) 'deliveryId': deliveryId,
+  });
+}
+
+({String? route, String? deliveryId}) decodePushPayload(String? payload) {
+  if (payload == null || payload.isEmpty) {
+    return (route: null, deliveryId: null);
+  }
+  // Notifications drawn by an older build carry the bare route.
+  if (!payload.startsWith('{')) return (route: payload, deliveryId: null);
+  try {
+    final map = jsonDecode(payload) as Map<String, dynamic>;
+    return (
+      route: map['route'] as String?,
+      deliveryId: map['deliveryId'] as String?,
+    );
+  } catch (_) {
+    return (route: null, deliveryId: null);
+  }
 }
 
 Future<Uint8List?> _fetchRoundIcon(String url) async {
