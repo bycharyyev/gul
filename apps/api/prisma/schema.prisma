@@ -78,8 +78,12 @@ model User {
   socialComments             SocialComment[]            @relation("SocialCommentAuthor")
   socialReports              SocialPostReport[]
   pushTokens                 PushToken[]
+  pushDeliveries             PushDelivery[]
+  /// ISO 3166-1 alpha-2. Filled from the phone number at registration, editable by the person.
+  country                    String?                     @db.VarChar(2)
 
   @@index([role])
+  @@index([country])
 }
 
 enum PushPlatform {
@@ -99,6 +103,93 @@ model PushToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum PushCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+
+/// A reusable message. Text exists in three languages; a person gets their own language and the
+/// Russian text when a translation is missing.
+model PushTemplate {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(120)
+  category    String   @db.VarChar(24)
+  titleRu     String   @db.VarChar(120)
+  bodyRu      String   @db.VarChar(500)
+  titleEn     String?  @db.VarChar(120)
+  bodyEn      String?  @db.VarChar(500)
+  titleTkm    String?  @db.VarChar(120)
+  bodyTkm     String?  @db.VarChar(500)
+  imageUrl    String?
+  route       String   @default("/home") @db.VarChar(300)
+  isEnabled   Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaigns PushCampaign[]
+
+  @@index([isEnabled, name])
+}
+
+/// One send to an audience: everyone, a country, a language, a role, or a hand-picked list. The
+/// text is copied from the template at creation so editing a template later never rewrites history.
+model PushCampaign {
+  id             String             @id @default(cuid())
+  name           String             @db.VarChar(120)
+  category       String             @db.VarChar(24)
+  templateId     String?
+  template       PushTemplate?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  titleRu        String             @db.VarChar(120)
+  bodyRu         String             @db.VarChar(500)
+  titleEn        String?            @db.VarChar(120)
+  bodyEn         String?            @db.VarChar(500)
+  titleTkm       String?            @db.VarChar(120)
+  bodyTkm        String?            @db.VarChar(500)
+  imageUrl       String?
+  route          String             @default("/home") @db.VarChar(300)
+  /// { type: "ALL" | "FILTER" | "USERS", countries?: string[], locales?: string[], roles?: string[], userIds?: string[] }
+  audience       Json
+  status         PushCampaignStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  recipientCount Int                @default(0)
+  lastError      String?            @db.VarChar(300)
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  deliveries PushDelivery[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+}
+
+/// One push to one person: campaigns and automatic ones (orders, chat, ...) alike, so the
+/// statistics cover everything the app sends. `openedAt` is set when the person taps it.
+model PushDelivery {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId String?
+  campaign   PushCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  category   String        @db.VarChar(24)
+  /// Devices the push was addressed to, and how many of them the push service accepted.
+  devices    Int           @default(0)
+  accepted   Int           @default(0)
+  openedAt   DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([campaignId])
+  @@index([userId, createdAt])
+  @@index([createdAt, category])
 }
 
 enum MarketplaceSourceCode {

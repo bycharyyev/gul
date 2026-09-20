@@ -171,10 +171,27 @@ describe("AuthService", () => {
           fullName: "New User",
           username: "autogenusr",
           locale: "ru",
+          country: "RU",
         },
       });
       expect(result.user.username).toBe("autogenusr");
       expect(result.user.avatarUrl).toBeNull();
+    });
+
+    it.each([
+      ["+99361234567", "TM"],
+      ["+8613800138000", "CN"],
+      ["+905321234567", "TR"],
+      ["+2547123456789", null],
+    ])("derives the country from the phone number %s -> %s", async (phone, country) => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({ id: "u", phone, fullName: "N", username: "x", role: "CUSTOMER", locale: "ru", country });
+
+      await service.register({ phone, password: "password123", fullName: "N" });
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ phone, country }),
+      });
     });
 
     it("records the referral when a referredByUsername is supplied, without blocking on failure", async () => {

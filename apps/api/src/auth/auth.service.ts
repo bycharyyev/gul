@@ -10,6 +10,7 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import { randomBytes, createHash } from "crypto";
+import { countryFromPhone } from "../common/phone-country";
 import { PrismaService } from "../prisma/prisma.service";
 import { ReferralsService } from "../referrals/referrals.service";
 import { ACCESS_TOKEN_SECRET } from "./jwt-secret";
@@ -87,7 +88,15 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.password);
     const username = await this.referrals.generateUsername();
     const user = await this.prisma.user.create({
-      data: { phone: dto.phone, passwordHash, fullName: dto.fullName, username, locale: dto.locale ?? "ru" },
+      data: {
+        phone: dto.phone,
+        passwordHash,
+        fullName: dto.fullName,
+        username,
+        locale: dto.locale ?? "ru",
+        // Worked out from the number, never asked: the person can correct it in their profile.
+        country: countryFromPhone(dto.phone),
+      },
     });
 
     if (dto.referredByUsername) {
@@ -114,6 +123,7 @@ export class AuthService {
         role: user.role,
         avatarUrl: null,
         locale: user.locale,
+        country: user.country,
       },
     };
   }
@@ -166,6 +176,7 @@ export class AuthService {
         role: user.role,
         avatarUrl: toAvatarUrl(user.avatarPath),
         locale: user.locale,
+        country: user.country,
       },
     };
   }
@@ -274,6 +285,7 @@ export class AuthService {
         role: true,
         avatarPath: true,
         locale: true,
+        country: true,
       },
     });
     if (!user) throw new NotFoundException("User not found");
@@ -289,7 +301,7 @@ export class AuthService {
 
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { fullName: dto.fullName, phone: dto.phone, locale: dto.locale },
+      data: { fullName: dto.fullName, phone: dto.phone, locale: dto.locale, country: dto.country },
       select: {
         id: true,
         phone: true,
@@ -298,6 +310,7 @@ export class AuthService {
         role: true,
         avatarPath: true,
         locale: true,
+        country: true,
       },
     });
     const { avatarPath, ...rest } = user;
@@ -316,6 +329,7 @@ export class AuthService {
         role: true,
         avatarPath: true,
         locale: true,
+        country: true,
       },
     });
     const { avatarPath, ...rest } = user;
