@@ -4,12 +4,21 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/strings.dart';
 import 'remote_app_config.dart';
 
-/// Shows the maintenance banner and, for builds older than `min_app_version`, a full-screen
+/// Shows the maintenance notice and, for builds older than `min_app_version`, a full-screen
 /// "update the app" page in place of the app.
-class AppGate extends StatelessWidget {
+class AppGate extends StatefulWidget {
   const AppGate({required this.child, super.key});
 
   final Widget child;
+
+  @override
+  State<AppGate> createState() => _AppGateState();
+}
+
+class _AppGateState extends State<AppGate> {
+  /// The notice text the person closed. A different message shows again; the same one stays away
+  /// until the next launch.
+  String? _dismissed;
 
   @override
   Widget build(BuildContext context) {
@@ -18,30 +27,72 @@ class AppGate extends StatelessWidget {
       valueListenable: service.config,
       builder: (context, config, _) {
         if (service.updateRequired) return _UpdateRequired(config: config);
-        if (config.maintenanceMessage.isEmpty) return child;
-        return Column(
+        final message = config.maintenanceMessage;
+        if (message.isEmpty || message == _dismissed) return widget.child;
+
+        final topInset = MediaQuery.paddingOf(context).top;
+        return Stack(
           children: [
-            Material(
-              color: Theme.of(context).colorScheme.tertiaryContainer,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Text(
-                    config.maintenanceMessage,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
+            // The screens keep their own layout; the notice floats over the top edge, so nothing
+            // is pushed down and no screen ends up with a doubled status-bar gap.
+            Positioned.fill(child: widget.child),
+            Positioned(
+              left: 12,
+              right: 12,
+              top: topInset + 8,
+              child: _NoticeCard(
+                message: message,
+                onClose: () => setState(() => _dismissed = message),
               ),
             ),
-            Expanded(child: child),
           ],
         );
       },
+    );
+  }
+}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard({required this.message, required this.onClose});
+
+  final String message;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.inverseSurface,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, size: 20, color: scheme.onInverseSurface),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onInverseSurface,
+                ),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.close,
+                size: 18,
+                color: scheme.onInverseSurface,
+              ),
+              onPressed: onClose,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
