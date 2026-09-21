@@ -23,9 +23,10 @@ class _AppGateState extends State<AppGate> {
   @override
   Widget build(BuildContext context) {
     final service = RemoteAppConfigService.instance;
-    return ValueListenableBuilder<RemoteAppConfig>(
-      valueListenable: service.config,
-      builder: (context, config, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([service.config, service.serverForcedUpdate]),
+      builder: (context, _) {
+        final config = service.config.value;
         if (service.updateRequired) return _UpdateRequired(config: config);
         final message = config.maintenanceMessage;
         if (message.isEmpty || message == _dismissed) return widget.child;

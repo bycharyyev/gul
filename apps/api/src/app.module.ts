@@ -28,6 +28,7 @@ import { SellerApiModule } from "./seller-api/seller-api.module";
 import { SellersModule } from "./sellers/sellers.module";
 import { TelegramBotModule } from "./telegram-bot/telegram-bot.module";
 import { AdminTelegramBotModule } from "./admin-telegram-bot/admin-telegram-bot.module";
+import { MinAppVersionMiddleware } from "./common/min-app-version.middleware";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { WithdrawalsModule } from "./withdrawals/withdrawals.module";
 import { HomeSlidesModule } from "./home-slides/home-slides.module";
@@ -108,5 +109,6 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestIdMiddleware).forRoutes("*");
+    consumer.apply(MinAppVersionMiddleware).forRoutes("*");
   }
 }

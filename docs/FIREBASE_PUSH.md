@@ -120,3 +120,20 @@ phone so far.
   to enable "Autostart" and set battery saver to "No restrictions" for Gulyaly, otherwise data
   messages can be held back. This is a reason to keep a `notification` block fallback under review
   if delivery on such phones proves unreliable.
+
+## Forced app update (Remote Config `min_app_version`)
+
+Set `min_app_version` (for example `1.0.7`) in the Firebase console → Remote Config and publish.
+Builds older than that are refused:
+
+- **Server**: `MinAppVersionMiddleware` answers HTTP 426 `APP_UPDATE_REQUIRED` to any request
+  carrying an `X-App-Version` older than the minimum. The API reads the same parameter through the
+  Firebase Admin SDK (cached 60 s). It fails open: if Firebase cannot be read, nobody is locked out,
+  and the last value read stays in force. Callers that send no version (website, admin, partners)
+  are never affected.
+- **App**: shows a blocking "update the app" screen, at once on a 426 and otherwise after the next
+  config fetch (at most every 3 hours; running apps get changes immediately). `update_url` is where
+  the button leads (https only).
+
+To lift the block, publish an empty value or a lower version. A malformed value is ignored rather
+than blocking everyone. `maintenance_message` shows a dismissible notice to every user while set.
