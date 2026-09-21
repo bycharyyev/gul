@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/firebase/app_gate.dart';
 import '../core/l10n/strings.dart';
 import '../core/sharing/shared_text.dart';
 import '../core/widgets/crystal.dart';
@@ -70,7 +71,9 @@ class GulyalyApp extends ConsumerWidget {
       // whole app, and nothing re-paints when a route changes.
       builder: (context, child) => StringsScope(
         strings: strings,
-        child: AmbientBackground(child: child ?? const SizedBox.shrink()),
+        child: AppGate(
+          child: AmbientBackground(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }

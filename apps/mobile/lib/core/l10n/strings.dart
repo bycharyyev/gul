@@ -579,6 +579,9 @@ class Strings {
       'edit.fullName': 'Имя',
       'edit.phone': 'Телефон',
       'edit.country': 'Страна',
+      'update.title': 'Требуется обновление',
+      'update.message': 'Эта версия приложения устарела. Установите новую, чтобы продолжить.',
+      'update.button': 'Обновить',
       'edit.countryHint':
           'Определилась по номеру телефона. От неё зависят уведомления и акции для вашей страны.',
       'edit.saved': 'Изменения сохранены',
@@ -1128,6 +1131,9 @@ class Strings {
       'edit.fullName': 'Name',
       'edit.phone': 'Phone',
       'edit.country': 'Country',
+      'update.title': 'Update required',
+      'update.message': 'This version of the app is out of date. Install the new one to continue.',
+      'update.button': 'Update',
       'edit.countryHint':
           'Worked out from your phone number. It decides which notifications and offers you receive.',
       'edit.saved': 'Changes saved',
@@ -1672,6 +1678,9 @@ class Strings {
       'edit.fullName': 'Ady',
       'edit.phone': 'Telefon',
       'edit.country': 'Ýurt',
+      'update.title': 'Täzelenme gerek',
+      'update.message': 'Programmanyň bu wersiýasy könelişipdir. Dowam etmek üçin täzesini guruň.',
+      'update.button': 'Täzelemek',
       'edit.countryHint':
           'Telefon belgiňizden kesgitlenildi. Ol size haýsy habarnamalaryň we aksiýalaryň gelýändigini kesgitleýär.',
       'edit.saved': 'Üýtgeşmeler ýatda saklandy',
