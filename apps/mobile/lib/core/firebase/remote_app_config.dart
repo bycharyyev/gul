@@ -71,7 +71,7 @@ class RemoteAppConfigService {
       isVersionBelow(currentVersion, config.value.minVersion);
 
   /// Never throws; the app keeps its defaults (nothing blocked, no banner) when it cannot reach
-  /// Firebase. Fetching is throttled to once an hour by Firebase, which also keeps it inside the
+  /// Firebase. Fetching is throttled to once every 12 hours, which also keeps it inside the
   /// free quota.
   Future<void> initialize() async {
     try {
@@ -81,7 +81,7 @@ class RemoteAppConfigService {
       await remote.setConfigSettings(
         RemoteConfigSettings(
           fetchTimeout: const Duration(seconds: 8),
-          minimumFetchInterval: const Duration(hours: 1),
+          minimumFetchInterval: const Duration(hours: 12),
         ),
       );
       await remote.setDefaults(const {
