@@ -121,19 +121,23 @@ phone so far.
   messages can be held back. This is a reason to keep a `notification` block fallback under review
   if delivery on such phones proves unreliable.
 
-## Forced app update (Remote Config `min_app_version`)
+## App updates (Remote Config)
 
-Set `min_app_version` (for example `1.0.7`) in the Firebase console → Remote Config and publish.
-Builds older than that are refused:
+The API never blocks an old app: it keeps working against the server, and the app is only asked
+(or, for a security fix, required) to update. Set these in the Firebase console -> Remote Config and
+publish. The app reads them at start (at most every 3 hours) and running apps get changes at once.
 
-- **Server**: `MinAppVersionMiddleware` answers HTTP 426 `APP_UPDATE_REQUIRED` to any request
-  carrying an `X-App-Version` older than the minimum. The API reads the same parameter through the
-  Firebase Admin SDK (cached 60 s). It fails open: if Firebase cannot be read, nobody is locked out,
-  and the last value read stays in force. Callers that send no version (website, admin, partners)
-  are never affected.
-- **App**: shows a blocking "update the app" screen, at once on a 426 and otherwise after the next
-  config fetch (at most every 3 hours; running apps get changes immediately). `update_url` is where
-  the button leads (https only).
+| Level | Parameters | What people see |
+|---|---|---|
+| 1. Recommended | `latest_app_version` = `1.1.0` | Dismissible card "a new version is available" with an update button, on builds below it |
+| 2. Required by a date | `min_app_version` = `1.0.8` and `update_deadline` = `2026-10-05T00:00:00Z` | Card "required by 05.10.2026" until the deadline, then a blocking screen. The screen appears on time even if the app stays open |
+| 3. Urgent | `min_app_version` = `1.0.8`, `update_deadline` empty | Blocking "update the app" screen straight away (a security fix) |
 
-To lift the block, publish an empty value or a lower version. A malformed value is ignored rather
-than blocking everyone. `maintenance_message` shows a dismissible notice to every user while set.
+`update_url` (https) is where the update button leads. Precedence: the minimum wins over the
+recommendation. A malformed version is ignored; a malformed deadline counts as "now", so a typo can
+never delay an urgent fix. To lift a block, publish an empty value or a lower version.
+
+`maintenance_message` shows a dismissible notice to every user while it is non-empty.
+
+For a leak in the **API**, fix the endpoint on the server: that protects old apps too. The update
+levels above are for problems inside the app itself.
