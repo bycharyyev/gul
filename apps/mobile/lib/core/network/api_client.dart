@@ -3,7 +3,10 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../config/app_config.dart';
+import '../firebase/remote_app_config.dart';
 import '../errors/app_exception.dart';
 import '../storage/token_store.dart';
 import 'auth_interceptor.dart';
@@ -44,6 +47,7 @@ class ApiClient {
     if (refreshDio != null) refreshClient.options = options;
 
     client.interceptors.add(_RequestIdInterceptor());
+    client.interceptors.add(_AppVersionInterceptor());
     client.interceptors.add(
       AuthInterceptor(
         store: store,
@@ -129,6 +133,38 @@ class _RequestIdInterceptor extends Interceptor {
     ).join();
     options.headers['X-Request-Id'] = id;
     handler.next(options);
+  }
+}
+
+/// Tells the server which build is calling, so it can refuse one that is too old, and reacts when it
+/// does: an HTTP 426 puts up the "update the app" screen at once.
+class _AppVersionInterceptor extends Interceptor {
+  static Future<String?>? _version;
+
+  static Future<String?> _load() async {
+    try {
+      return (await PackageInfo.fromPlatform()).version;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    final version = await (_version ??= _load());
+    if (version != null) options.headers['X-App-Version'] = version;
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.response?.statusCode == 426) {
+      RemoteAppConfigService.instance.serverForcedUpdate.value = true;
+    }
+    handler.next(err);
   }
 }
 

@@ -67,11 +67,16 @@ class RemoteAppConfigService {
   );
   String currentVersion = '';
 
+  /// Set when the server itself refused this build (HTTP 426). Stronger than the fetched config:
+  /// it applies at the very next request, without waiting for the next fetch.
+  final ValueNotifier<bool> serverForcedUpdate = ValueNotifier(false);
+
   bool get updateRequired =>
+      serverForcedUpdate.value ||
       isVersionBelow(currentVersion, config.value.minVersion);
 
   /// Never throws; the app keeps its defaults (nothing blocked, no banner) when it cannot reach
-  /// Firebase. Fetching is throttled to once every 12 hours, which also keeps it inside the
+  /// Firebase. Fetching is throttled to once every 3 hours, which also keeps it inside the
   /// free quota.
   Future<void> initialize() async {
     try {
@@ -81,7 +86,7 @@ class RemoteAppConfigService {
       await remote.setConfigSettings(
         RemoteConfigSettings(
           fetchTimeout: const Duration(seconds: 8),
-          minimumFetchInterval: const Duration(hours: 12),
+          minimumFetchInterval: const Duration(hours: 3),
         ),
       );
       await remote.setDefaults(const {

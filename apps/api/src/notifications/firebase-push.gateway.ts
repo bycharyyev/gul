@@ -7,6 +7,7 @@ import {
   getApps,
   initializeApp,
 } from "firebase-admin/app";
+import { getRemoteConfig } from "firebase-admin/remote-config";
 import {
   BatchResponse,
   getMessaging,
@@ -48,6 +49,14 @@ export class FirebasePushGateway implements OnModuleInit {
 
   get enabled() {
     return Boolean(this.app);
+  }
+
+  /** A parameter's default value from the published Remote Config template ("" when unset). */
+  async remoteConfigValue(key: string): Promise<string> {
+    if (!this.app) throw new Error("Firebase is not configured");
+    const template = await getRemoteConfig(this.app).getTemplate();
+    const value = template.parameters?.[key]?.defaultValue;
+    return value && "value" in value ? value.value : "";
   }
 
   async send(
