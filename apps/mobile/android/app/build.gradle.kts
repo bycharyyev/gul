@@ -11,6 +11,7 @@ plugins {
 // build the app without receiving production Firebase credentials.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 // Release signing is read from android/key.properties, which is git-ignored and lives only on

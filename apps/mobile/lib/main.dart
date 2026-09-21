@@ -8,6 +8,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app/app.dart';
 import 'app/providers.dart';
 import 'app/router.dart';
+import 'core/firebase/app_health.dart';
+import 'core/firebase/remote_app_config.dart';
 import 'core/notifications/push_repository.dart';
 import 'core/notifications/push_service.dart';
 import 'features/auth/presentation/auth_controller.dart';
@@ -33,6 +35,11 @@ Future<void> main() async {
   // milliseconds, unlike the session restore below.
   await initializeDateFormatting('ru');
   await initializeDateFormatting('en');
+
+  // Crash reporting first, so a failure in anything below is recorded. Remote config is not
+  // awaited: the app paints on its defaults and picks the fetched values up when they arrive.
+  await AppHealth.initialize();
+  unawaited(RemoteAppConfigService.instance.initialize());
 
   final container = ProviderContainer();
 
