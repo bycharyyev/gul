@@ -76,10 +76,14 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
           S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+          # reg.ru's cert (GlobalSign) is genuinely valid, but AWS CLI v2's own bundled CA list is
+          # stale and doesn't include that root yet; the runner's OS trust store does, so point at
+          # it instead of AWS CLI's built-in bundle.
+          AWS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
         run: |
-          # Path-style addressing, not virtual-hosted (<bucket>.<endpoint>): reg.ru's certificate
-          # does not cover arbitrary bucket subdomains, only the bare endpoint host. The API's own
-          # S3 client sets the equivalent `forcePathStyle: true` for the same reason.
+          # Path-style addressing, not virtual-hosted (<bucket>.<endpoint>): the API's own S3
+          # client sets the equivalent `forcePathStyle: true`, and matching it here keeps the two
+          # upload paths behaving the same way.
           aws configure set default.s3.addressing_style path
 
           APK=apps/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
