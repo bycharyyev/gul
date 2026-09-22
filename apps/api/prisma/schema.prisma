@@ -812,6 +812,17 @@ model ManagedLink {
   @@index([isEnabled])
 }
 
+/// A staff-defined shortcut to an external analytics or operations dashboard.
+model AnalyticsLink {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  url         String
+  faviconUrl  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // A singleton row (always id "singleton") rather than a real table, since there is exactly one
 // platform to configure. Holds the admin's own Telegram link, mirroring Seller.telegramChatId /
 // telegramLinkCode -- the admin panel's own "Connect Telegram" button uses the same /start deep

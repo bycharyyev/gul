@@ -12,6 +12,7 @@ import type {
   AdminContentPageInput,
   AdminHomeSlideInput,
   AdminManagedLinkInput,
+  AnalyticsLinkDto,
   AdminServiceInput,
   AdminSocialLinkInput,
   AdminStatsDto,
@@ -23,6 +24,7 @@ import type {
   ContentPageDto,
   CreateApiKeyInput,
   CreateApiKeyResult,
+  CreateAnalyticsLinkInput,
   CreateOrderInput,
   CreateSellerApiKeyInput,
   CreateSellerApiKeyResult,
@@ -988,6 +990,21 @@ export class ApiClient {
     return this.request<void>(`/managed-links/admin/${id}`, {
       method: "DELETE",
     });
+  }
+
+  listAnalyticsLinks() {
+    return this.request<AnalyticsLinkDto[]>("/analytics-links");
+  }
+
+  createAnalyticsLink(input: CreateAnalyticsLinkInput) {
+    return this.request<AnalyticsLinkDto>("/analytics-links", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteAnalyticsLink(id: string) {
+    return this.request<void>(`/analytics-links/${id}`, { method: "DELETE" });
   }
 
   // ---- Order tracking (public) ----

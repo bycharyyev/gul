@@ -196,3 +196,20 @@ export const adminManagedLinkInputSchema = z.object({
 });
 export type AdminManagedLinkInput = z.infer<typeof adminManagedLinkInputSchema>;
 
+export const analyticsLinkSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  url: z.string().url(),
+  faviconUrl: z.string().url(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type AnalyticsLinkDto = z.infer<typeof analyticsLinkSchema>;
+
+export const createAnalyticsLinkInputSchema = z.object({
+  title: z.string().min(1).max(80),
+  description: z.string().max(160).optional(),
+  url: z.string().url().refine((value) => /^https?:\/\//i.test(value), "URL must start with http:// or https://"),
+});
+export type CreateAnalyticsLinkInput = z.infer<typeof createAnalyticsLinkInputSchema>;

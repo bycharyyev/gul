@@ -20,6 +20,7 @@ import { PartnerModule } from "./partner/partner.module";
 import { StoriesModule } from "./stories/stories.module";
 import { ContentPagesModule } from "./content-pages/content-pages.module";
 import { ManagedLinksModule } from "./managed-links/managed-links.module";
+import { AnalyticsLinksModule } from "./analytics-links/analytics-links.module";
 import { ChatModule } from "./chat/chat.module";
 import { SupportModule } from "./support/support.module";
 import { EmailModule } from "./email/email.module";
@@ -73,6 +74,7 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
     StoriesModule,
     ContentPagesModule,
     ManagedLinksModule,
+    AnalyticsLinksModule,
     SupportModule,
     ChatModule,
     EmailModule,
