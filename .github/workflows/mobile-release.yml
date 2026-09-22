@@ -1,0 +1,95 @@
+name: Mobile release (signed APK to S3)
+
+# Builds a signed release APK on every push to main that touches the mobile app, and uploads it
+# to a stable S3 URL that never changes -- the Remote Config `update_url` parameter points at
+# this URL once and never has to be edited again; each run simply overwrites the object.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile-release.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Pinned for the same reason as mobile-ci.yml: an unpinned channel silently follows
+          # whatever "stable" is on the day the job runs.
+          flutter-version: 3.38.5
+          channel: stable
+          cache: true
+
+      - working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Write the release keystore
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set -- add the signing secrets before this workflow can produce a release build."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/release-keystore.jks
+          cat > key.properties <<PROPS
+          storeFile=release-keystore.jks
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          PROPS
+
+      - name: Build number
+        id: version
+        run: |
+          # Always higher than any build this repo has produced manually (build 25 as of writing),
+          # and strictly increasing across CI runs -- GitHub's run_number never repeats or resets.
+          echo "build_number=$((1000 + ${{ github.run_number }}))" >> "$GITHUB_OUTPUT"
+
+      - working-directory: apps/mobile
+        run: |
+          flutter build apk --release --no-shrink --target-platform android-arm64 \
+            --split-per-abi --build-number=${{ steps.version.outputs.build_number }}
+
+      - name: Remove the keystore from the runner
+        if: always()
+        working-directory: apps/mobile/android
+        run: rm -f app/release-keystore.jks key.properties
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+        run: |
+          APK=apps/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          # One object, always the same key -- this is the whole point: update_url is set once in
+          # the Firebase console and every release since simply replaces what it points at.
+          aws s3 cp "$APK" "s3://$S3_PUBLIC_BUCKET/app/gulyaly-latest.apk" \
+            --endpoint-url "$S3_ENDPOINT" \
+            --content-type application/vnd.android.package-archive \
+            --content-disposition "attachment; filename=gulyaly.apk"
+
+      - name: Summary
+        env:
+          S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+        run: |
+          echo "### Gulyaly APK uploaded" >> "$GITHUB_STEP_SUMMARY"
+          echo "- build number: ${{ steps.version.outputs.build_number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: https://$S3_PUBLIC_BUCKET.s3.regru.cloud/app/gulyaly-latest.apk" >> "$GITHUB_STEP_SUMMARY"
