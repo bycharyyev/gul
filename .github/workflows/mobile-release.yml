@@ -77,6 +77,11 @@ jobs:
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
           S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
         run: |
+          # Path-style addressing, not virtual-hosted (<bucket>.<endpoint>): reg.ru's certificate
+          # does not cover arbitrary bucket subdomains, only the bare endpoint host. The API's own
+          # S3 client sets the equivalent `forcePathStyle: true` for the same reason.
+          aws configure set default.s3.addressing_style path
+
           APK=apps/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           # One object, always the same key -- this is the whole point: update_url is set once in
           # the Firebase console and every release since simply replaces what it points at.
