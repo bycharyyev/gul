@@ -51,7 +51,13 @@ Future<void> main() async {
   container.listen<AuthState>(authControllerProvider, (previous, next) {
     if (next.status == AuthStatus.authenticated &&
         previous?.status != AuthStatus.authenticated) {
+      // Firebase receives only the opaque backend id, never the profile's phone or name.
+      unawaited(AppHealth.identify(next.user?.id));
       unawaited(push.syncForAuthenticatedUser());
+    }
+    if (next.status == AuthStatus.unauthenticated &&
+        previous?.status != AuthStatus.unauthenticated) {
+      unawaited(AppHealth.identify(null));
     }
   });
   // Detach the device while the session is still valid: by the time the status flips to signed
