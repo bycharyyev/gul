@@ -51,21 +51,24 @@ void updateLevelTests() {
       expect(level('1.0.8', c), UpdateLevel.none);
     });
 
-    test('below the minimum with a future deadline: required soon, then blocked', () {
-      const c = RemoteAppConfig(
-        minVersion: '1.0.8',
-        updateDeadline: '2026-09-25T00:00:00Z',
-      );
-      expect(level('1.0.6', c), UpdateLevel.requiredSoon);
-      expect(
-        evaluateUpdate(
-          current: '1.0.6',
-          config: c,
-          now: DateTime.utc(2026, 9, 26),
-        ),
-        UpdateLevel.required,
-      );
-    });
+    test(
+      'below the minimum with a future deadline: required soon, then blocked',
+      () {
+        const c = RemoteAppConfig(
+          minVersion: '1.0.8',
+          updateDeadline: '2026-09-25T00:00:00Z',
+        );
+        expect(level('1.0.6', c), UpdateLevel.requiredSoon);
+        expect(
+          evaluateUpdate(
+            current: '1.0.6',
+            config: c,
+            now: DateTime.utc(2026, 9, 26),
+          ),
+          UpdateLevel.required,
+        );
+      },
+    );
 
     test('an unreadable deadline never delays a security fix', () {
       const c = RemoteAppConfig(minVersion: '1.0.8', updateDeadline: 'soon');

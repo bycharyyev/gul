@@ -23,7 +23,8 @@ class AppHealth {
       // The Firebase SDK produces basic lifecycle events automatically. Do not add phone, email,
       // names, payment details, or notification tokens to Analytics events or user properties.
       await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(collect);
-      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      FlutterError.onError =
+          FirebaseCrashlytics.instance.recordFlutterFatalError;
       PlatformDispatcher.instance.onError = (error, stack) {
         FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
         return true;
