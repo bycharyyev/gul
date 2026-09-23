@@ -1,0 +1,26 @@
+node_modules
+.turbo
+dist
+*.tsbuildinfo
+.next
+out
+coverage
+*.log
+.env
+.env.*.local
+.env.local
+apps/api/uploads
+.DS_Store
+Thumbs.db
+Desktop.ini
+.pnpm-store
+generated
+.vscode
+.idea
+*.swp
+.vercel
+*.pem
+*.key
+.claude/settings.local.json
+# Graphify generates a local knowledge graph; keep it out of source control.
+graphify-out/

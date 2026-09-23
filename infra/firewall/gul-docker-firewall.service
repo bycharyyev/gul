@@ -1,0 +1,13 @@
+[Unit]
+Description=Restrict docker-published ports to the secondary VPS
+# The rules live in a chain docker owns, so they have to be written after docker has created it.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gul-docker-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

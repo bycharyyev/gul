@@ -1,0 +1,35 @@
+name: Diagnose secondary VPS
+on:
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SECONDARY_HOST }} >> ~/.ssh/known_hosts
+      - name: Read-only capacity + monitoring diagnostics
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }} '
+            echo "=== CPU / RAM / DISK ==="
+            nproc
+            free -h
+            df -h /
+            echo
+            echo "=== netdata ==="
+            systemctl is-active netdata 2>&1
+            netdata -v 2>&1 || true
+            echo
+            echo "=== docker containers ==="
+            docker ps -a --format "{{.Names}}  {{.Image}}  {{.Status}}"
+            echo
+            echo "=== docker logging driver in use ==="
+            docker inspect --format "{{.Name}}: {{.HostConfig.LogConfig.Type}}" $(docker ps -q)
+            echo
+            echo "=== systemd services (filtered to app-relevant) ==="
+            systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null \
+              | grep -iE "postfix|opendkim|nginx|netdata"
+          ' < /dev/null

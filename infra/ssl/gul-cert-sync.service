@@ -1,0 +1,8 @@
+[Unit]
+Description=Ensure Let's Encrypt cert covers every nginx server_name
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gul/scripts/sync-ssl-domains.sh

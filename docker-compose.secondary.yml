@@ -1,0 +1,79 @@
+# Failover compose for the secondary VPS. Only the app containers -- the database is the
+# pg-standby container managed separately by setup-replication.yml / failover-to-secondary.yml,
+# reachable here as host "postgres" via the shared "gul-net" external network (an alias, so
+# DATABASE_URL in .env can stay byte-identical to the primary's). The queue lives on the primary
+# and is shared -- see the note above the api service for why this node no longer runs its own.
+#
+# Same log cap as docker-compose.prod.yml (10MB x 5 files/service) -- see that file for why.
+x-logging: &default-logging
+  # journald instead of json-file: makes container logs show up in Netdata's built-in systemd
+  # journal viewer alongside Postfix/nginx/OpenDKIM logs, no separate log-shipping tool needed.
+  # Retention is bounded by journald.conf's SystemMaxUse (set via setup-netdata-secondary-streaming.yml),
+  # not per-container here -- journald has no per-container size cap option.
+  driver: journald
+  options:
+    tag: "{{.Name}}"
+
+services:
+  # Warm, local emergency queue. The API deliberately uses PRIMARY_REDIS_HOST day-to-day so both
+  # app nodes share the primary queue. Database failover changes that host to this service and
+  # recreates the API; PostgreSQL remains the durable source from which sweepers rebuild work that
+  # was only present in the lost primary Redis.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file: .env
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [gul-net]
+    logging: *default-logging
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/gul-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # PRIMARY_REDIS_HOST and REDIS_PASSWORD come from this node's .env, written by
+      # enable-shared-queue.yml. Composed here rather than stored whole so the two facts stay
+      # separate: the address is not a secret and the password is.
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@${PRIMARY_REDIS_HOST}:6379"
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - uploads-data:/repo/apps/api/uploads
+    networks: [gul-net]
+    logging: *default-logging
+
+  web:
+    image: ghcr.io/${GHCR_OWNER}/gul-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [gul-net]
+    logging: *default-logging
+
+  admin:
+    image: ghcr.io/${GHCR_OWNER}/gul-admin:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8081:80"
+    networks: [gul-net]
+    logging: *default-logging
+
+networks:
+  gul-net:
+    external: true
+
+volumes:
+  redis-data:
+  uploads-data:

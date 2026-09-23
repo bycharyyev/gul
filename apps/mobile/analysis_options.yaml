@@ -1,0 +1,43 @@
+# Static analysis for the Gulyaly app.
+#
+# `flutter_lints` is the floor. The additions below are the ones that catch classes of bug this
+# codebase can actually hit: silently swallowed futures, rebuilds caused by missing `const`,
+# `BuildContext` used after an await, and string interpolation that hides a null.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # A dangling future in an app that writes money is not a style issue.
+    unawaited_futures: error
+    # Using a BuildContext after an await is the most common source of "widget disposed" crashes.
+    use_build_context_synchronously: error
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # Rebuild cost. Every widget that could be const and is not is rebuilt on each parent build.
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+
+    # Correctness.
+    always_declare_return_types: true
+    avoid_slow_async_io: true
+    cancel_subscriptions: true
+    close_sinks: true
+    unawaited_futures: true
+    use_build_context_synchronously: true
+    avoid_empty_else: true
+    no_adjacent_strings_in_list: true
+    throw_in_finally: true
+    unnecessary_await_in_return: true
+
+    # Clarity.
+    avoid_unnecessary_containers: true
+    prefer_single_quotes: true
+    sort_child_properties_last: true
+    unnecessary_parenthesis: true
+    require_trailing_commas: true

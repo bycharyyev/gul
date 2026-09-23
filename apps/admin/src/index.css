@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+.bg-hero-gradient {
+  background-image:
+    radial-gradient(60% 50% at 15% 10%, rgba(109, 75, 255, 0.14), transparent 60%),
+    radial-gradient(50% 45% at 90% 15%, rgba(20, 184, 166, 0.12), transparent 60%),
+    linear-gradient(180deg, #f2f1ff 0%, #f8fafc 55%, #f8fafc 100%);
+}
+
+.text-gradient {
+  background-image: linear-gradient(90deg, #5a2fee 0%, #6d4bff 45%, #14b8a6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.bg-gradient-brand {
+  background-image: linear-gradient(135deg, #6d4bff 0%, #5a2fee 55%, #0d9488 130%);
+}
+
+.bg-gradient-brand-soft {
+  background-image: linear-gradient(135deg, rgba(109, 75, 255, 0.1) 0%, rgba(20, 184, 166, 0.08) 100%);
+}

@@ -1,0 +1,24 @@
+{
+  "name": "topup-hub",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "db:generate": "pnpm --filter @topup-hub/api prisma:generate",
+    "db:migrate": "pnpm --filter @topup-hub/api prisma:migrate",
+    "db:seed": "pnpm --filter @topup-hub/api prisma:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2"
+  }
+}

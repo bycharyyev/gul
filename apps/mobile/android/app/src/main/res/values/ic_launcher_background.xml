@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The brand mark is drawn for a white ground; the adaptive background must match it or the
+         ring's black stroke loses contrast under a dark launcher theme. -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
+</resources>

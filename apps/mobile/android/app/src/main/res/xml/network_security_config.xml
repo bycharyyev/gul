@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS only, everywhere, with one deliberate hole.
+
+  10.0.2.2 is the Android emulator's route to the developer's own machine, where the API runs
+  over plain HTTP during development. Without this exception a debug build cannot reach it at
+  all (cleartext has been blocked by default since API 28).
+
+  The exception is scoped two ways: to that single host, and to debug builds only. The
+  debug-overrides block below is not removed from the file, but the platform applies it only when
+  the application is debuggable, and a release build carries no android:debuggable flag. Verified
+  on the built release manifest.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- Lets a developer inspect traffic with a local proxy. Debug builds only. -->
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,103 @@
+name: Audit servers
+
+# Runs one of the inspection scripts in infra/checks on one or both VPS. Every one of them
+# reads; none of them change configuration, restart anything, or write to disk. (primary-postmortem
+# does start one throwaway privileged container, because dmesg and the journal are not readable by
+# an account without sudo -- it still only reads.)
+#
+# `script` and `host` are `choice` inputs, so both values come from a fixed list rather than from
+# free text interpolated into an ssh command.
+#
+# `host` matters more than it looks: when one machine is unreachable, the useful question becomes
+# what the *other* one witnessed, and a matrix that always includes the dead host buries that
+# answer under a failed leg.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Which check to run
+        type: choice
+        default: server-audit.sh
+        options:
+          - server-audit.sh
+          - primary-outage-forensics.sh
+          - primary-postmortem.sh
+          - capacity.sh
+          - throughput.sh
+          - env-parity.sh
+          - drift.sh
+          - certbot-preflight.sh
+          - verify-backup-restore.sh
+      host:
+        description: Where to run it
+        type: choice
+        default: both
+        options:
+          - both
+          - primary
+          - secondary
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+    name: audit (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.host == 'both' || inputs.host == matrix.name
+
+      - name: Set up SSH
+        if: inputs.host == 'both' || inputs.host == matrix.name
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "$HOST" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain $HOST" >&2; exit 1;
+          }
+
+      - name: Run ${{ inputs.script }}
+        if: inputs.host == 'both' || inputs.host == matrix.name
+        env:
+          HOST: ${{ secrets[matrix.host_secret] }}
+          USER_NAME: ${{ secrets[matrix.user_secret] }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o ServerAliveInterval=15 "$USER_NAME@$HOST" \
+            bash -s < "infra/checks/${{ inputs.script }}"
+
+  scheduled-backup-restore:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pinned SSH trust
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+      - name: Restore and validate newest backup
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 "$USER_NAME@$HOST" \
+            bash -s < infra/checks/verify-backup-restore.sh

@@ -1,0 +1,21 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/out
+**/coverage
+**/*.log
+**/.env
+**/.env.local
+**/.env.*.local
+**/.DS_Store
+.git
+.pnpm-store
+**/generated
+.vscode
+.idea
+.claude
+
+# The Flutter client. Nothing in the three server images uses it, and its build/ directory
+# holds APKs -- 178MB of debug build was riding along in every docker build context.
+apps/mobile

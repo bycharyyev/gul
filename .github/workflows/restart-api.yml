@@ -1,0 +1,62 @@
+name: Restart the api container (primary and/or secondary)
+
+# Plain ops lever: recreate the api container without changing anything about the release.
+#
+# Needed because deploy.yml starts the new image and health-checks it *before* running
+# `prisma migrate deploy`, so anything the API does once at boot against a table that migration
+# has just created (template seeding, for one) is skipped on the deploy that introduces it.
+# Restarting afterwards runs it against the migrated schema.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which host(s) to restart
+        type: choice
+        default: both
+        options:
+          - both
+          - primary
+          - secondary
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SECONDARY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Restart primary
+        if: inputs.target == 'both' || inputs.target == 'primary'
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            set -e
+            cd /opt/gul
+            docker compose up -d --force-recreate --no-deps api
+            for i in $(seq 1 20); do
+              curl -fsS http://127.0.0.1:4000/api/health > /dev/null && echo "primary healthy" && exit 0
+              sleep 2
+            done
+            echo "primary did NOT come back healthy" >&2
+            exit 1
+          ' < /dev/null
+
+      - name: Restart secondary
+        if: inputs.target == 'both' || inputs.target == 'secondary'
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
+            set -e
+            cd /opt/gul-secondary
+            docker compose up -d --force-recreate --no-deps api
+            for i in $(seq 1 20); do
+              curl -fsS http://127.0.0.1:4000/api/health > /dev/null && echo "secondary healthy" && exit 0
+              sleep 2
+            done
+            echo "secondary did NOT come back healthy" >&2
+            exit 1
+          ' < /dev/null

@@ -1,0 +1,214 @@
+import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Flower2,
+  Truck,
+  Store,
+  Sparkles,
+  GalleryHorizontal,
+  Share2,
+  Link2,
+  FileText,
+  MessageCircle,
+  Mail,
+  Code2,
+  KeyRound,
+  Users,
+  Contact,
+  Database,
+  Activity,
+  BarChart3,
+  Bell,
+  Gift,
+  Container,
+  Network,
+  UserCircle,
+  LogOut,
+  UserPlus,
+  Banknote,
+  ShoppingBag,
+  ShieldCheck,
+  type LucideIcon,
+  MessagesSquare,
+} from "lucide-react";
+import { LanguageSwitcher, useTranslation } from "@topup-hub/i18n";
+import { api, getCurrentUser, USER_UPDATED_EVENT } from "@/lib/api";
+import { NotificationProvider, useNotifications } from "@/lib/notifications-context";
+
+function useNavItems(): { to: string; label: string; icon: LucideIcon }[] {
+  const { t } = useTranslation();
+  return [
+    { to: "/", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
+    { to: "/orders", label: t("admin.nav.orders"), icon: ShoppingCart },
+    { to: "/catalog", label: t("admin.nav.catalog"), icon: Package },
+    { to: "/gallery", label: t("admin.nav.gallery"), icon: Flower2 },
+    { to: "/gallery-orders", label: t("admin.nav.galleryOrders"), icon: Truck },
+    { to: "/feed/moderation", label: t("admin.nav.feedModeration"), icon: ShieldCheck },
+    { to: "/chats", label: t("admin.nav.chats"), icon: MessagesSquare },
+    { to: "/sellers", label: t("admin.nav.sellers"), icon: Store },
+    { to: "/seller-applications", label: t("admin.nav.sellerApplications"), icon: UserPlus },
+    { to: "/withdrawals", label: t("admin.nav.withdrawals"), icon: Banknote },
+    { to: "/seller-ledger", label: t("admin.nav.sellerLedger"), icon: Banknote },
+    { to: "/payment-reconciliation", label: t("admin.nav.paymentReconciliation"), icon: Activity },
+    { to: "/home-slides", label: t("admin.nav.homeSlides"), icon: GalleryHorizontal },
+    { to: "/stories", label: t("admin.nav.stories"), icon: Sparkles },
+    { to: "/social-links", label: t("admin.nav.socialLinks"), icon: Share2 },
+    { to: "/managed-links", label: t("admin.nav.managedLinks"), icon: Link2 },
+    { to: "/analytics", label: t("admin.nav.analytics"), icon: BarChart3 },
+    { to: "/notifications", label: t("admin.nav.notifications"), icon: Bell },
+    { to: "/content-pages", label: t("admin.nav.contentPages"), icon: FileText },
+    { to: "/support", label: t("admin.nav.support"), icon: MessageCircle },
+    { to: "/mail", label: t("admin.nav.mail"), icon: Mail },
+    { to: "/mail/templates", label: t("admin.nav.mailTemplates"), icon: Mail },
+    { to: "/api-management", label: t("admin.nav.apiManagement"), icon: Code2 },
+    { to: "/api-keys", label: t("admin.nav.apiKeys"), icon: KeyRound },
+    { to: "/api-usage", label: t("admin.nav.apiUsage"), icon: Activity },
+    { to: "/users", label: t("admin.nav.customers"), icon: Contact },
+    { to: "/team", label: t("admin.nav.team"), icon: Users },
+    { to: "/database", label: t("admin.nav.database"), icon: Database },
+    { to: "/monitoring", label: t("admin.nav.monitoring"), icon: Activity },
+    { to: "/referrals", label: t("admin.nav.referrals"), icon: Gift },
+    { to: "/cargo", label: t("admin.nav.cargo"), icon: Container },
+    { to: "/cargo/purchases/review", label: t("admin.nav.marketplacePurchases"), icon: ShoppingBag },
+    { to: "/subdomains", label: t("admin.nav.subdomains"), icon: Network },
+  ];
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <NotificationProvider>
+      <LayoutChrome>{children}</LayoutChrome>
+    </NotificationProvider>
+  );
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-semibold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function LayoutChrome({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const navItems = useNavItems();
+  const navigate = useNavigate();
+  const [user, setUser] = useState(getCurrentUser());
+  const [navOrder, setNavOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("gulyaly.admin.nav-order") ?? "[]"); } catch { return []; }
+  });
+  const [draggedNav, setDraggedNav] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const { pendingOrdersCount, unreadChatCount } = useNotifications();
+
+  useEffect(() => {
+    const onUserUpdated = () => setUser(getCurrentUser());
+    window.addEventListener(USER_UPDATED_EVENT, onUserUpdated);
+    return () => window.removeEventListener(USER_UPDATED_EVENT, onUserUpdated);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const orderedNavItems = [...navItems].sort((a, b) => {
+    const ai = navOrder.indexOf(a.to); const bi = navOrder.indexOf(b.to);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
+  function moveNav(target: string) {
+    if (!draggedNav || draggedNav === target) return;
+    const base = [...navItems.map((item) => item.to)].sort((a, b) => {
+      const ai = navOrder.indexOf(a); const bi = navOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+    const from = base.indexOf(draggedNav); const to = base.indexOf(target);
+    if (from < 0 || to < 0) return;
+    base.splice(from, 1); base.splice(to, 0, draggedNav);
+    setNavOrder(base); localStorage.setItem("gulyaly.admin.nav-order", JSON.stringify(base));
+  }
+
+  function logout() {
+    api.logout();
+    navigate("/login");
+  }
+
+  function badgeFor(to: string) {
+    if (to === "/orders") return pendingOrdersCount;
+    if (to === "/support") return unreadChatCount;
+    return 0;
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="shrink-0 border-b border-slate-100 px-6 pb-4 pt-5">
+          <div className="flex items-center gap-2 text-lg font-extrabold">
+          <img src="/brand/gulyaly.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-full" />
+          <span className="text-gradient">Gulyaly</span>
+          </div>
+          <p className="mt-2 pl-10 text-[11px] font-medium text-slate-400">{now.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })} · {now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</p>
+        </div>
+        {/* Independently scrollable: the nav list alone can exceed the viewport, the logo above
+            and the account/logout block below stay put instead of scrolling away with it. */}
+        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="space-y-1">
+          {orderedNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              draggable
+              onDragStart={() => setDraggedNav(item.to)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => moveNav(item.to)}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                  isActive
+                    ? "bg-gradient-brand-soft text-brand-700"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`
+              }
+            >
+              <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {item.label}
+              <NavBadge count={badgeFor(item.to)} />
+            </NavLink>
+          ))}
+          </div>
+        </nav>
+        <div className="shrink-0 border-t border-slate-200 px-4 pb-6 pt-3">
+          <NavLink
+            to="/account"
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                isActive ? "bg-gradient-brand-soft text-brand-700" : "text-slate-600 hover:bg-slate-50"
+              }`
+            }
+          >
+            <UserCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {user?.fullName || user?.phone || t("admin.nav.myAccount")}
+          </NavLink>
+          <button
+            onClick={logout}
+            className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50"
+          >
+            <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {t("admin.nav.logout")}
+          </button>
+          <LanguageSwitcher className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600" />
+        </div>
+      </aside>
+      <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50 p-8">{children}</main>
+    </div>
+  );
+}

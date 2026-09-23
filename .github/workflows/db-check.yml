@@ -1,0 +1,49 @@
+name: DB check (read-only)
+
+# Runs one of the read-only SQL files in infra/checks against the production database and prints
+# the result. It answers the class of question a green deploy cannot: not "did the code ship" but
+# "what does the data actually say".
+#
+# One workflow rather than one per question, because the only thing that differs between them is
+# the filename. `script` is a `choice`, so the value is drawn from a fixed list and cannot be used
+# to smuggle another path or a shell fragment into the command below.
+#
+# Read-only is a property of the files, not of this workflow -- keep it that way. Anything that
+# writes belongs in a workflow whose name says so.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Which check to run
+        type: choice
+        default: referral-state.sql
+        options:
+          - referral-state.sql
+          - referral-codes.sql
+          - sellers-list.sql
+          - managed-subdomains.sql
+          - cargo-state.sql
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - uses: actions/checkout@v4
+
+      - name: Run ${{ inputs.script }}
+        # The SQL arrives on stdin rather than as -c: quoted identifiers like "User" do not survive
+        # ssh -> sh -c -> psql and silently arrive lowercase, which Postgres then cannot find.
+        # POSTGRES_USER/POSTGRES_DB are expanded inside the container, not on the runner.
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'cd /opt/gul && docker compose exec -T postgres sh -c "psql -X -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\""' \
+            < "infra/checks/${{ inputs.script }}"

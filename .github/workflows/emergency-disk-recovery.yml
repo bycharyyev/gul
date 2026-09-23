@@ -1,0 +1,87 @@
+name: Emergency — reclaim disk and bring the stack up
+
+# Primary filled to 100% (0 bytes free) and Postgres could not start, taking the whole site to
+# 502. Root cause: deploy.yml prunes images only on its SUCCESS path, so a run of failed deploys
+# accumulates every image it pulled and never reclaims any of them.
+#
+# Reclaims in increasing order of aggression, checking free space between steps, then starts the
+# stack. Only ever removes Docker artefacts that can be re-pulled from GHCR -- never volumes,
+# never backups, never database data.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Reclaim space, then start the stack
+        run: |
+          cat > /tmp/recover.sh <<'SCRIPT'
+          set -u
+          free_mb() { df -Pm / | awk 'NR==2 {print $4}'; }
+
+          echo "=== BEFORE ==="
+          df -h /
+          echo
+          echo "=== biggest consumers under / (top 12) ==="
+          du -xh --max-depth=2 / 2>/dev/null | sort -rh | head -12
+          echo
+          echo "=== docker usage ==="
+          docker system df || true
+          echo
+
+          echo "=== 1/3 build cache (always safe, usually the largest) ==="
+          docker builder prune -a -f || true
+          echo "free now: $(free_mb) MB"
+
+          if [ "$(free_mb)" -lt 3000 ]; then
+            echo "=== 2/3 dangling images ==="
+            docker image prune -f || true
+            echo "free now: $(free_mb) MB"
+          fi
+
+          if [ "$(free_mb)" -lt 3000 ]; then
+            # Unused tagged images too. Everything here is re-pullable from GHCR, so the cost of
+            # over-pruning is a slower next deploy, not data loss.
+            echo "=== 3/3 unused tagged images ==="
+            docker image prune -a -f || true
+            echo "free now: $(free_mb) MB"
+          fi
+
+          echo
+          echo "=== AFTER RECLAIM ==="
+          df -h /
+          echo
+
+          echo "=== starting stack ==="
+          cd /opt/gul
+          docker compose up -d
+          echo
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4000/api/health > /dev/null 2>&1; then
+              echo "API HEALTHY"
+              docker compose ps
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "API DID NOT COME BACK -- state follows" >&2
+          docker compose ps
+          docker compose logs --tail=40 postgres
+          docker compose logs --tail=40 api
+          exit 1
+          SCRIPT
+
+          scp -i ~/.ssh/id_ed25519 /tmp/recover.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/recover.sh"
+          ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /tmp/recover.sh; rc=$?; rm -f /tmp/recover.sh; exit $rc' < /dev/null

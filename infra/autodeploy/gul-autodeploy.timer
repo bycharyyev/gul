@@ -1,0 +1,13 @@
+[Unit]
+Description=Check main for a new commit to deploy
+
+[Timer]
+# Two minutes: fast enough that a push feels like it deployed itself, slow enough that the check
+# costs one `git fetch` and nothing else when nothing has changed.
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Unit=gul-autodeploy.service
+
+[Install]
+WantedBy=timers.target

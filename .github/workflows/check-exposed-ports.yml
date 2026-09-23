@@ -1,0 +1,61 @@
+name: Check exposed ports (read-only)
+
+# What can a stranger on the internet actually connect to?
+#
+# This has to run from somewhere neutral. Testing from a machine on a VPN reports every port open,
+# because the connection succeeds at the proxy rather than at the server; testing from the
+# secondary reports 5432 and 6379 open because the secondary is explicitly allowed. A GitHub
+# runner is neither, which is the whole reason this workflow exists rather than a script that
+# lands on one of the two hosts.
+#
+# Why it matters here: docker publishes ports by writing its own iptables rules, and those are
+# consulted before ufw's. A `ufw allow from <one address>` on a port that docker published can
+# read as protection and provide none -- 5432 carries the entire customer database.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly. An exposure introduced by a compose change is silent, and nothing else would notice.
+    - cron: "17 6 * * 1"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe each host from outside
+        env:
+          PRIMARY: ${{ secrets.DEPLOY_HOST }}
+          SECONDARY: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          # 22/80/443 are meant to be open. Everything else on this list is meant to be reachable
+          # only from the other server, and a success is a finding.
+          probe() {
+            host=$1; port=$2; expect=$3
+            if nc -z -w 5 "$host" "$port" 2>/dev/null; then state=OPEN; else state=closed; fi
+            verdict=ok
+            [ "$state" = "OPEN" ] && [ "$expect" = "closed" ] && verdict="EXPOSED"
+            [ "$state" = "closed" ] && [ "$expect" = "OPEN" ] && verdict="unexpectedly closed"
+            printf '  %-6s %-8s expected %-8s %s\n' "$port" "$state" "$expect" "$verdict"
+            [ "$verdict" = "EXPOSED" ] && echo "$host:$port" >> /tmp/exposed
+            return 0
+          }
+
+          : > /tmp/exposed
+
+          echo "--- primary ---"
+          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed"; do
+            probe "$PRIMARY" ${spec}
+          done
+
+          echo "--- secondary ---"
+          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed" "587 closed" "25 closed"; do
+            probe "$SECONDARY" ${spec}
+          done
+
+          echo
+          if [ -s /tmp/exposed ]; then
+            echo "Reachable from the open internet and should not be:"
+            sed 's/^/  /' /tmp/exposed
+            exit 1
+          fi
+          echo "Nothing reachable that should not be."

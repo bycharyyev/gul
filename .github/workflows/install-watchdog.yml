@@ -1,0 +1,62 @@
+name: Install app watchdog
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "infra/watchdog/**"
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    # Both machines. The watchdog only ever reached the primary, because the workflow named one
+    # host and the script hardcoded its path -- fine while the secondary received no traffic, and
+    # a gap since the second A record went in: an API dying there now takes half the visitors.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+    name: install (${{ matrix.name }})
+    env:
+      HOST: ${{ secrets[matrix.host_secret] }}
+      USER_NAME: ${{ secrets[matrix.user_secret] }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship watchdog files to a scratch dir
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER_NAME@$HOST" 'rm -rf /tmp/watchdog-sync && mkdir -p /tmp/watchdog-sync' < /dev/null
+          scp -i ~/.ssh/id_ed25519 infra/watchdog/gul-watchdog.sh infra/watchdog/gul-watchdog.service infra/watchdog/gul-watchdog.timer "$USER_NAME@$HOST:/tmp/watchdog-sync/"
+
+      - name: "Install under /etc + /usr/local/bin, enable timer (docker-chroot -- deploy has no sudo)"
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER_NAME@$HOST" '
+            set -e
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "cp /tmp/watchdog-sync/gul-watchdog.sh /usr/local/bin/gul-watchdog.sh"
+              echo "chmod +x /usr/local/bin/gul-watchdog.sh"
+              echo "cp /tmp/watchdog-sync/gul-watchdog.service /etc/systemd/system/gul-watchdog.service"
+              echo "cp /tmp/watchdog-sync/gul-watchdog.timer /etc/systemd/system/gul-watchdog.timer"
+              echo "systemctl daemon-reload"
+              echo "systemctl enable --now gul-watchdog.timer"
+              echo "systemctl list-timers gul-watchdog.timer --no-pager"
+            } > /tmp/watchdog-sync/apply.sh
+            chmod +x /tmp/watchdog-sync/apply.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/watchdog-sync/apply.sh
+            rm -rf /tmp/watchdog-sync
+          ' < /dev/null

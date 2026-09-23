@@ -1,0 +1,11 @@
+# Copy to android/key.properties on the machine that cuts releases. Never commit the real file.
+#
+#   keytool -genkey -v -keystore ~/gulyaly-release.jks -keyalg RSA -keysize 2048 \
+#           -validity 10000 -alias gulyaly
+#
+# Losing this keystore means losing the ability to update the app on Play at all -- back it up
+# somewhere that survives the laptop.
+storePassword=
+keyPassword=
+keyAlias=gulyaly
+storeFile=/absolute/path/to/gulyaly-release.jks

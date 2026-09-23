@@ -1,0 +1,7 @@
+{
+  "qa": "AUTO",
+  "security": "AUTO",
+  "devops": "AUTO",
+  "staging": "AUTO",
+  "production_deployment": "HUMAN_APPROVAL"
+}

@@ -1,0 +1,48 @@
+name: Install primary DB reachability alert on secondary
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up pinned SSH trust
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+            echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
+          }
+      - name: Install and start the check
+        env:
+          TARGET: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+          PRIMARY_DB_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/deploy_key infra/alerts/gul-primary-db-alert.sh "$TARGET:/tmp/"
+          scp -i ~/.ssh/deploy_key infra/alerts/gul-primary-db-alert.service infra/alerts/gul-primary-db-alert.timer "$TARGET:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "PRIMARY_DB_HOST='$PRIMARY_DB_HOST' bash -s" <<'REMOTE'
+            set -euo pipefail
+            [ -f /etc/gul-disk-alert.env ] || {
+              echo "install disk/email alert first; its SMTP credentials are reused" >&2; exit 1;
+            }
+            printf '%s\n' '#!/bin/sh' 'set -e' \
+              'install -m 0755 /tmp/gul-primary-db-alert.sh /usr/local/bin/' \
+              'install -m 0644 /tmp/gul-primary-db-alert.service /etc/systemd/system/' \
+              'install -m 0644 /tmp/gul-primary-db-alert.timer /etc/systemd/system/' \
+              "printf '%s\\n' 'PRIMARY_DB_HOST=$PRIMARY_DB_HOST' > /etc/gul-primary-db-alert.env" \
+              'chmod 600 /etc/gul-primary-db-alert.env' \
+              'systemctl daemon-reload' \
+              'systemctl enable --now gul-primary-db-alert.timer' \
+              'systemctl start gul-primary-db-alert.service' \
+              > /tmp/install-primary-db-alert.sh
+            docker run --rm --pid=host --privileged -v /:/host alpine \
+              chroot /host /bin/sh /tmp/install-primary-db-alert.sh
+            rm -f /tmp/gul-primary-db-alert.* /tmp/install-primary-db-alert.sh
+          REMOTE
+
