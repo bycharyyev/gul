@@ -580,9 +580,11 @@ class Strings {
       'edit.phone': 'Телефон',
       'edit.country': 'Страна',
       'update.title': 'Требуется обновление',
-      'update.soon': 'Обязательное обновление до {date}. Обновите приложение заранее.',
+      'update.soon':
+          'Обязательное обновление до {date}. Обновите приложение заранее.',
       'update.recommended': 'Доступна новая версия Gulyaly.',
-      'update.message': 'Эта версия приложения устарела. Установите новую, чтобы продолжить.',
+      'update.message':
+          'Эта версия приложения устарела. Установите новую, чтобы продолжить.',
       'update.button': 'Обновить',
       'edit.countryHint':
           'Определилась по номеру телефона. От неё зависят уведомления и акции для вашей страны.',
@@ -1134,9 +1136,11 @@ class Strings {
       'edit.phone': 'Phone',
       'edit.country': 'Country',
       'update.title': 'Update required',
-      'update.soon': 'Update required by {date}. Please update the app in advance.',
+      'update.soon':
+          'Update required by {date}. Please update the app in advance.',
       'update.recommended': 'A new version of Gulyaly is available.',
-      'update.message': 'This version of the app is out of date. Install the new one to continue.',
+      'update.message':
+          'This version of the app is out of date. Install the new one to continue.',
       'update.button': 'Update',
       'edit.countryHint':
           'Worked out from your phone number. It decides which notifications and offers you receive.',
@@ -1683,9 +1687,11 @@ class Strings {
       'edit.phone': 'Telefon',
       'edit.country': 'Ýurt',
       'update.title': 'Täzelenme gerek',
-      'update.soon': '{date} çenli mejbury täzelenme. Programmany öňünden täzeläň.',
+      'update.soon':
+          '{date} çenli mejbury täzelenme. Programmany öňünden täzeläň.',
       'update.recommended': 'Gulyaly-nyň täze wersiýasy elýeterli.',
-      'update.message': 'Programmanyň bu wersiýasy könelişipdir. Dowam etmek üçin täzesini guruň.',
+      'update.message':
+          'Programmanyň bu wersiýasy könelişipdir. Dowam etmek üçin täzesini guruň.',
       'update.button': 'Täzelemek',
       'edit.countryHint':
           'Telefon belgiňizden kesgitlenildi. Ol size haýsy habarnamalaryň we aksiýalaryň gelýändigini kesgitleýär.',

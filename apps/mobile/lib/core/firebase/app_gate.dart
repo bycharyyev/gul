@@ -28,7 +28,9 @@ class _AppGateState extends State<AppGate> {
       builder: (context, _) {
         final config = service.config.value;
         final level = service.updateLevel;
-        if (level == UpdateLevel.required) return _UpdateRequired(config: config);
+        if (level == UpdateLevel.required) {
+          return _UpdateRequired(config: config);
+        }
 
         final strings = Strings.of(context);
         final cards = <_Notice>[];
@@ -54,7 +56,9 @@ class _AppGateState extends State<AppGate> {
         if (config.maintenanceMessage.isNotEmpty) {
           cards.add(_Notice(text: config.maintenanceMessage));
         }
-        final visible = cards.where((c) => !_dismissed.contains(c.text)).toList();
+        final visible = cards
+            .where((c) => !_dismissed.contains(c.text))
+            .toList();
         if (visible.isEmpty) return widget.child;
 
         final topInset = MediaQuery.paddingOf(context).top;
