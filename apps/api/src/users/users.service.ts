@@ -1,6 +1,11 @@
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { ReferralsService } from "../referrals/referrals.service";
@@ -22,6 +27,8 @@ const SAFE_SELECT = {
   role: true,
   isBlocked: true,
   createdAt: true,
+  // An opaque filename only; avatars are intentionally public assets at /api/avatar/:storedName.
+  avatarPath: true,
 };
 
 @Injectable()
@@ -48,7 +55,9 @@ export class UsersService {
           ? {
               OR: [
                 { phone: { contains: search, mode: "insensitive" as const } },
-                { fullName: { contains: search, mode: "insensitive" as const } },
+                {
+                  fullName: { contains: search, mode: "insensitive" as const },
+                },
               ],
             }
           : {}),
@@ -66,37 +75,73 @@ export class UsersService {
     const [total, blocked, newLast7Days, newLast30Days] = await Promise.all([
       this.prisma.user.count({ where: { role: "CUSTOMER" } }),
       this.prisma.user.count({ where: { role: "CUSTOMER", isBlocked: true } }),
-      this.prisma.user.count({ where: { role: "CUSTOMER", createdAt: { gte: sevenDaysAgo } } }),
-      this.prisma.user.count({ where: { role: "CUSTOMER", createdAt: { gte: thirtyDaysAgo } } }),
+      this.prisma.user.count({
+        where: { role: "CUSTOMER", createdAt: { gte: sevenDaysAgo } },
+      }),
+      this.prisma.user.count({
+        where: { role: "CUSTOMER", createdAt: { gte: thirtyDaysAgo } },
+      }),
     ]);
 
     return { total, blocked, newLast7Days, newLast30Days };
   }
 
   async getCustomerDetail(id: string) {
-    const user = await this.prisma.user.findFirst({ where: { id, role: "CUSTOMER" }, select: SAFE_SELECT });
+    const user = await this.prisma.user.findFirst({
+      where: { id, role: "CUSTOMER" },
+      select: SAFE_SELECT,
+    });
     if (!user) throw new NotFoundException("Customer not found");
 
-    const orders = await this.prisma.order.findMany({
-      where: { userId: id },
-      orderBy: { createdAt: "desc" },
-      include: { service: { select: { name: true } } },
-    });
+    const [orders, devices] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: "desc" },
+        include: { service: { select: { name: true } } },
+      }),
+      // Device tokens are deliberately not returned. The timestamp is an honest "last app
+      // connection" signal, not a claim that the person is online right now.
+      this.prisma.pushToken.findMany({
+        where: { userId: id },
+        select: { platform: true, lastSeenAt: true },
+        orderBy: { lastSeenAt: "desc" },
+      }),
+    ]);
 
-    return { user, orders };
+    return {
+      user,
+      orders,
+      devices: {
+        count: devices.length,
+        lastAppSeenAt: devices[0]?.lastSeenAt ?? null,
+        android: devices.filter((device) => device.platform === "ANDROID")
+          .length,
+        ios: devices.filter((device) => device.platform === "IOS").length,
+      },
+    };
   }
 
   async createStaff(dto: CreateStaffUserDto, adminId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
+    const existing = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
     if (existing) throw new ConflictException("PHONE_ALREADY_REGISTERED");
 
     const passwordHash = await argon2.hash(dto.password);
     const username = await this.referrals.generateUsername();
     const created = await this.prisma.user.create({
-      data: { phone: dto.phone, passwordHash, fullName: dto.fullName, role: dto.role, username },
+      data: {
+        phone: dto.phone,
+        passwordHash,
+        fullName: dto.fullName,
+        role: dto.role,
+        username,
+      },
       select: SAFE_SELECT,
     });
-    this.auditLog.record(adminId, "user.create_staff", "User", created.id, { role: dto.role });
+    this.auditLog.record(adminId, "user.create_staff", "User", created.id, {
+      role: dto.role,
+    });
     return created;
   }
 
@@ -105,16 +150,24 @@ export class UsersService {
     if (!user) throw new NotFoundException("User not found");
 
     if (id === requesterId && (dto.role || dto.isBlocked)) {
-      throw new BadRequestException("Cannot change your own role or blocked status");
+      throw new BadRequestException(
+        "Cannot change your own role or blocked status",
+      );
     }
 
     // One ADMIN must not be able to demote/block another ADMIN -- otherwise any single
     // compromised or rogue admin account can silently disable every other admin.
     if (user.role === "ADMIN" && (dto.role || dto.isBlocked)) {
-      throw new BadRequestException("Cannot change another admin's role or blocked status");
+      throw new BadRequestException(
+        "Cannot change another admin's role or blocked status",
+      );
     }
 
-    const updated = await this.prisma.user.update({ where: { id }, data: dto, select: SAFE_SELECT });
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: dto,
+      select: SAFE_SELECT,
+    });
     if (dto.role || dto.isBlocked !== undefined) {
       this.auditLog.record(requesterId, "user.privilege_change", "User", id, {
         role: dto.role,
@@ -125,14 +178,18 @@ export class UsersService {
   }
 
   async deleteUser(id: string, requesterId: string) {
-    if (id === requesterId) throw new BadRequestException("Cannot delete your own account");
+    if (id === requesterId)
+      throw new BadRequestException("Cannot delete your own account");
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException("User not found");
 
     // Document rows cascade-delete via the FK (onDelete: Cascade), but that only removes
     // the DB rows — the files on disk don't go with them, so grab the keys first and
     // clean them up after the delete succeeds.
-    const documents = await this.prisma.document.findMany({ where: { userId: id }, select: { storedName: true } });
+    const documents = await this.prisma.document.findMany({
+      where: { userId: id },
+      select: { storedName: true },
+    });
 
     try {
       await this.prisma.user.delete({ where: { id } });
@@ -143,7 +200,9 @@ export class UsersService {
     }
 
     await Promise.all(
-      documents.map((doc) => fs.unlink(path.join(uploadsDir(), doc.storedName)).catch(() => {})),
+      documents.map((doc) =>
+        fs.unlink(path.join(uploadsDir(), doc.storedName)).catch(() => {}),
+      ),
     );
   }
 }

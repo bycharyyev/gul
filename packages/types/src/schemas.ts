@@ -144,12 +144,16 @@ export type EmailStatusDto = z.infer<typeof emailStatusSchema>;
 export const requestEmailVerificationSchema = z.object({
   email: z.string().email().max(254),
 });
-export type RequestEmailVerificationInput = z.infer<typeof requestEmailVerificationSchema>;
+export type RequestEmailVerificationInput = z.infer<
+  typeof requestEmailVerificationSchema
+>;
 
 export const confirmEmailVerificationSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
 });
-export type ConfirmEmailVerificationInput = z.infer<typeof confirmEmailVerificationSchema>;
+export type ConfirmEmailVerificationInput = z.infer<
+  typeof confirmEmailVerificationSchema
+>;
 
 // ---- Admin: catalog management ----
 
@@ -197,7 +201,8 @@ export interface PaymentDto {
   createdAt: string;
 }
 
-export type PaymentStatus = "INITIATING" | "PENDING" | "SUCCEEDED" | "DECLINED" | "UNKNOWN" | "CANCELLED";
+export type PaymentStatus =
+  "INITIATING" | "PENDING" | "SUCCEEDED" | "DECLINED" | "UNKNOWN" | "CANCELLED";
 
 export interface PaymentInitiationDto {
   paymentId: string;
@@ -255,6 +260,7 @@ export const staffUserSchema = z.object({
   role: z.enum(USER_ROLES),
   isBlocked: z.boolean(),
   createdAt: z.string(),
+  avatarPath: z.string().nullable(),
 });
 export type StaffUserDto = z.infer<typeof staffUserSchema>;
 
@@ -278,9 +284,21 @@ export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export interface AdminStatsDto {
   uptimeSeconds: number;
   nodeVersion: string;
-  totals: { orders: number; services: number; staff: number; customers: number; apiKeys: number };
+  totals: {
+    orders: number;
+    services: number;
+    staff: number;
+    customers: number;
+    apiKeys: number;
+  };
   ordersByStatus: Record<string, number>;
-  queue: { waiting: number; active: number; completed: number; failed: number; delayed: number };
+  queue: {
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  };
 }
 
 export interface OrdersTimeseriesPoint {
@@ -299,9 +317,24 @@ export interface OrdersTimeseriesPoint {
  */
 export interface ApiUsageDto {
   days: string[];
-  totals: { total: number; ok: number; clientError: number; serverError: number };
-  byDay: { day: string; total: number; clientError: number; serverError: number }[];
-  byTier: { tier: string; total: number; clientError: number; serverError: number }[];
+  totals: {
+    total: number;
+    ok: number;
+    clientError: number;
+    serverError: number;
+  };
+  byDay: {
+    day: string;
+    total: number;
+    clientError: number;
+    serverError: number;
+  }[];
+  byTier: {
+    tier: string;
+    total: number;
+    clientError: number;
+    serverError: number;
+  }[];
   endpoints: {
     endpoint: string;
     total: number;
@@ -504,6 +537,14 @@ export interface CustomerOrderRowDto extends OrderDto {
 export interface CustomerDetailDto {
   user: StaffUserDto;
   orders: CustomerOrderRowDto[];
+  /** Aggregate device presence only. Tokens must never leave the API. */
+  devices: {
+    count: number;
+    /** Last time a registered app device contacted the API, not a real-time online status. */
+    lastAppSeenAt: string | null;
+    android: number;
+    ios: number;
+  };
 }
 
 // ---- Order delivery note ----
