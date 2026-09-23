@@ -58,6 +58,10 @@ env:
   TELEGRAM_ADMIN_BOT_USERNAME: ${{ vars.TELEGRAM_ADMIN_BOT_USERNAME }}
 jobs:
   build-and-test:
+    # Production is only ever deployed from main. workflow_dispatch can be pointed at any branch,
+    # and on 2026-09-23 it was: an unmerged codex-dev commit went live while main stayed behind.
+    # Every later job needs this one, so skipping it skips the whole pipeline.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       # Consumed by the deploy job to decide whether an automatic image rollback is even
