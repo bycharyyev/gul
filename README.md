@@ -14,6 +14,8 @@ backend, with a public storefront, an internal ops console, and a B2B partner AP
 > audit of the business logic, financial-integrity fixes, and security posture.
 > [docs/architecture/CURRENT_ARCHITECTURE.md](docs/architecture/CURRENT_ARCHITECTURE.md) is the
 > current source of truth for runtime boundaries, state ownership, and deployment topology.
+> [docs/analysis/](docs/analysis/README.md) holds the current assessment (security, architecture,
+> unit economics, UX) and the generated facts every other document's numbers come from.
 > [docs/architecture/HIGH_AVAILABILITY.md](docs/architecture/HIGH_AVAILABILITY.md) covers the
 > two-VPS topology and failover in depth.
 

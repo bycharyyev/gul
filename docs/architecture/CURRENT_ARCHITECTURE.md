@@ -1,7 +1,7 @@
 # Current architecture
 
 **Status:** Current source of truth  
-**Last verified:** 2026-09-06  
+**Last verified:** 2026-09-26  
 **Scope:** Runtime components, trust boundaries, state ownership and deployment topology
 
 Gulyaly is a modular monolith with four clients. Business state is authoritative in PostgreSQL;
@@ -15,10 +15,12 @@ This document describes the current code and deployment. Historical audits belon
 Next.js web ─┐
 Vite admin ──┼── HTTPS/JSON ──> NestJS API ──> PostgreSQL
 Flutter ─────┤                       │   ├────> S3-compatible storage
-Partner API ─┘                       │   └────> GitHub Actions provisioning API
-                                      └────────> Redis/BullMQ workers
-                                                   ├─ top-up delivery
-                                                   └─ critical/transactional/marketing email
+Partner API ─┘                       │   ├────> GitHub Actions provisioning API
+   │                                  │   └────> Firebase Cloud Messaging (push delivery)
+   │                                  └────────> Redis/BullMQ workers
+   │                                               ├─ top-up delivery
+   │                                               └─ critical/transactional/marketing email
+   └── Flutter also talks to Firebase directly: Crashlytics, Analytics, Performance, Remote Config
 ```
 
 The partner boundary uses `X-Api-Key`; customer, seller and staff clients use JWT access tokens
@@ -28,13 +30,14 @@ plus rotating opaque refresh tokens. All channels reuse the same application ser
 
 | Component | Responsibility | State owner |
 |---|---|---|
-| `apps/api` | REST API, workers, Telegram bot, Swagger | PostgreSQL |
+| `apps/api` | REST API, workers, Telegram bot, push campaigns, Swagger (`/docs`, public in production, see analysis S-04) | PostgreSQL |
 | `apps/web` | Customer and seller storefront | API |
 | `apps/admin` | Staff operations console | API |
 | `apps/mobile` | Flutter customer client | API |
 | PostgreSQL 16 | Business and financial source of truth | Primary DB |
 | Redis 7/BullMQ | Work delivery, quotas and short-lived counters | Reconstructable state |
 | S3 | Public media and private documents | Object store |
+| Firebase (project `gulyaly-push-20260920`, Spark plan) | Push delivery (FCM), crash reports, analytics, performance, Remote Config | Google |
 | Host nginx | TLS termination and hostname routing | Versioned config in `infra/nginx` |
 
 `apps/api` is a modular monolith. Its Nest modules are deployment-internal boundaries, not
@@ -50,7 +53,9 @@ platform read/probe exceptions: health readiness and the API-usage read model.
 | Top-up commerce | `catalog`, `orders`, `payments`, `partner` | services, rates, top-up orders and payments |
 | Marketplace | `gallery`, `sellers`, `withdrawals` | products, sellers, fulfilment and seller balances |
 | Cargo | `cargo` | routes, tariffs, shipments and tracking timeline |
-| Communications | `email`, `support`, `telegram-bot` | notifications and conversations |
+| Communications | `email`, `support`, `telegram-bot`, `chat`, `notifications` | email, chat, support and push (tokens, deliveries, campaigns, templates, statistics) |
+| Growth | `social-feed`, `referrals`, `analytics-links`, `managed-links` | feed, referral rewards, tracked links |
+| Money movement | `seller-ledger`, `withdrawals`, `payments` | append-only seller ledger, payouts, payment pipeline |
 | Content | `stories`, `home-slides`, `content-pages`, `social-links` | storefront content |
 | Platform | `storage`, `uploads`, `metrics`, `health`, `audit-log`, `subdomains`, `queue` | cross-cutting infrastructure |
 
@@ -62,6 +67,30 @@ legacy flat methods during migration. New client domains should follow the names
 Cross-domain calls go through exported Nest services. Shared database transactions are an
 intentional advantage of the monolith; splitting a module into a service requires an ADR and a
 measured scaling, security or ownership reason.
+
+## Mobile client services
+
+The Flutter app uses Firebase directly for four things the API does not own (details in
+`../FIREBASE_PUSH.md`):
+
+- **Push** is delivered by the API through FCM. Android receives data-only messages that the app
+  draws itself (round picture, per-category channel); iOS receives an alert with `mutable-content`.
+  Every push is a `PushDelivery` row, so sent / delivered / opened are countable per campaign.
+- **Crashlytics, Analytics, Performance** run in release builds only. Analytics carries only the
+  opaque user id, never a phone or a name.
+- **Remote Config** drives app updates in three levels: `latest_app_version` (dismissible card),
+  `min_app_version` + `update_deadline` (required by a date, then blocking), and `min_app_version`
+  alone (blocking at once). The API never refuses an old build.
+
+## Delivery and repository policy
+
+- One long-lived branch, `main`, protected: changes arrive through pull requests only, squash-merged.
+- Production deploys only from `main`: `deploy.yml` skips every job for any other ref, so a manual
+  dispatch on a feature branch cannot reach the servers.
+- Android release builds are made on the developer PC and signed with a key that lives only there
+  (`android/key.properties`, git-ignored). CI builds no APK and holds no signing key.
+- The update button in the app opens `update_url` from Remote Config (a direct APK link now,
+  Google Play once published).
 
 ## State and consistency rules
 
@@ -122,9 +151,12 @@ support report can be correlated without copying sensitive request data.
   `SENT`/`PROCESSING` for reconciliation instead of becoming retryable failures.
 - Flutter contracts are maintained manually rather than generated from OpenAPI.
 - full state-layer failover and failback are not automatic.
+- Open findings from the current review (security, architecture, unit economics, UX) are tracked
+  with priorities in `../analysis/README.md`; numbers quoted anywhere in the docs come from
+  `../analysis/FACTS.md`, which is generated.
 
 ## Change policy
 
 Update this file in the same pull request when a runtime component, state owner, trust boundary,
-deployment role or failure mode changes. Record irreversible or costly decisions under
+deployment role or failure mode changes, then run `pnpm docs:facts` (CI checks it). Record irreversible or costly decisions under
 `docs/adr/`.

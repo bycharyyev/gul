@@ -7,6 +7,25 @@ Ordered by what blocks the most mobile work.
 
 ---
 
+## Status (checked against the code on 2026-09-26)
+
+The gaps below were written on 2026-09-01. Where the code has moved since, the status says so; a gap
+marked "not re-checked" is still described as of the original date.
+
+| Gap | Status | Evidence |
+|---|---|---|
+| 1 Notifications | **Partly resolved.** Push delivery is live; there is still no in-app inbox or unread count | `POST /notifications/devices`, `/notifications/opened`, FCM campaigns (`../docs/FIREBASE_PUSH.md`) |
+| 2 Pagination | **Open** | only the feed, sellers and a few admin lists take a cursor or limit |
+| 3 Gallery product detail | **Resolved** | `GET /gallery/products/:id` |
+| 4 Cart | not re-checked | |
+| 5 Customer wallet | not re-checked | |
+| 6 Deep links | **Resolved** | Android App Links, `APP_LINKS.md` |
+| 7 Support chat poll-only | **Open** (mitigated: a push announces a new message) | no WebSocket or SSE in the API |
+| 8 Password recovery | **Open** | reset is still keyed on email |
+| 9-12 | not re-checked | |
+
+---
+
 ## GAP 1 — No notifications API
 
 **Current backend.** Nothing. No `/notifications` route, no `Notification` model, no device-token

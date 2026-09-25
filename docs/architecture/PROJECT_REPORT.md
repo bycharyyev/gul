@@ -1,7 +1,8 @@
 # Gulyaly — project & security report
 
 > Historical audit snapshot dated 2026-08-26. For the current runtime topology and known
-> limitations, use [CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md). In particular, the
+> limitations, use [CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md); for the current security
+> findings, use [../analysis/SECURITY.md](../analysis/SECURITY.md). In particular, the
 > secondary application tier later became active/active and production uploads moved to S3.
 
 Written from a direct read of the code (models, controllers, services, workflows, configs), not

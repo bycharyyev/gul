@@ -35,6 +35,13 @@ Single test in a given package: run the package's own test runner directly from 
 
 **Seeded admin login:** phone `+70000000000`. The password is whatever `SEED_ADMIN_PASSWORD` was set to — the seed refuses to run without it, so there is no default to look up here or anywhere else.
 
+## Working agreements
+
+- **One long-lived branch: `main`, protected.** Work happens on a short branch per task and reaches `main` only through a pull request, merged with **squash** (one commit per change). Direct pushes and force-pushes are refused, including for admins.
+- **Production deploys only from `main`.** `deploy.yml` skips every job for any other ref; a manual dispatch on a feature branch does nothing.
+- **Docs travel with code.** A change that moves a fact (routes, models, workflows, tests, screens) regenerates `docs/analysis/FACTS.md` with `pnpm docs:facts`; the `Docs facts` workflow fails the PR otherwise. Behaviour changes update the matching finding in `docs/analysis/`.
+- **Android releases are built on the developer PC**, never in CI: `cd apps/mobile && flutter build apk --release --no-shrink --target-platform android-arm64 --split-per-abi --build-number=N` (N above the last published; R8 hangs on this machine, hence `--no-shrink`). The signing key is `android/key.properties` + a keystore held only on that PC (both git-ignored); CI has no signing key. The in-app update button opens the Remote Config parameter `update_url`. Firebase behaviour (push, Crashlytics, Analytics, Performance, the three update levels) is in `docs/FIREBASE_PUSH.md`.
+
 ## Architecture
 
 ### Monorepo layout
@@ -57,9 +64,9 @@ cd packages/api-client && npx tsc -p tsconfig.json
 
 ### Backend module map (`apps/api/src`)
 
-Each folder is a self-contained Nest module: `auth`, `catalog`, `orders`, `payments`, `users`, `api-keys`, `partner`, `admin-stats`, `queue`, `prisma`. Cross-cutting guards/decorators live in `auth/guards` and `auth/decorators` (`JwtAuthGuard`, `RolesGuard` + `@Roles(...)`, `@CurrentUser()`).
+Each folder is a self-contained Nest module (the full list and the count are in `docs/analysis/FACTS.md`; the core ones are `auth`, `catalog`, `orders`, `payments`, `users`, `api-keys`, `partner`, `admin-stats`, `queue`, `prisma`, and newer verticals such as `gallery`, `cargo`, `chat`, `social-feed`, `notifications`, `seller-ledger`). Cross-cutting guards/decorators live in `auth/guards` and `auth/decorators` (`JwtAuthGuard`, `RolesGuard` + `@Roles(...)`, `@CurrentUser()`).
 
-**Domain model** (`prisma/schema.prisma`): `User` (role: CUSTOMER/SUPPORT/MANAGER/ADMIN — staff and customers are the same table), `Service` (catalog item, e.g. TMCELL), `Rate` (per-service, per-currency conversion), `PaymentMethod`, `Order` (attributed to either a `User` **or** an `ApiKey`, never both), `Payment`, `TopupJob`, `ApiKey`, `AuditLog` (model exists, not yet written to). A second vertical lives alongside the top-up core: `GalleryCategory`/`GalleryProduct`/`GalleryOrder` (a flowers/gifts marketplace), `Seller`/`SellerApplication`/`WithdrawalRequest` (multi-vendor onboarding + payouts — a `Seller` links a Telegram chat via a one-time code to get order notifications), and `Referral`/`ReferralSettings` (customer- and seller-sourced referrals, configurable TMT rewards). Plus CMS-ish content the admin manages without a redeploy (`Story`, `HomeSlide`, `SocialLink`, `ContentPage`), support chat (`SupportThread`/`SupportMessage`), conversations (`ChatRoom`/`ChatMember`/`ChatMessage` — see "Chat" below), `Storefront` (a seller's own sections of their shop), and `ManagedSubdomain` (see below).
+**Domain model** (`prisma/schema.prisma`): `User` (role: CUSTOMER/SUPPORT/MANAGER/ADMIN — staff and customers are the same table), `Service` (catalog item, e.g. TMCELL), `Rate` (per-service, per-currency conversion), `PaymentMethod`, `Order` (attributed to either a `User` **or** an `ApiKey`, never both), `Payment`, `TopupJob`, `ApiKey`, `AuditLog` (written by the services that change privileges, money and content). A second vertical lives alongside the top-up core: `GalleryCategory`/`GalleryProduct`/`GalleryOrder` (a flowers/gifts marketplace), `Seller`/`SellerApplication`/`WithdrawalRequest` (multi-vendor onboarding + payouts — a `Seller` links a Telegram chat via a one-time code to get order notifications), and `Referral`/`ReferralSettings` (customer- and seller-sourced referrals, configurable TMT rewards). Plus CMS-ish content the admin manages without a redeploy (`Story`, `HomeSlide`, `SocialLink`, `ContentPage`), support chat (`SupportThread`/`SupportMessage`), conversations (`ChatRoom`/`ChatMember`/`ChatMessage` — see "Chat" below), `Storefront` (a seller's own sections of their shop), and `ManagedSubdomain` (see below).
 
 **Auth**: JWT access token (short-lived) + opaque refresh token (hashed, stored in `RefreshToken`, rotated on use). `packages/api-client` auto-retries a 401 once via `/auth/refresh` before giving up and calling `onSessionExpired`. Partner requests use a completely separate mechanism — see below.
 
@@ -317,10 +324,11 @@ API calls by hand):
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+This project has a knowledge graph at graphify-out/ (git-ignored, rebuilt locally) with god nodes, community structure, and cross-file relationships.
 
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- After modifying code, run `pnpm graph` (same as `graphify update .`, AST-only, no API cost, about a minute). `graphify hook install` does it after every commit. The graph records the commit it was built from (`Graph Freshness` in the report); if it differs from `git rev-parse HEAD`, refresh before trusting it.
+- The written assessment of the project (security, architecture, unit economics, UX) is in `docs/analysis/`; start there before re-analysing anything, and keep it current (see its README).

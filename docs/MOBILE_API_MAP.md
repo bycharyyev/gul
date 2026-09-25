@@ -6,8 +6,11 @@ The HTTP surface a Gulyaly customer app can actually use, extracted from the Nes
 **Base URL:** `https://api.gulyaly.com/api` — note the `/api` prefix; it is part of the path, not
 the host.
 
-**Totals:** 157 routes overall; 69 are customer-facing (not `/admin/*`, not the API-key partner
-channel). Of those, 19 are public and the rest need a JWT.
+**Totals:** this table is a snapshot taken on 2026-09-01, when the API had 157 routes (69
+customer-facing, 19 of them public). It has grown since: the current count is in
+[`analysis/FACTS.md`](analysis/FACTS.md), and routes added after the snapshot (device registration
+under `/notifications/*`, the feed, chat rooms, marketplace purchases, push administration) are not
+listed below. The live OpenAPI document at `/docs-json` is authoritative.
 
 ## Error envelope
 
