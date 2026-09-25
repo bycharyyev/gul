@@ -34,6 +34,7 @@ The graph ranks nodes by connections. The top ones are the places every change p
 
 | ID | Pri | Finding | Effort |
 |---|---|---|---|
+| A-09 | P0 | Database backups are probably not being made: the primary reports its dedicated backup storage as not configured | S |
 | A-01 | P0 | Web and admin (23k lines) have no automated tests | M |
 | A-02 | P1 | `ApiClient` is a 1,974-line single class | M |
 | A-03 | P1 | Very large files mix responsibilities (chat, email, admin pages) | M |
@@ -42,6 +43,24 @@ The graph ranks nodes by connections. The top ones are the places every change p
 | A-06 | P2 | Translations exist in three places | M |
 | A-07 | P2 | The ops workflows are not indexed for an operator | S |
 | A-08 | P2 | Framework debt: NestJS 10 (a security fix needs 11) | M |
+
+### A-09 · Database backups (found 2026-09-26)
+
+The scheduled `Audit servers` job "Restore and validate newest backup" has been red since at least
+2026-09-23. It failed silently (exit 1, no output) because a helper aborted under `set -e` when the
+optional `BACKUP_S3_REGION` was unset; that bug is fixed (the script now says what is missing).
+Re-run on demand on 2026-09-26, the check reports **`dedicated BACKUP_S3_* storage is not
+configured`** on the primary. `infra/backups/backup-db.sh` starts with the same check and
+"refuses to run" without it. The hourly `gul-db-backup.timer` is installed and fires, so it is most
+likely failing every hour. Unless another mechanism exists, **there are no recent database backups**.
+`/opt/gul/backups` is empty, which fits both a working upload and a refusal to start.
+
+**Fix:** (1) create a bucket dedicated to backups with versioning and Object Lock, and an access key
+that can write only to it (the README in `infra/backups/` explains why it must not be the API's
+identity); (2) put `BACKUP_S3_ENDPOINT`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`,
+`BACKUP_S3_BUCKET` in `/opt/gul/.env` on the primary; (3) run `Install DB backups to S3`;
+(4) run `Audit servers` with `verify-backup-restore.sh` on the primary and confirm it restores.
+Until then the only protection for the data is the streaming replica, which copies mistakes too.
 
 ### A-01 · No tests for web and admin
 
@@ -73,9 +92,8 @@ PostgreSQL has one writer and an asynchronous standby; Redis is one instance sha
 nodes; promotion and failback are manual (`failover-to-secondary.yml`). The application tier is
 genuinely active/active, so a crashed app container costs nothing, but the loss of the primary host
 means minutes of manual work and a small window of lost writes.
-**Fix in order:** (1) run a **restore drill**: restore last night's S3 dump into an empty database
-and record the time (backups exist and are hourly, but a backup that has never been restored is a
-guess); (2) rehearse the failover once and write the measured RTO into `RELIABILITY_TARGETS.md`;
+**Fix in order:** (1) settle A-09 first, then keep the scheduled restore check green (it restores the
+newest backup into a throwaway database every night and compares row counts); (2) rehearse the failover once and write the measured RTO into `RELIABILITY_TARGETS.md`;
 (3) only then consider a managed database or automatic failover.
 
 ### A-05 · Constants that should be settings

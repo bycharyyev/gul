@@ -18,6 +18,7 @@ these documents assess it. Reviewed 2026-09-26.
 
 | ID | Item | Where |
 |---|---|---|
+| A-09 | **Database backups are probably not being made** (dedicated backup storage not configured on the primary); fix and prove with the restore check | [ARCHITECTURE_REVIEW](ARCHITECTURE_REVIEW.md) |
 | E-02 / U-01 | Connect a real top-up supplier and delete the mock gateway flag; today a paid order shows "completed" with nothing delivered | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
 | E-01 | Record the supplier cost on every order and shipment so margin can be measured | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
 | S-01, S-02 | Bump Next.js (critical), multer, nodemailer, sharp | [SECURITY](SECURITY.md) |
