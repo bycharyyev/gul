@@ -141,3 +141,19 @@ never delay an urgent fix. To lift a block, publish an empty value or a lower ve
 
 For a leak in the **API**, fix the endpoint on the server: that protects old apps too. The update
 levels above are for problems inside the app itself.
+
+## Other Firebase services in the app
+
+All run on the free Spark plan. Crashlytics, Analytics and Performance collect **in release builds
+only**, so a developer's device never pollutes the production data.
+
+| Service | What it does here | Notes |
+|---|---|---|
+| Crashlytics | Fatal Flutter and platform errors, tied to the opaque user id | A test crash reached the console on 2026-09-21 |
+| Analytics | Lifecycle events and the opaque user id | Never a phone, name, e-mail or notification token |
+| Performance | Start-up and screen timing | SDK only; the Gradle plugin was left out because it hung the release build, so per-request network timing is not collected |
+| Remote Config | The update levels above and `maintenance_message` | Fetched at most every 3 hours; a running app receives changes at once. Free up to 100,000 fetches a day |
+
+Parameters (Firebase console, Remote Config): `min_app_version`, `latest_app_version`,
+`update_deadline`, `update_url`, `maintenance_message`. All default to empty, which means "off".
+

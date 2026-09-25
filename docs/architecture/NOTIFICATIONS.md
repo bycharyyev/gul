@@ -1,5 +1,10 @@
 # Order notifications & stats — real end-to-end test (2026-08-29)
 
+> **Scope note (2026-09-26).** This is a historical test of *email* notifications. Mobile push
+> notifications (FCM: device tokens, per-category channels, campaigns, templates, sent / delivered /
+> opened statistics) were added afterwards and are documented in [`../FIREBASE_PUSH.md`](../FIREBASE_PUSH.md).
+> The email findings below were not re-run.
+
 Tested by creating real orders against production via the API (not mocked), reading actual DB/log
 state, then cleaning up. Findings below are from that test, not from reading the code alone.
 

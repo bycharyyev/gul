@@ -1,0 +1,24 @@
+name: Docs facts
+
+# docs/analysis/FACTS.md holds every countable fact about the repository (routes, models, tests,
+# workflows, ...), generated from the code. A change that moves a number must regenerate it in the
+# same PR, otherwise the documentation quietly stops matching the system. No path filter on purpose:
+# a PR that deletes a workflow or adds a controller anywhere should be caught.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  facts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The script only needs git and node -- no `pnpm install`, so this stays a ten-second job.
+      - run: node scripts/docs-facts.mjs --check
