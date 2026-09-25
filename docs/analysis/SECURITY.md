@@ -11,8 +11,8 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 
 | ID | Sev | Finding | Effort |
 |---|---|---|---|
-| S-01 | P0 | Next.js 15.5.23 has two critical advisories, fixed in 15.5.24 | S |
-| S-02 | P0 | Vulnerable runtime dependencies: multer, nodemailer, sharp (high), `@nestjs/core` (moderate) | S–M |
+| S-01 | P0 | **Fixed 2026-09-26** (next 15.5.26). Next.js 15.5.23 had two critical advisories, fixed in 15.5.24 | S |
+| S-02 | P0 | **Partly fixed 2026-09-26** (multer 2.4.0, nodemailer 9.1.1, sharp 0.35.4); `@nestjs/core` 10 still needs the major upgrade | S–M |
 | S-03 | P0 | Web and admin send no security headers (*verified live*) | S |
 | S-04 | P0 | The full API documentation is public in production (*verified live*) | S |
 | S-05 | P1 | Web and admin keep access and refresh tokens in `localStorage` | M |
@@ -27,6 +27,8 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 
 ### S-01 · Next.js critical advisories
 
+> **Fixed 2026-09-26:** `next` bumped to 15.5.26 (`apps/web`). The text below records the finding as reviewed.
+
 `apps/web` resolves to `next@15.5.23`. Two critical advisories are fixed in `15.5.24`:
 GHSA-p293-qw3h-jr36 (remote code execution, **Windows-hosted** servers only) and GHSA-2xp9-vwfh-vxw4
 (remote code execution in the image optimisation API when AVIF files are processed).
@@ -36,6 +38,8 @@ with no `remotePatterns` it only touches the site's own images, which lowers exp
 **Fix:** bump to `>=15.5.24` (a patch release), run typecheck, build and the smoke check, deploy.
 
 ### S-02 · Vulnerable dependencies
+
+> **Fixed 2026-09-26:** multer 2.4.0, nodemailer 9.1.1, sharp 0.35.4. Still open: `@nestjs/core` 10 to 11 and the remaining audit findings (11 after the bump, 5 high, mostly build-time `webpack` under Sentry).
 
 `pnpm audit --prod` reported 22 advisories at review time: 2 critical, 10 high, 7 moderate, 3 low.
 Beyond Next.js, the ones that matter here:
