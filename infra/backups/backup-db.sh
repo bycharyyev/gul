@@ -28,7 +28,10 @@ mkdir -p "$STAGING"
 # Backup storage has its own credentials and bucket. Reusing the API's object-storage identity
 # would let an application compromise erase both live objects and every recovery point.
 env_value() {
-  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e "s/$//" -e "s/^[\"']//" -e "s/[\"']$//"
+  # `|| true`: an absent key is an empty value, not a fatal error. Under `set -o pipefail` grep's
+  # exit status 1 would otherwise abort the whole script before it can say what is missing, and the
+  # optional BACKUP_S3_REGION is read this way too.
+  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e "s/$//" -e "s/^[\"']//" -e "s/[\"']$//" || true
 }
 
 S3_ENDPOINT=$(env_value BACKUP_S3_ENDPOINT)

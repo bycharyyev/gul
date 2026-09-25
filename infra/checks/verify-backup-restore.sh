@@ -16,7 +16,9 @@ CONTAINER=restore-verify-pg
 trap 'docker rm -f $CONTAINER >/dev/null 2>&1 || true; rm -rf "$WORKDIR"' EXIT
 
 env_value() {
-  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e "s/\"//g" -e "s/'\''//g"
+  # `|| true`: an absent key is an empty value, not a fatal error (see backup-db.sh). Without it this
+  # script died silently, exit 1 and no output, whenever the optional BACKUP_S3_REGION was unset.
+  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e "s/\"//g" -e "s/'\''//g" || true
 }
 S3_ENDPOINT=$(env_value BACKUP_S3_ENDPOINT); S3_ENDPOINT=${S3_ENDPOINT%/}
 S3_ACCESS_KEY_ID=$(env_value BACKUP_S3_ACCESS_KEY_ID)
