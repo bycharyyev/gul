@@ -21,7 +21,7 @@ these documents assess it. Reviewed 2026-09-26.
 | A-09 | **Database backups are probably not being made** (dedicated backup storage not configured on the primary); fix and prove with the restore check | [ARCHITECTURE_REVIEW](ARCHITECTURE_REVIEW.md) |
 | E-02 / U-01 | Connect a real top-up supplier and delete the mock gateway flag; today a paid order shows "completed" with nothing delivered | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
 | E-01 | Record the supplier cost on every order and shipment so margin can be measured | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
-| S-01, S-02 | Bump Next.js (critical), multer, nodemailer, sharp | [SECURITY](SECURITY.md) |
+| S-01, S-02 | *Fixed 2026-09-26:* Next.js, multer, nodemailer, sharp bumped (NestJS 11 upgrade still open) | [SECURITY](SECURITY.md) |
 | S-03 | Security headers on the web and admin sites | [SECURITY](SECURITY.md) |
 | S-04 | Close the public API documentation in production | [SECURITY](SECURITY.md) |
 | A-01 | Smoke tests for the top-up flow and the admin money screens | [ARCHITECTURE_REVIEW](ARCHITECTURE_REVIEW.md) |
