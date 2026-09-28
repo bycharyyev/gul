@@ -82,9 +82,12 @@ case "$LATEST" in
     [ "$BYTES" -ge 4096 ] || { echo "encrypted object is implausibly small" >&2; exit 1; }
     ENVELOPE=$(openssl cms -cmsout -inform DER -in "$WORKDIR/dump.cms" -print -noout 2>&1) || {
       echo "object is not a readable CMS envelope (truncated or corrupt)" >&2; exit 1; }
-    echo "$ENVELOPE" | grep -q 'authEnvelopedData' || { echo "object is not AES-GCM AuthEnvelopedData" >&2; exit 1; }
+    # Here-strings, not `echo "$ENVELOPE" | grep -q`: the printout includes the whole ciphertext,
+    # grep -q exits at its first match, echo dies of SIGPIPE, and pipefail turned a match into a
+    # failure -- which is exactly what the first run of this check reported.
+    grep -q 'authEnvelopedData' <<< "$ENVELOPE" || { echo "object is not AES-GCM AuthEnvelopedData" >&2; exit 1; }
     WANT=$(openssl x509 -in "$RECIPIENT" -noout -serial | cut -d= -f2 | tr 'a-f' 'A-F')
-    GOT=$(echo "$ENVELOPE" | sed -n 's/.*serialNumber: *0x\([0-9A-Fa-f]*\).*/\1/p' | head -1 | tr 'a-f' 'A-F')
+    GOT=$(sed -n 's/.*serialNumber: *0x\([0-9A-Fa-f]*\).*/\1/p;T;q' <<< "$ENVELOPE" | tr 'a-f' 'A-F')
     echo "encrypted to certificate serial: ${GOT:-?}"
     if [ -z "$GOT" ] || [ "$GOT" != "$WANT" ]; then
       echo "object is encrypted to a different key than $RECIPIENT" >&2
