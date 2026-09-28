@@ -36,7 +36,7 @@ Layer scores (out of 5):
 
 ### 1. App tier is genuinely active/active
 
-Both VPS (`109.238.95.125` and `91.184.250.89`) run `api`/`web`/`admin` continuously, both serve
+Both VPS (`DEPLOY_HOST` and `SECONDARY_HOST`) run `api`/`web`/`admin` continuously, both serve
 real traffic, both talk to the single Postgres primary over the network. JWTs are stateless and
 refresh tokens live in the shared database, so it does not matter which node answers a request —
 no session affinity is needed. **A crash of primary's containers alone needs no failover at all**:

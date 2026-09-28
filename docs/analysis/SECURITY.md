@@ -16,7 +16,7 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-03 | P0 | Web and admin send no security headers (*verified live*) | S |
 | S-04 | P0 | The full API documentation is public in production (*verified live*) | S |
 | S-05 | P1 | Web and admin keep access and refresh tokens in `localStorage` | M |
-| S-06 | P1 | The repository is public and documents the production servers | S |
+| S-06 | P1 | *Partly fixed 2026-09-28* (IPs out of the docs, secret scanning on, full leak sweep clean). The repository is public and documents the production servers | S |
 | S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
 | S-08 | P1 | No second factor for staff accounts | M |
 | S-09 | P1 | Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
@@ -93,6 +93,19 @@ and its documents name both production server IPs, the network layout, the firew
 deploy user's Docker-group access and that password login is enabled on the secondary.
 **Fix, pick one:** make the repository private (note the free plan's smaller Actions allowance), or
 replace addresses in the documents with role names and keep the operator runbook somewhere private.
+
+> **Partly fixed 2026-09-28.** Server IPs in the documents are replaced by the secret names
+> (`DEPLOY_HOST`, `SECONDARY_HOST`); both addresses stay public through DNS (`gulyaly.com`,
+> `mail.gulyaly.com`) and in the first commit of the history, so this removes a convenience, not a
+> secret. The same day a full sweep of everything the public can read found **no password, token
+> or private key**: all 13 commits of history, the logs of all 56 remaining workflow runs (only
+> masked `***` values and the CI-only JWT placeholders), all PR/issue text, the artifacts (the
+> backup artifact is encrypted; the build records carry only public build arguments, the Sentry
+> token goes in as a BuildKit secret), the GHCR images (private) and the three S3 buckets
+> (anonymous listing refused). GitHub **secret scanning and push protection were off** and are now
+> on, so a future push containing a known token format is refused before it becomes public. The
+> architecture description of the firewall and the deploy user still reads as a map; making the
+> repository private remains the complete fix.
 
 ### S-07 · SSH password login on the secondary
 
