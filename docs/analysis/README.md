@@ -18,7 +18,7 @@ these documents assess it. Reviewed 2026-09-26.
 
 | ID | Item | Where |
 |---|---|---|
-| A-09 | **Database backups are probably not being made** (dedicated backup storage not configured on the primary); fix and prove with the restore check | [ARCHITECTURE_REVIEW](ARCHITECTURE_REVIEW.md) |
+| A-09 | *Fixed 2026-09-28:* hourly backups run again, encrypted to a key held only on the owner's PC, verified on the server and by a decrypt drill. Still open: reg.ru has no Object Lock, so whoever holds the keys can delete (not read) them | [ARCHITECTURE_REVIEW](ARCHITECTURE_REVIEW.md) |
 | E-02 / U-01 | Connect a real top-up supplier and delete the mock gateway flag; today a paid order shows "completed" with nothing delivered | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
 | E-01 | Record the supplier cost on every order and shipment so margin can be measured | [UNIT_ECONOMICS](UNIT_ECONOMICS.md) |
 | S-01, S-02 | *Fixed 2026-09-26:* Next.js, multer, nodemailer, sharp bumped (NestJS 11 upgrade still open) | [SECURITY](SECURITY.md) |

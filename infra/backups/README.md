@@ -48,10 +48,20 @@ MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:4096 -nodes -keyout backup-priv
 ## Deletion protection (Object Lock)
 
 Every upload asks for GOVERNANCE retention for 30 days, which makes an object undeletable even
-with valid keys. reg.ru's S3 console has no Object Lock setting; if the bucket refuses the lock
-headers, the script uploads without them and logs a `WARNING` on every run rather than losing the
-backup. Without it, whoever holds the keys can delete the backups (but still cannot read them).
-The upload log line ends in `retention-locked: yes|no`.
+with valid keys. **reg.ru does not support it** (confirmed 2026-09-28: the lock headers get
+`400 InvalidRequest`, and the console has no such setting), so the script uploads without them and
+logs a `WARNING` every hour rather than losing the backup. Whoever holds the keys can therefore
+delete the backups, though still not read them. The upload log line ends in
+`retention-locked: yes|no`; if it ever says `yes`, the provider started honouring it.
+
+## Changing the bucket's secret key
+
+The four values are repository secrets and lines in `/opt/gul/.env`.
+[`install-backup-credentials.yml`](../../.github/workflows/install-backup-credentials.yml) copies
+the secrets onto the server without printing them, and reports only their lengths — a length of
+1 is how a paste that failed on 2026-09-28 was caught. After `gh secret set
+BACKUP_S3_SECRET_ACCESS_KEY` (reading the value from a file or the clipboard, never a hidden
+prompt), run that workflow, then `install-db-backup-s3.yml`.
 
 ## Why S3 and not the local disk
 
