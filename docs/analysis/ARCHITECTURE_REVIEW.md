@@ -62,6 +62,17 @@ identity); (2) put `BACKUP_S3_ENDPOINT`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_S
 (4) run `Audit servers` with `verify-backup-restore.sh` on the primary and confirm it restores.
 Until then the only protection for the data is the streaming replica, which copies mistakes too.
 
+**Progress 2026-09-28.** Bucket `gulyaly-db-backups` and key pair `db-backups` created at reg.ru;
+the panel offers neither Object Lock nor per-bucket key scoping, so the "write-only identity" and
+immutability parts of the fix are not available from this provider. The first credential install
+failed on a hand-pasted secret that reached the server one character long (a probe got
+`SignatureDoesNotMatch`); the credential script now reads the key from the clipboard and checks
+its length. Dumps are now **encrypted on the server** to a certificate whose private key exists
+only on the owner's PC (`infra/backups/README.md`), which covers the confidentiality half of the
+original concern; deletion protection remains open unless the provider adds Object Lock. Mark
+fixed once the first hourly backup has uploaded and both the server check and
+`restore-drill.sh` pass.
+
 ### A-01 · No tests for web and admin
 
 The API has 71 spec files and mobile has 53 test files; `apps/web` (81 files) and `apps/admin` (67

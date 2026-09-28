@@ -20,6 +20,8 @@ generated
 *.swp
 .vercel
 *.pem
+# Public certificate backups are encrypted to; its private key never enters the repository.
+!infra/backups/backup-recipient.pem
 *.key
 .claude/settings.local.json
 # Graphify generates a local knowledge graph; keep it out of source control.
