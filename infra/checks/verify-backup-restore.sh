@@ -69,6 +69,36 @@ fi
 echo
 
 echo "############ DOWNLOADING ############"
+# Encrypted dumps (*.cms) cannot be opened here: the private key lives only on the owner's PC,
+# which is the point. What this host can prove without it: the object downloads, is a complete
+# authenticated envelope, is addressed to our certificate, and is not trivially small. The full
+# decrypt-and-inspect drill is infra/backups/restore-drill.sh, run on the PC.
+case "$LATEST" in
+  *.cms)
+    RECIPIENT=/opt/gul/scripts/backup-recipient.pem
+    s3 --output "$WORKDIR/dump.cms" "$S3_ENDPOINT/$S3_BUCKET/$LATEST"
+    BYTES=$(stat -c %s "$WORKDIR/dump.cms")
+    echo "downloaded: $BYTES bytes"
+    [ "$BYTES" -ge 4096 ] || { echo "encrypted object is implausibly small" >&2; exit 1; }
+    ENVELOPE=$(openssl cms -cmsout -inform DER -in "$WORKDIR/dump.cms" -print -noout 2>&1) || {
+      echo "object is not a readable CMS envelope (truncated or corrupt)" >&2; exit 1; }
+    echo "$ENVELOPE" | grep -q 'authEnvelopedData' || { echo "object is not AES-GCM AuthEnvelopedData" >&2; exit 1; }
+    WANT=$(openssl x509 -in "$RECIPIENT" -noout -serial | cut -d= -f2 | tr 'a-f' 'A-F')
+    GOT=$(echo "$ENVELOPE" | sed -n 's/.*serialNumber: *0x\([0-9A-Fa-f]*\).*/\1/p' | head -1 | tr 'a-f' 'A-F')
+    echo "encrypted to certificate serial: ${GOT:-?}"
+    if [ -z "$GOT" ] || [ "$GOT" != "$WANT" ]; then
+      echo "object is encrypted to a different key than $RECIPIENT" >&2
+      exit 1
+    fi
+    LOCK=$(s3 --head --dump-header - --output /dev/null "$S3_ENDPOINT/$S3_BUCKET/$LATEST" \
+      | tr -d '\r' | sed -n 's/^x-amz-object-lock-retain-until-date: *//Ip')
+    echo "retention lock until: ${LOCK:-none (provider has no Object Lock)}"
+    echo
+    echo "encrypted backup verified (envelope, recipient, age, size)"
+    echo "the restore itself is proven by infra/backups/restore-drill.sh on the PC that holds the key"
+    exit 0
+    ;;
+esac
 s3 --output "$WORKDIR/dump.sql.gz" "$S3_ENDPOINT/$S3_BUCKET/$LATEST"
 SIZE=$(du -h "$WORKDIR/dump.sql.gz" | cut -f1)
 gunzip -t "$WORKDIR/dump.sql.gz" && echo "downloaded and gzip-valid: $SIZE" || { echo "gzip corrupt" >&2; exit 1; }

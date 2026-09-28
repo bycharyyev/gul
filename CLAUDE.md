@@ -137,10 +137,13 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 - **`NEXT_PUBLIC_API_URL` / `VITE_API_URL`** are build-time values baked into the web/admin bundles — set as Docker build-args in the workflow (`API_PUBLIC_URL` env at the top of `deploy.yml`), not at container runtime. Changing the API's public URL means editing the workflow, not the server `.env`.
 - **Logs**: `ssh deploy@OLD_VPS_HOST`, then `cd /opt/gul && docker compose logs -f <service>`.
 - **Manual migration/seed**: `docker compose run --rm api npx prisma migrate deploy` (the deploy pipeline already does this on every push).
-- **Database backups**: hourly `pg_dump` via `gul-db-backup.timer`, uploaded to the
-  **private** reg.ru S3 bucket (`s3://$S3_PRIVATE_BUCKET/db-backups/`) and then deleted from the
+- **Database backups**: hourly `pg_dump` via `gul-db-backup.timer`, **encrypted on the server**
+  (`openssl cms`, AES-256-GCM) to `infra/backups/backup-recipient.pem`, uploaded to the dedicated
+  reg.ru bucket `gulyaly-db-backups` (`BACKUP_S3_*` in `/opt/gul/.env`) and then deleted from the
   server's disk; 30-day retention, expired by the date in the object name — source of truth in
-  [`infra/backups/`](infra/backups/README.md). Nothing is kept locally on purpose: dumps sitting
+  [`infra/backups/`](infra/backups/README.md). **The private key exists only on the owner's PC**
+  (`~/.gulyaly/backup-encryption/`); without it no backup can be read, and the full restore test is
+  `infra/backups/restore-drill.sh` on that PC. Nothing is kept locally on purpose: dumps sitting
   beside the database they exist to replace do not survive losing the box, and this is the one
   machine where filling the disk has already taken the site down. The only file ever left in
   `/opt/gul/backups` is one whose upload failed, and the unit exits non-zero when that happens.

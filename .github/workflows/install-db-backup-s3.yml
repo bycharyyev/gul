@@ -1,7 +1,8 @@
 name: Install DB backups to S3
 
-# Installs the hourly Postgres dump on the primary. Backups use a dedicated, Object-Lock-enabled
-# bucket and identity; they must not share the API's object-storage credentials.
+# Installs the hourly Postgres dump on the primary: backup-db.sh, the systemd units, and the public
+# certificate every dump is encrypted to (its private key never leaves the owner's PC). Backups go
+# to a dedicated bucket; Object Lock is requested and used when the provider supports it.
 
 on:
   workflow_dispatch:
@@ -29,6 +30,7 @@ jobs:
           TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p /opt/gul/scripts"
           scp -i ~/.ssh/deploy_key infra/backups/backup-db.sh "$TARGET:/opt/gul/scripts/backup-db.sh"
+          scp -i ~/.ssh/deploy_key infra/backups/backup-recipient.pem "$TARGET:/opt/gul/scripts/backup-recipient.pem"
           scp -i ~/.ssh/deploy_key infra/backups/gul-db-backup.service infra/backups/gul-db-backup.timer "$TARGET:/tmp/"
           ssh -i ~/.ssh/deploy_key "$TARGET" "chmod 750 /opt/gul/scripts/backup-db.sh"
 
@@ -61,9 +63,12 @@ jobs:
         run: |
           TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'set -e' > /tmp/run-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl start gul-db-backup.service' >> /tmp/run-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl is-failed gul-db-backup.service || true' >> /tmp/run-backup.sh"
+          # `|| true` on start: under `set -e` a failed unit used to end the script before the
+          # journal was printed, so the log showed that it failed and never why. The last line
+          # still fails the step when the unit failed.
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl start gul-db-backup.service || true' >> /tmp/run-backup.sh"
           ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'journalctl -u gul-db-backup.service -n 25 --no-pager' >> /tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "echo '! systemctl is-failed --quiet gul-db-backup.service' >> /tmp/run-backup.sh"
           ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/run-backup.sh"
           echo "--- anything left in the staging directory means an upload failed ---"
           ssh -i ~/.ssh/deploy_key "$TARGET" "ls -la /opt/gul/backups 2>/dev/null || echo 'staging directory is empty or absent'"
