@@ -1,0 +1,29 @@
+name: Debug backup run
+
+# One-off: probes the same S3 endpoint/bucket/credentials backup-db.sh uses, with the exact same
+# Object-Lock headers, but WITHOUT `--fail` -- so reg.ru's actual error response body (which
+# explains *why* the upload is rejected) prints instead of being swallowed. Deliberately does NOT
+# use `bash -x` or print any variable: only the response body from reg.ru's own server ever
+# reaches the log, never a credential value. Uploads and immediately deletes one harmless 4-byte
+# probe object; does not touch the database or any real backup. Delete this workflow once the
+# real cause of the failed backup run is found and fixed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Probe the Object-Lock upload and print reg.ru's actual response
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          scp -i ~/.ssh/deploy_key infra/backups/debug-probe.sh "$TARGET:/tmp/debug-probe.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "bash /tmp/debug-probe.sh; rm -f /tmp/debug-probe.sh" < /dev/null
