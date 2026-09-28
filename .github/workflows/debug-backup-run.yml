@@ -1,0 +1,31 @@
+name: Debug backup run
+
+# One-off: runs infra/backups/backup-db.sh directly over SSH (not via systemd), as the unprivileged
+# deploy user, so the real curl/pg_dump error surfaces in the log instead of being swallowed by
+# `set -e` inside the systemd unit's own wrapper script. Read-only against application data: it
+# dumps and immediately deletes on failure exactly as backup-db.sh already does; no secret values
+# are echoed (the script itself never prints them). Delete once the real cause is found and fixed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run backup-db.sh directly and show full output
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "bash -x /opt/gul/scripts/backup-db.sh" < /dev/null 2>&1 || true
+
+      - name: Show what is currently staged
+        run: |
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "ls -la /opt/gul/backups 2>/dev/null || echo 'staging directory is empty or absent'" < /dev/null
