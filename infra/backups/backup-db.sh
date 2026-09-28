@@ -30,6 +30,14 @@ RETENTION_DAYS=30
 
 mkdir -p "$STAGING"
 
+# Failed uploads from before encryption (2026-09-28) left readable dumps here. This version never
+# uploads them, newer encrypted backups supersede them, and they hold every customer's phone
+# number in the clear -- so they go.
+for f in "$STAGING"/*.sql.gz.tmp; do
+  [ -e "$f" ] || continue
+  rm -f "$f" && echo "removed unencrypted leftover $(basename "$f")"
+done
+
 env_value() {
   # `|| true`: an absent key is an empty value, not a fatal error. Under `set -o pipefail` grep's
   # exit status 1 would otherwise abort the whole script before it can say what is missing, and the
