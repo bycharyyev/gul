@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { House, Storefront, ChatCircle, User, SignIn, PlayCircle } from "@phosphor-icons/react/dist/ssr";
 import { LanguageSwitcher, useTranslation } from "@topup-hub/i18n";
-import { api, isAuthenticated, API_ORIGIN } from "@/lib/api";
+import { api, isAuthenticated } from "@/lib/api";
+import { resolveAvatarSrc } from "@/lib/avatar";
 
 export function SiteHeader() {
   const { t } = useTranslation();
@@ -73,7 +74,7 @@ export function SiteHeader() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-brand text-white">
               {authed && avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- user-uploaded, arbitrary origin/size, not worth next/image here
-                <img src={`${API_ORIGIN}${avatarUrl}`} alt="" className="h-full w-full object-cover" />
+                <img src={resolveAvatarSrc(avatarUrl) ?? undefined} alt="" className="h-full w-full object-cover" />
               ) : authed ? (
                 <User size={16} weight="bold" aria-hidden="true" />
               ) : (

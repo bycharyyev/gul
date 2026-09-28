@@ -10,6 +10,7 @@ import * as argon2 from "argon2";
 import { PrismaService } from "../prisma/prisma.service";
 import { ReferralsService } from "../referrals/referrals.service";
 import { AuditLogService } from "../audit-log/audit-log.service";
+import { toAvatarUrl } from "../common/avatar-url.util";
 import type { CreateStaffUserDto } from "./dto/create-staff-user.dto";
 import type { UpdateUserDto } from "./dto/update-user.dto";
 
@@ -31,6 +32,18 @@ const SAFE_SELECT = {
   avatarPath: true,
 };
 
+// avatarPath can be either a relative local-disk filename or a full absolute S3 URL, depending
+// on storage mode (see avatar-url.util.ts). Every caller of SAFE_SELECT must resolve it into
+// avatarUrl the same way auth.service.ts does, rather than handing the raw column to clients --
+// admin unconditionally prefixed API_ORIGIN onto it, which broke every avatar once storage moved
+// to S3.
+function toSafeUser<T extends { avatarPath: string | null }>(
+  user: T,
+): Omit<T, "avatarPath"> & { avatarUrl: string | null } {
+  const { avatarPath, ...rest } = user;
+  return { ...rest, avatarUrl: toAvatarUrl(avatarPath) };
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -39,16 +52,17 @@ export class UsersService {
     private auditLog: AuditLogService,
   ) {}
 
-  listStaff() {
-    return this.prisma.user.findMany({
+  async listStaff() {
+    const users = await this.prisma.user.findMany({
       where: { role: { in: ["SUPPORT", "MANAGER", "ADMIN"] } },
       select: SAFE_SELECT,
       orderBy: { createdAt: "asc" },
     });
+    return users.map(toSafeUser);
   }
 
-  listCustomers(search?: string) {
-    return this.prisma.user.findMany({
+  async listCustomers(search?: string) {
+    const users = await this.prisma.user.findMany({
       where: {
         role: "CUSTOMER",
         ...(search
@@ -65,6 +79,7 @@ export class UsersService {
       select: { ...SAFE_SELECT, _count: { select: { orders: true } } },
       orderBy: { createdAt: "desc" },
     });
+    return users.map(toSafeUser);
   }
 
   async getCustomerStats() {
@@ -92,6 +107,7 @@ export class UsersService {
       select: SAFE_SELECT,
     });
     if (!user) throw new NotFoundException("Customer not found");
+    const safeUser = toSafeUser(user);
 
     const [orders, devices] = await Promise.all([
       this.prisma.order.findMany({
@@ -109,7 +125,7 @@ export class UsersService {
     ]);
 
     return {
-      user,
+      user: safeUser,
       orders,
       devices: {
         count: devices.length,
@@ -142,7 +158,7 @@ export class UsersService {
     this.auditLog.record(adminId, "user.create_staff", "User", created.id, {
       role: dto.role,
     });
-    return created;
+    return toSafeUser(created);
   }
 
   async updateUser(id: string, dto: UpdateUserDto, requesterId: string) {
@@ -174,7 +190,7 @@ export class UsersService {
         isBlocked: dto.isBlocked,
       });
     }
-    return updated;
+    return toSafeUser(updated);
   }
 
   async deleteUser(id: string, requesterId: string) {
