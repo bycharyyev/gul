@@ -1,81 +1,11 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  Flower2,
-  Truck,
-  Store,
-  Sparkles,
-  GalleryHorizontal,
-  Share2,
-  Link2,
-  FileText,
-  MessageCircle,
-  Mail,
-  Code2,
-  KeyRound,
-  Users,
-  Contact,
-  Database,
-  Activity,
-  BarChart3,
-  Bell,
-  Gift,
-  Container,
-  Network,
-  UserCircle,
-  LogOut,
-  UserPlus,
-  Banknote,
-  ShoppingBag,
-  ShieldCheck,
-  type LucideIcon,
-  MessagesSquare,
-} from "lucide-react";
+import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, UserCircle, X } from "lucide-react";
 import { LanguageSwitcher, useTranslation } from "@topup-hub/i18n";
 import { api, getCurrentUser, USER_UPDATED_EVENT } from "@/lib/api";
 import { NotificationProvider, useNotifications } from "@/lib/notifications-context";
-
-function useNavItems(): { to: string; label: string; icon: LucideIcon }[] {
-  const { t } = useTranslation();
-  return [
-    { to: "/", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
-    { to: "/orders", label: t("admin.nav.orders"), icon: ShoppingCart },
-    { to: "/catalog", label: t("admin.nav.catalog"), icon: Package },
-    { to: "/gallery", label: t("admin.nav.gallery"), icon: Flower2 },
-    { to: "/gallery-orders", label: t("admin.nav.galleryOrders"), icon: Truck },
-    { to: "/feed/moderation", label: t("admin.nav.feedModeration"), icon: ShieldCheck },
-    { to: "/chats", label: t("admin.nav.chats"), icon: MessagesSquare },
-    { to: "/sellers", label: t("admin.nav.sellers"), icon: Store },
-    { to: "/seller-applications", label: t("admin.nav.sellerApplications"), icon: UserPlus },
-    { to: "/withdrawals", label: t("admin.nav.withdrawals"), icon: Banknote },
-    { to: "/seller-ledger", label: t("admin.nav.sellerLedger"), icon: Banknote },
-    { to: "/payment-reconciliation", label: t("admin.nav.paymentReconciliation"), icon: Activity },
-    { to: "/home-slides", label: t("admin.nav.homeSlides"), icon: GalleryHorizontal },
-    { to: "/stories", label: t("admin.nav.stories"), icon: Sparkles },
-    { to: "/social-links", label: t("admin.nav.socialLinks"), icon: Share2 },
-    { to: "/managed-links", label: t("admin.nav.managedLinks"), icon: Link2 },
-    { to: "/analytics", label: t("admin.nav.analytics"), icon: BarChart3 },
-    { to: "/notifications", label: t("admin.nav.notifications"), icon: Bell },
-    { to: "/content-pages", label: t("admin.nav.contentPages"), icon: FileText },
-    { to: "/support", label: t("admin.nav.support"), icon: MessageCircle },
-    { to: "/mail", label: t("admin.nav.mail"), icon: Mail },
-    { to: "/mail/templates", label: t("admin.nav.mailTemplates"), icon: Mail },
-    { to: "/api-management", label: t("admin.nav.apiManagement"), icon: Code2 },
-    { to: "/api-keys", label: t("admin.nav.apiKeys"), icon: KeyRound },
-    { to: "/api-usage", label: t("admin.nav.apiUsage"), icon: Activity },
-    { to: "/users", label: t("admin.nav.customers"), icon: Contact },
-    { to: "/team", label: t("admin.nav.team"), icon: Users },
-    { to: "/database", label: t("admin.nav.database"), icon: Database },
-    { to: "/monitoring", label: t("admin.nav.monitoring"), icon: Activity },
-    { to: "/referrals", label: t("admin.nav.referrals"), icon: Gift },
-    { to: "/cargo", label: t("admin.nav.cargo"), icon: Container },
-    { to: "/cargo/purchases/review", label: t("admin.nav.marketplacePurchases"), icon: ShoppingBag },
-    { to: "/subdomains", label: t("admin.nav.subdomains"), icon: Network },
-  ];
-}
+import { useNavGroups } from "./nav-config";
+import { CommandPalette } from "./command-palette";
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -85,8 +15,32 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-function NavBadge({ count }: { count: number }) {
+// Per-browser preferences. Storage can be unavailable (private mode, blocked site data), so every
+// read and write tolerates failure and falls back to the default.
+function readPref<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : (JSON.parse(raw) as T);
+  } catch {
+    return fallback;
+  }
+}
+function writePref(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* preference simply isn't remembered */
+  }
+}
+
+const COLLAPSED_KEY = "gulyaly.admin.sidebar-collapsed";
+const CLOSED_GROUPS_KEY = "gulyaly.admin.nav-closed-groups";
+
+function NavBadge({ count, compact }: { count: number; compact: boolean }) {
   if (count === 0) return null;
+  if (compact) {
+    return <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" aria-label={String(count)} />;
+  }
   return (
     <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-semibold text-white">
       {count > 99 ? "99+" : count}
@@ -96,14 +50,15 @@ function NavBadge({ count }: { count: number }) {
 
 function LayoutChrome({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const navItems = useNavItems();
+  const groups = useNavGroups();
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(getCurrentUser());
-  const [navOrder, setNavOrder] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("gulyaly.admin.nav-order") ?? "[]"); } catch { return []; }
-  });
-  const [draggedNav, setDraggedNav] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [collapsed, setCollapsed] = useState(() => readPref(COLLAPSED_KEY, false));
+  const [closedGroups, setClosedGroups] = useState<string[]>(() => readPref(CLOSED_GROUPS_KEY, []));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { pendingOrdersCount, unreadChatCount } = useNotifications();
 
   useEffect(() => {
@@ -117,24 +72,37 @@ function LayoutChrome({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  const orderedNavItems = [...navItems].sort((a, b) => {
-    const ai = navOrder.indexOf(a.to); const bi = navOrder.indexOf(b.to);
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  function moveNav(target: string) {
-    if (!draggedNav || draggedNav === target) return;
-    const base = [...navItems.map((item) => item.to)].sort((a, b) => {
-      const ai = navOrder.indexOf(a); const bi = navOrder.indexOf(b);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  // A tap on a link in the phone drawer should leave the drawer, not the page, on screen.
+  useEffect(() => setMobileOpen(false), [location.pathname]);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      writePref(COLLAPSED_KEY, !c);
+      return !c;
     });
-    const from = base.indexOf(draggedNav); const to = base.indexOf(target);
-    if (from < 0 || to < 0) return;
-    base.splice(from, 1); base.splice(to, 0, draggedNav);
-    setNavOrder(base); localStorage.setItem("gulyaly.admin.nav-order", JSON.stringify(base));
+  }
+
+  function toggleGroup(id: string) {
+    setClosedGroups((prev) => {
+      const next = prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id];
+      writePref(CLOSED_GROUPS_KEY, next);
+      return next;
+    });
+  }
+
+  function isActive(to: string) {
+    return to === "/" ? location.pathname === "/" : location.pathname === to || location.pathname.startsWith(`${to}/`);
   }
 
   function logout() {
@@ -148,67 +116,154 @@ function LayoutChrome({ children }: { children: ReactNode }) {
     return 0;
   }
 
+  // The drawer on phones always shows labels; only the desktop rail collapses to icons.
+  const compact = collapsed && !mobileOpen;
+
+  const sidebar = (
+    <aside
+      className={`flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${
+        compact ? "w-16" : "w-64"
+      }`}
+    >
+      <div className={`flex shrink-0 items-center gap-2 border-b border-slate-100 py-4 ${compact ? "justify-center px-2" : "px-5"}`}>
+        <img src="/brand/gulyaly.svg" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-full" />
+        {!compact && <span className="text-gradient text-lg font-extrabold">Gulyaly</span>}
+        {mobileOpen && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="ml-auto rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+            aria-label={t("admin.shell.closeMenu")}
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      {/* Independently scrollable: the nav alone can exceed the viewport; the logo above and the
+          account block below stay put. */}
+      <nav className={`min-h-0 flex-1 overflow-y-auto py-3 ${compact ? "px-2" : "px-3"}`} aria-label={t("admin.shell.mainNav")}>
+        {groups.map((group, gi) => {
+          const holdsActive = group.items.some((item) => isActive(item.to));
+          // The group with the open page never folds away, or the highlighted row would vanish.
+          const open = holdsActive || !closedGroups.includes(group.id);
+          return (
+            <div key={group.id} className={gi > 0 ? "mt-3" : ""}>
+              {compact ? (
+                gi > 0 && <div className="mx-2 mb-3 border-t border-slate-100" />
+              ) : (
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  disabled={holdsActive}
+                  aria-expanded={open}
+                  className="mb-1 flex w-full items-center justify-between rounded px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600 disabled:cursor-default disabled:hover:text-slate-400"
+                >
+                  {group.label}
+                  {!holdsActive && (
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "" : "-rotate-90"}`} aria-hidden="true" />
+                  )}
+                </button>
+              )}
+              {(open || compact) && (
+                <div className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === "/"}
+                      title={compact ? item.label : undefined}
+                      className={({ isActive: active }) =>
+                        `relative flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium ${
+                          compact ? "justify-center px-2" : "px-3"
+                        } ${active ? "bg-gradient-brand-soft text-brand-700" : "text-slate-600 hover:bg-slate-50"}`
+                      }
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {!compact && <span className="truncate">{item.label}</span>}
+                      <NavBadge count={badgeFor(item.to)} compact={compact} />
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className={`shrink-0 border-t border-slate-200 pb-4 pt-3 ${compact ? "px-2" : "px-3"}`}>
+        <NavLink
+          to="/account"
+          title={compact ? t("admin.nav.myAccount") : undefined}
+          className={({ isActive: active }) =>
+            `flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium ${compact ? "justify-center px-2" : "px-3"} ${
+              active ? "bg-gradient-brand-soft text-brand-700" : "text-slate-600 hover:bg-slate-50"
+            }`
+          }
+        >
+          <UserCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {!compact && <span className="truncate">{user?.fullName || user?.phone || t("admin.nav.myAccount")}</span>}
+        </NavLink>
+        <button
+          onClick={logout}
+          title={compact ? t("admin.nav.logout") : undefined}
+          className={`mt-1 flex w-full items-center gap-2.5 rounded-lg py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50 ${
+            compact ? "justify-center px-2" : "px-3"
+          }`}
+        >
+          <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {!compact && t("admin.nav.logout")}
+        </button>
+        {!compact && (
+          <LanguageSwitcher className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600" />
+        )}
+      </div>
+    </aside>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
-        <div className="shrink-0 border-b border-slate-100 px-6 pb-4 pt-5">
-          <div className="flex items-center gap-2 text-lg font-extrabold">
-          <img src="/brand/gulyaly.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-full" />
-          <span className="text-gradient">Gulyaly</span>
-          </div>
-          <p className="mt-2 pl-10 text-[11px] font-medium text-slate-400">{now.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })} · {now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</p>
+      <div className="hidden lg:flex">{sidebar}</div>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 flex lg:hidden">
+          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+          <div className="relative flex h-full">{sidebar}</div>
         </div>
-        {/* Independently scrollable: the nav list alone can exceed the viewport, the logo above
-            and the account/logout block below stay put instead of scrolling away with it. */}
-        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <div className="space-y-1">
-          {orderedNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              draggable
-              onDragStart={() => setDraggedNav(item.to)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => moveNav(item.to)}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                  isActive
-                    ? "bg-gradient-brand-soft text-brand-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`
-              }
-            >
-              <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {item.label}
-              <NavBadge count={badgeFor(item.to)} />
-            </NavLink>
-          ))}
-          </div>
-        </nav>
-        <div className="shrink-0 border-t border-slate-200 px-4 pb-6 pt-3">
-          <NavLink
-            to="/account"
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                isActive ? "bg-gradient-brand-soft text-brand-700" : "text-slate-600 hover:bg-slate-50"
-              }`
-            }
-          >
-            <UserCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {user?.fullName || user?.phone || t("admin.nav.myAccount")}
-          </NavLink>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 lg:px-6">
           <button
-            onClick={logout}
-            className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50"
+            onClick={() => setMobileOpen(true)}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+            aria-label={t("admin.shell.openMenu")}
           >
-            <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {t("admin.nav.logout")}
+            <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <LanguageSwitcher className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600" />
-        </div>
-      </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50 p-8">{children}</main>
+          <button
+            onClick={toggleCollapsed}
+            className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:block"
+            aria-label={collapsed ? t("admin.shell.expandSidebar") : t("admin.shell.collapseSidebar")}
+            title={collapsed ? t("admin.shell.expandSidebar") : t("admin.shell.collapseSidebar")}
+          >
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" aria-hidden="true" /> : <PanelLeftClose className="h-5 w-5" aria-hidden="true" />}
+          </button>
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="flex h-9 min-w-0 max-w-xs flex-1 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm text-slate-400 hover:border-slate-300"
+          >
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{t("admin.shell.searchButton")}</span>
+            <kbd className="ml-auto hidden rounded border border-slate-200 px-1.5 text-[10px] sm:inline">Ctrl K</kbd>
+          </button>
+          <p className="ml-auto hidden text-xs font-medium tabular-nums text-slate-400 sm:block">
+            {now.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" })} ·{" "}
+            {now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </header>
+        <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-8">{children}</main>
+      </div>
+
+      <CommandPalette groups={groups} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

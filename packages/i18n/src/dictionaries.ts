@@ -6,6 +6,7 @@ import { webMainDict } from "./dict/web-main.js";
 import { webSellerDict } from "./dict/web-seller.js";
 import { marketplacePurchaseDict } from "./dict/marketplace-purchase.js";
 import { socialCommerceDict } from "./dict/social-commerce.js";
+import { adminShellDict } from "./dict/admin-shell.js";
 
 export type Dictionary = Record<string, string>;
 
@@ -988,6 +989,7 @@ const shardDicts: Record<Locale, Dictionary>[] = [
   socialCommerceDict,
   adminBatchBDict,
   adminBatchCDict,
+  adminShellDict,
   adminBatchADict,
 ];
 
