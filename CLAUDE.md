@@ -24,7 +24,7 @@ pnpm db:seed                     # seed catalog + admin user (apps/api/prisma/se
 
 Per-app dev servers (useful when only touching one app — avoids Turborepo firing up all three):
 ```bash
-pnpm --filter @topup-hub/api dev      # Nest, http://localhost:4000/api, Swagger at /docs
+pnpm --filter @topup-hub/api dev      # Nest, http://localhost:4000/api, Swagger at /docs (off in production; staff: /api/admin/stats/openapi)
 pnpm --filter @topup-hub/web dev      # Next.js, http://localhost:3000 (or 3001 if 3000 is taken)
 pnpm --filter @topup-hub/admin dev    # Vite, http://localhost:5173
 ```

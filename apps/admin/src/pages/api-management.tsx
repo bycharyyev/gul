@@ -25,9 +25,7 @@ export default function ApiManagementPage() {
     setLoading(true);
     Promise.all([
       api.getAdminStats(),
-      fetch(`${API_BASE}/docs-json`)
-        .then((r) => r.json())
-        .catch(() => null),
+      api.getAdminOpenApi().catch(() => null),
     ])
       .then(([statsRes, openapi]) => {
         setStats(statsRes);
@@ -66,9 +64,12 @@ export default function ApiManagementPage() {
           <Button variant="secondary" size="sm" onClick={load}>
             {t("admin.apiManagement.refresh")}
           </Button>
-          <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">
-            <Button size="sm">{t("admin.apiManagement.openSwagger")}</Button>
-          </a>
+          {/* Swagger UI is public only outside production (S-04); there it cannot load. */}
+          {import.meta.env.DEV && (
+            <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">
+              <Button size="sm">{t("admin.apiManagement.openSwagger")}</Button>
+            </a>
+          )}
         </div>
       </div>
 
