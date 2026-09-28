@@ -10,11 +10,11 @@
 | --- | --- | --- |
 | API (NestJS) | 23582 | 336 |
 | Web (Next.js) | 10310 | 81 |
-| Admin (Vite) | 12672 | 67 |
+| Admin (Vite) | 12997 | 69 |
 | Mobile (Flutter) | 25679 | 130 |
 | packages/types | 2208 | 13 |
 | packages/api-client | 2193 | 5 |
-| packages/i18n | 4996 | 10 |
+| packages/i18n | 5064 | 11 |
 
 ## Automated tests
 

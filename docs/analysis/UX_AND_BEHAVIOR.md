@@ -42,7 +42,7 @@ accessibility test (large text scale).
 | U-05 | P1 | Turkmen text has not been reviewed by a native speaker | process |
 | U-06 | P2 | The update prompt has no destination until `update_url` is set | device test |
 | U-07 | P2 | Release APK is larger than it needs to be | build |
-| U-08 | P2 | The admin console is large for a small team | code |
+| U-08 | P2 | *Partly fixed 2026-09-28* (grouped sidebar, Ctrl+K). The admin console is large for a small team | code |
 
 ### U-01 · "Completed" without delivery
 
@@ -88,6 +88,26 @@ without a native reviewer. Wrong wording in a payments product costs trust quick
   build machine, so the arm64 APK is about 29 MB. Fixing the hang would roughly halve it.
 - **U-08** 44 admin page files for a small team. Group them by role (finance, catalogue, content,
   support, platform) and hide what a role cannot use; the role model already exists.
+  *Partly fixed 2026-09-28:* the sidebar is grouped into nine sections that fold, collapses to an
+  icon rail, becomes a drawer on phones, and any section can be opened by name with Ctrl+K.
+  Hiding sections a role cannot use is still open.
+
+### Admin console against a reference template (2026-09-28)
+
+Compared with *Studio Admin* ([demo](https://studio-admin.arhamkhnz.com),
+[source](https://github.com/arhamkhnz/next-shadcn-admin-dashboard), MIT), a widely used open
+admin template. Ideas are taken, not code; its stack (Next.js 16, Tailwind 4, shadcn/ui,
+TanStack Table) differs from the console's (Vite, Tailwind 3, hand-written primitives).
+
+| What the template does | Console before | Status |
+|---|---|---|
+| Sidebar in labelled, foldable groups; collapses to icons; drawer on phones | 33 items in one flat list, fixed width, no phone layout | **Done** |
+| Command palette (search to jump anywhere) | none | **Done** (sections; entity search not yet) |
+| One data table: sorting, paging, column filters, row selection, CSV export | each page hand-rolls its table; orders load everything, no paging or export | Next |
+| KPI cards with change against the previous period (+12.5 %) | totals only | Next |
+| Light/dark theme | light only; ~10k lines of hard-coded light colours | Later (needs colour tokens first) |
+| Kanban board, printable invoice, roles matrix | orders as a list; no invoice; roles as a column | Candidates: order board for processing, printable order receipt |
+| Calendar, file manager, theme presets | none | Not needed now |
 
 ## Behaviours verified on a device
 
