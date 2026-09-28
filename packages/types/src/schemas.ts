@@ -308,6 +308,24 @@ export interface OrdersTimeseriesPoint {
   completedCount: number;
 }
 
+/** One window of the dashboard's period comparison. */
+export interface AdminPeriodTotals {
+  orders: number;
+  completedOrders: number;
+  volumeTmt: number;
+  newCustomers: number;
+}
+
+/**
+ * The last `days` days against the `days` days before them, for the dashboard's trend badges.
+ * Both windows end "now" on the server clock, so the two are always the same length.
+ */
+export interface AdminPeriodComparisonDto {
+  days: number;
+  current: AdminPeriodTotals;
+  previous: AdminPeriodTotals;
+}
+
 /**
  * API usage, as counted by the request interceptor.
  *

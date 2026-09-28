@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
+import { DataTable } from "@/components/data-table";
 import { alertAction, confirmAction } from "@/lib/confirm";
 
 const API_ORIGIN = (
@@ -261,95 +262,95 @@ export default function UsersPage() {
               {loading ? "Обновление…" : `${customers.length} в списке`}
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Клиент</th>
-                  <th className="px-4 py-3">Заказы</th>
-                  <th className="px-4 py-3">Статус</th>
-                  <th className="px-4 py-3">Регистрация</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {customers.map((user) => (
-                  <tr
-                    key={user.id}
-                    onClick={() => setSelectedId(user.id)}
-                    className={`cursor-pointer transition-colors ${selectedId === user.id ? "bg-brand-50" : "hover:bg-slate-50"}`}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <CustomerAvatar user={user} />
-                        <div>
-                          <p className="font-semibold text-slate-900">
-                            {user.fullName || "Без имени"}
-                          </p>
-                          <p className="mt-0.5 font-mono text-xs text-slate-500">
-                            {user.phone}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-semibold tabular-nums text-slate-700">
-                      {user._count.orders}
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.isBlocked ? (
-                        <span className="inline-flex rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
-                          {t("admin.users.statusBlocked")}
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                          {t("admin.users.statusActive")}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {new Date(user.createdAt).toLocaleDateString(
-                        LOCALE_BCP47[locale],
-                      )}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right"
-                      onClick={(event) => event.stopPropagation()}
+          <DataTable
+            rows={customers}
+            rowKey={(user) => user.id}
+            onRowClick={(user) => setSelectedId(user.id)}
+            rowClassName={(user) =>
+              `transition-colors ${selectedId === user.id ? "bg-brand-50" : "hover:bg-slate-50"}`
+            }
+            loading={loading}
+            emptyText={t("admin.users.notFound")}
+            exportName="customers"
+            initialSort={{ id: "registered", direction: "desc" }}
+            columns={[
+              {
+                id: "customer",
+                header: "Клиент",
+                sortValue: (user) => user.fullName || user.phone,
+                csv: (user) => user.fullName ?? "",
+                cell: (user) => (
+                  <div className="flex items-center gap-3">
+                    <CustomerAvatar user={user} />
+                    <div>
+                      <p className="font-semibold text-slate-900">{user.fullName || "Без имени"}</p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-500">{user.phone}</p>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                id: "phone",
+                header: "Телефон",
+                // Shown inside the customer cell; the export gets it as its own column.
+                exportOnly: true,
+                cell: () => null,
+                csv: (user) => user.phone,
+              },
+              {
+                id: "orders",
+                header: "Заказы",
+                sortValue: (user) => user._count.orders,
+                csv: (user) => user._count.orders,
+                className: "font-semibold tabular-nums text-slate-700",
+                cell: (user) => user._count.orders,
+              },
+              {
+                id: "status",
+                header: "Статус",
+                sortValue: (user) => user.isBlocked,
+                csv: (user) => (user.isBlocked ? t("admin.users.statusBlocked") : t("admin.users.statusActive")),
+                cell: (user) =>
+                  user.isBlocked ? (
+                    <span className="inline-flex rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
+                      {t("admin.users.statusBlocked")}
+                    </span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                      {t("admin.users.statusActive")}
+                    </span>
+                  ),
+              },
+              {
+                id: "registered",
+                header: "Регистрация",
+                sortValue: (user) => new Date(user.createdAt),
+                csv: (user) => new Date(user.createdAt),
+                className: "text-xs text-slate-500",
+                cell: (user) => new Date(user.createdAt).toLocaleDateString(LOCALE_BCP47[locale]),
+              },
+              {
+                id: "actions",
+                header: "",
+                className: "text-right",
+                cell: (user) => (
+                  <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+                    <Button variant="secondary" size="sm" onClick={() => toggleBlocked(user)}>
+                      {user.isBlocked ? t("admin.users.unblockShort") : t("admin.users.blockShort")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                      onClick={() => removeUser(user)}
                     >
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => toggleBlocked(user)}
-                        >
-                          {user.isBlocked
-                            ? t("admin.users.unblockShort")
-                            : t("admin.users.blockShort")}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                          onClick={() => removeUser(user)}
-                        >
-                          {t("common.delete")}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!loading && customers.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-slate-400"
-                    >
-                      {t("admin.users.notFound")}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      {t("common.delete")}
+                    </Button>
+                  </div>
+                ),
+              },
+            ]}
+          />
         </Card>
         <Card className="overflow-hidden xl:sticky xl:top-5">
           {!detail && (

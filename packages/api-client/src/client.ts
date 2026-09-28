@@ -16,6 +16,7 @@ import type {
   AdminServiceInput,
   AdminSocialLinkInput,
   AdminStatsDto,
+  AdminPeriodComparisonDto,
   AdminStoryInput,
   AdPricingDto,
   ApiKeyDto,
@@ -701,6 +702,10 @@ export class ApiClient {
   // ---- Admin: stats ----
   getAdminStats() {
     return this.request<AdminStatsDto>("/admin/stats");
+  }
+
+  getAdminPeriodComparison(days = 30) {
+    return this.request<AdminPeriodComparisonDto>(`/admin/stats/period-comparison?days=${days}`);
   }
 
   /** The API's OpenAPI document; staff-only, since the public /docs is off in production. */
