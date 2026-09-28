@@ -13,8 +13,8 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 |---|---|---|---|
 | S-01 | P0 | **Fixed 2026-09-26** (next 15.5.26). Next.js 15.5.23 had two critical advisories, fixed in 15.5.24 | S |
 | S-02 | P0 | **Partly fixed 2026-09-26** (multer 2.4.0, nodemailer 9.1.1, sharp 0.35.4); `@nestjs/core` 10 still needs the major upgrade | S–M |
-| S-03 | P0 | Web and admin send no security headers (*verified live*) | S |
-| S-04 | P0 | The full API documentation is public in production (*verified live*) | S |
+| S-03 | P0 | *Fixed 2026-09-28* (CSP still report-only). Web and admin sent no security headers (*verified live*) | S |
+| S-04 | P0 | *Fixed 2026-09-28.* The full API documentation was public in production (*verified live*) | S |
 | S-05 | P1 | Web and admin keep access and refresh tokens in `localStorage` | M |
 | S-06 | P1 | *Partly fixed 2026-09-28* (IPs out of the docs, secret scanning on, full leak sweep clean). The repository is public and documents the production servers | S |
 | S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
@@ -23,7 +23,7 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-10 | P2 | Unsubscribe links are signed with the JWT access secret | S |
 | S-11 | P2 | Upload type checks trust the client-declared MIME type | M |
 | S-12 | P2 | Third-party GitHub Actions are pinned by tag, not by commit | S |
-| S-13 | P2 | Framework and server versions are advertised in response headers | S |
+| S-13 | P2 | *Partly fixed 2026-09-28* (nginx version and X-Powered-By hidden). Framework and server versions are advertised in response headers | S |
 
 ### S-01 · Next.js critical advisories
 
@@ -67,6 +67,13 @@ injected into either site may do.
 admin, and a `Content-Security-Policy-Report-Only` for both to learn what a real policy must allow
 before enforcing it.
 
+> **Fixed 2026-09-28** in `infra/nginx/gulyaly-{web,admin}.conf`: HSTS (one year, no
+> `includeSubDomains` yet, since managed subdomains come and go), `nosniff`, `X-Frame-Options`
+> (`SAMEORIGIN` web, `DENY` admin), `Referrer-Policy`, `Permissions-Policy`, and a report-only CSP
+> whose violations go to Sentry's security endpoint. **Still to do:** after a week of reports,
+> tighten the policy and rename the header to `Content-Security-Policy`; consider
+> `includeSubDomains` once every subdomain is known to be HTTPS-only.
+
 ### S-04 · Public API documentation (verified live)
 
 `https://api.gulyaly.com/docs` and `/docs-json` return 200 to anyone: a 265-path specification,
@@ -74,6 +81,12 @@ before enforcing it.
 map of the attack surface. `main.ts` mounts Swagger unconditionally.
 **Fix:** mount it only outside production, or restrict `/docs*` in nginx to staff addresses. The
 seller API has hand-written documentation at `/seller/api-docs`, so partners do not depend on it.
+
+> **Fixed 2026-09-28**, twice over: `main.ts` mounts Swagger only when `NODE_ENV` is not
+> `production` (override with `API_DOCS_PUBLIC=true|false`, `common/openapi-document.ts`), and the
+> API vhost answers `/docs`, `/docs-json` and `/docs-yaml` with 404 regardless. The admin console's
+> API page, which used to fetch the public `/docs-json`, now reads the same document from the
+> staff-only `GET /api/admin/stats/openapi` (ADMIN, MANAGER).
 
 ### S-05 · Tokens in `localStorage` (web, admin)
 

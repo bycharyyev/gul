@@ -8,6 +8,7 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { configureBodyParsing } from "./common/body-parsing";
+import { isPublicApiDocsEnabled, setOpenApiDocument } from "./common/openapi-document";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
@@ -71,12 +72,18 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("docs", app, document);
+  setOpenApiDocument(document);
+  const publicDocs = isPublicApiDocsEnabled();
+  if (publicDocs) {
+    SwaggerModule.setup("docs", app, document);
+  }
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
   // eslint-disable-next-line no-console
-  console.log(`API listening on http://localhost:${port}/api (docs at /docs)`);
+  console.log(
+    `API listening on http://localhost:${port}/api (${publicDocs ? "docs at /docs" : "public docs off; staff: /api/admin/stats/openapi"})`,
+  );
 }
 
 bootstrap();

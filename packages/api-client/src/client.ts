@@ -703,6 +703,13 @@ export class ApiClient {
     return this.request<AdminStatsDto>("/admin/stats");
   }
 
+  /** The API's OpenAPI document; staff-only, since the public /docs is off in production. */
+  getAdminOpenApi() {
+    return this.request<{
+      paths?: Record<string, Record<string, { summary?: string; tags?: string[] }>>;
+    }>("/admin/stats/openapi");
+  }
+
   getOrdersTimeseries(days = 30) {
     return this.request<OrdersTimeseriesPoint[]>(
       `/admin/stats/orders-timeseries?days=${days}`,
