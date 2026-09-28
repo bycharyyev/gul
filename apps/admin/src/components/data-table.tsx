@@ -51,12 +51,13 @@ export function DataTable<T>({
   toolbar,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
-  const [sort, setSort] = useState(initialSort ?? null);
-  const [pageSize, setPageSize] = useState(pageSizes[1] ?? pageSizes[0]);
+  const [sort, setSort] = useState<{ id: string; direction: SortDirection } | null>(initialSort ?? null);
+  const [pageSize, setPageSize] = useState<number>(pageSizes[1] ?? pageSizes[0] ?? 25);
   const [page, setPage] = useState(0);
 
   const sorted = useMemo(() => {
-    const column = sort && columns.find((c) => c.id === sort.id);
+    if (!sort) return rows;
+    const column = columns.find((c) => c.id === sort.id);
     return column?.sortValue ? sortRows(rows, column.sortValue, sort.direction) : rows;
   }, [rows, columns, sort]);
 

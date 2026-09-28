@@ -63,12 +63,9 @@ export default function DashboardPage() {
       }))
     : [];
 
-  const totalVolume = series.reduce((sum, p) => sum + Number(p.volumeTmt), 0);
-  const totalOrdersInPeriod = series.reduce((sum, p) => sum + p.orderCount, 0);
   const completedOrders = stats?.ordersByStatus.COMPLETED ?? 0;
   const pendingOrders = (stats?.ordersByStatus.PENDING_PAYMENT ?? 0) + (stats?.ordersByStatus.PAID ?? 0) + (stats?.ordersByStatus.PROCESSING ?? 0);
   const completionRate = stats?.totals.orders ? Math.round((completedOrders / stats.totals.orders) * 100) : 0;
-  const averageOrder = totalOrdersInPeriod ? totalVolume / totalOrdersInPeriod : 0;
 
   return (
     <div className="space-y-6">

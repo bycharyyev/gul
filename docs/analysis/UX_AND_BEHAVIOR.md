@@ -103,8 +103,8 @@ TanStack Table) differs from the console's (Vite, Tailwind 3, hand-written primi
 |---|---|---|
 | Sidebar in labelled, foldable groups; collapses to icons; drawer on phones | 33 items in one flat list, fixed width, no phone layout | **Done** |
 | Command palette (search to jump anywhere) | none | **Done** (sections; entity search not yet) |
-| One data table: sorting, paging, column filters, row selection, CSV export | each page hand-rolls its table; orders load everything, no paging or export | Next |
-| KPI cards with change against the previous period (+12.5 %) | totals only | Next |
+| One data table: sorting, paging, column filters, row selection, CSV export | each page hand-rolls its table; orders load everything, no paging or export | **Done 2026-09-28** on orders and customers: header sorting, client-side paging, CSV of the filtered and sorted list (UTF-8 BOM, `;`, formula cells neutralised). Column filters and row selection not yet; other pages still hand-rolled |
+| KPI cards with change against the previous period (+12.5 %) | totals only | **Done 2026-09-28**: orders, completed, volume and new customers against the previous window of the same length (`GET /admin/stats/period-comparison`) |
 | Light/dark theme | light only; ~10k lines of hard-coded light colours | Later (needs colour tokens first) |
 | Kanban board, printable invoice, roles matrix | orders as a list; no invoice; roles as a column | Candidates: order board for processing, printable order receipt |
 | Calendar, file manager, theme presets | none | Not needed now |
