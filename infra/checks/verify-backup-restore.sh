@@ -39,7 +39,8 @@ s3() {
 echo "############ WHAT IS IN S3 ############"
 LISTING=$(s3 "$S3_ENDPOINT/$S3_BUCKET?list-type=2&prefix=$PREFIX/")
 LATEST=$(echo "$LISTING" | grep -o '<Key>[^<]*</Key>' | sed 's/<[^>]*>//g' | sort | tail -1)
-COUNT=$(echo "$LISTING" | grep -c '<Key>' || true)
+# grep -o | wc -l, not grep -c: the S3 listing is one line of XML, so -c counted 1 whatever was there.
+COUNT=$(grep -o '<Key>' <<< "$LISTING" | wc -l)
 if [ -z "$LATEST" ]; then
   echo "no backup objects found under $PREFIX/ -- nothing to restore" >&2
   exit 1

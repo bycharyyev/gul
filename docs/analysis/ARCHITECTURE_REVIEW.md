@@ -34,7 +34,7 @@ The graph ranks nodes by connections. The top ones are the places every change p
 
 | ID | Pri | Finding | Effort |
 |---|---|---|---|
-| A-09 | P0 | Database backups are probably not being made: the primary reports its dedicated backup storage as not configured | S |
+| A-09 | P0 | *Fixed 2026-09-28.* Database backups were not being made: the primary reported its dedicated backup storage as not configured | S |
 | A-01 | P0 | Web and admin (23k lines) have no automated tests | M |
 | A-02 | P1 | `ApiClient` is a 1,974-line single class | M |
 | A-03 | P1 | Very large files mix responsibilities (chat, email, admin pages) | M |
@@ -69,9 +69,16 @@ failed on a hand-pasted secret that reached the server one character long (a pro
 `SignatureDoesNotMatch`); the credential script now reads the key from the clipboard and checks
 its length. Dumps are now **encrypted on the server** to a certificate whose private key exists
 only on the owner's PC (`infra/backups/README.md`), which covers the confidentiality half of the
-original concern; deletion protection remains open unless the provider adds Object Lock. Mark
-fixed once the first hourly backup has uploaded and both the server check and
-`restore-drill.sh` pass.
+original concern; deletion protection remains open unless the provider adds Object Lock.
+
+**Fixed 2026-09-28.** The first encrypted backup uploaded at 11:51 UTC and the hourly timer has
+kept going. `verify-backup-restore.sh` passed on the primary (recent, complete AES-GCM envelope,
+addressed to our certificate) and `restore-drill.sh` on the PC decrypted the newest dump into a
+complete database (10 users, 2 orders, 8 services, 4 content pages at the time). reg.ru answered
+the Object Lock headers with `400 InvalidRequest`, so uploads go without retention and log a
+warning each hour. Three readable dumps that earlier failed uploads had left in
+`/opt/gul/backups` were deleted. Residual risk: someone holding the S3 keys can delete the backups
+(they cannot read them); a provider with Object Lock, or a second copy elsewhere, would close it.
 
 ### A-01 · No tests for web and admin
 
