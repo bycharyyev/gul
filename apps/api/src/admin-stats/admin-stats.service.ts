@@ -65,6 +65,60 @@ export class AdminStatsService {
     }));
   }
 
+  /**
+   * The last `days` days against the `days` days before them. Both windows are measured back from
+   * the same instant, so they are always the same length -- comparing a finished previous month
+   * with a half-finished current one is the classic way to report a fake 50% drop.
+   */
+  async getPeriodComparison(days: number) {
+    const safeDays = Math.min(Math.max(Math.round(days), 1), 365);
+    const now = new Date();
+    const start = new Date(now.getTime() - safeDays * 86_400_000);
+    const prevStart = new Date(now.getTime() - 2 * safeDays * 86_400_000);
+
+    const [rows, newCurrent, newPrevious] = await Promise.all([
+      this.prisma.$queryRaw<
+        Array<{
+          curOrders: bigint;
+          prevOrders: bigint;
+          curCompleted: bigint;
+          prevCompleted: bigint;
+          curVolume: number | null;
+          prevVolume: number | null;
+        }>
+      >`
+        SELECT
+          COUNT(*) FILTER (WHERE "createdAt" >= ${start}) AS "curOrders",
+          COUNT(*) FILTER (WHERE "createdAt" < ${start}) AS "prevOrders",
+          COUNT(*) FILTER (WHERE "createdAt" >= ${start} AND status = 'COMPLETED') AS "curCompleted",
+          COUNT(*) FILTER (WHERE "createdAt" < ${start} AND status = 'COMPLETED') AS "prevCompleted",
+          COALESCE(SUM("amountTmt") FILTER (WHERE "createdAt" >= ${start}), 0)::float AS "curVolume",
+          COALESCE(SUM("amountTmt") FILTER (WHERE "createdAt" < ${start}), 0)::float AS "prevVolume"
+        FROM "Order"
+        WHERE "createdAt" >= ${prevStart} AND "createdAt" < ${now}
+      `,
+      this.prisma.user.count({ where: { role: "CUSTOMER", createdAt: { gte: start, lt: now } } }),
+      this.prisma.user.count({ where: { role: "CUSTOMER", createdAt: { gte: prevStart, lt: start } } }),
+    ]);
+
+    const r = rows[0];
+    return {
+      days: safeDays,
+      current: {
+        orders: Number(r?.curOrders ?? 0),
+        completedOrders: Number(r?.curCompleted ?? 0),
+        volumeTmt: r?.curVolume ?? 0,
+        newCustomers: newCurrent,
+      },
+      previous: {
+        orders: Number(r?.prevOrders ?? 0),
+        completedOrders: Number(r?.prevCompleted ?? 0),
+        volumeTmt: r?.prevVolume ?? 0,
+        newCustomers: newPrevious,
+      },
+    };
+  }
+
   /** Row counts for every table — a quick "what's in the database" overview for admins. */
   async getDatabaseOverview() {
     const [

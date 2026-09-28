@@ -26,6 +26,11 @@ export class AdminStatsController {
     return getOpenApiDocument() ?? { paths: {} };
   }
 
+  @Get("period-comparison")
+  getPeriodComparison(@Query("days") days?: string) {
+    return this.stats.getPeriodComparison(days ? Number(days) : 30);
+  }
+
   @Get("orders-timeseries")
   getTimeseries(@Query("days") days?: string) {
     return this.stats.getOrdersTimeseries(days ? Number(days) : 30);

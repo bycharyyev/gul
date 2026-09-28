@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table";
 import { promptAction } from "@/lib/confirm";
 
 const STATUS_OPTIONS = [
@@ -106,61 +107,79 @@ export default function OrdersPage() {
       </Card>
 
       <Card className="overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <div><h2 className="font-semibold">Реестр заказов</h2><p className="text-xs text-slate-500">Нажмите на строку, чтобы открыть полную карточку</p></div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{visibleOrders.length} записей</span>
-        </div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm">
-          <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">{t("admin.orders.colRecipient")}</th>
-              <th className="px-4 py-3">{t("admin.orders.colAmount")}</th>
-              <th className="px-4 py-3">{t("admin.orders.colSource")}</th>
-              <th className="px-4 py-3">{t("admin.orders.colStatus")}</th>
-              <th className="px-4 py-3">{t("admin.orders.colCreated")}</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {visibleOrders.map((order) => (
-              <tr
-                key={order.id}
-                onClick={() => navigate(`/orders/${order.id}`)}
-                className="cursor-pointer hover:bg-slate-50"
-              >
-                <td className="px-4 py-3 font-medium">{order.recipientIdentifier}</td>
-                <td className="px-4 py-3">
-                  {order.amountTmt} TMT · {order.amountCharged} {order.currency}
-                </td>
-                <td className="px-4 py-3 text-slate-500">
-                  {order.apiKey
-                    ? t("admin.orders.apiSourcePrefix", { label: order.apiKey.ownerLabel })
-                    : order.user?.phone ?? t("admin.orders.guestLabel")}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={order.status} />
-                </td>
-                <td className="px-4 py-3 text-slate-500">
-                  {new Date(order.createdAt).toLocaleString(LOCALE_BCP47[locale])}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {order.status === "PENDING_PAYMENT" && order.paymentMethod?.provider === "manual" && (
-                    <Button size="sm" disabled={busyId === order.id} onClick={(e) => confirmPayment(order.id, e)}>
-                      {busyId === order.id ? "…" : t("admin.orders.confirmPayment")}
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {!loading && visibleOrders.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  {t("admin.orders.empty")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table></div>
+        <DataTable
+          rows={visibleOrders}
+          rowKey={(order) => order.id}
+          onRowClick={(order) => navigate(`/orders/${order.id}`)}
+          loading={loading}
+          emptyText={t("admin.orders.empty")}
+          exportName="orders"
+          initialSort={{ id: "created", direction: "desc" }}
+          minWidth="850px"
+          toolbar={
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="font-semibold">Реестр заказов</h2>
+                <p className="text-xs text-slate-500">Нажмите на строку, чтобы открыть полную карточку</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{visibleOrders.length} записей</span>
+            </div>
+          }
+          columns={[
+            {
+              id: "recipient",
+              header: t("admin.orders.colRecipient"),
+              cell: (order) => order.recipientIdentifier,
+              sortValue: (order) => order.recipientIdentifier,
+              csv: (order) => order.recipientIdentifier,
+              className: "font-medium",
+            },
+            {
+              id: "amount",
+              header: t("admin.orders.colAmount"),
+              cell: (order) => `${order.amountTmt} TMT · ${order.amountCharged} ${order.currency}`,
+              sortValue: (order) => Number(order.amountTmt),
+              csv: (order) => Number(order.amountTmt),
+            },
+            {
+              id: "source",
+              header: t("admin.orders.colSource"),
+              cell: (order) =>
+                order.apiKey
+                  ? t("admin.orders.apiSourcePrefix", { label: order.apiKey.ownerLabel })
+                  : order.user?.phone ?? t("admin.orders.guestLabel"),
+              sortValue: sourceName,
+              csv: sourceName,
+              className: "text-slate-500",
+            },
+            {
+              id: "status",
+              header: t("admin.orders.colStatus"),
+              cell: (order) => <StatusBadge status={order.status} />,
+              sortValue: (order) => t(`orderStatus.${order.status}`),
+              csv: (order) => t(`orderStatus.${order.status}`),
+            },
+            {
+              id: "created",
+              header: t("admin.orders.colCreated"),
+              cell: (order) => new Date(order.createdAt).toLocaleString(LOCALE_BCP47[locale]),
+              sortValue: (order) => new Date(order.createdAt),
+              csv: (order) => new Date(order.createdAt),
+              className: "text-slate-500",
+            },
+            {
+              id: "actions",
+              header: "",
+              className: "text-right",
+              cell: (order) =>
+                order.status === "PENDING_PAYMENT" && order.paymentMethod?.provider === "manual" ? (
+                  <Button size="sm" disabled={busyId === order.id} onClick={(e) => confirmPayment(order.id, e)}>
+                    {busyId === order.id ? "…" : t("admin.orders.confirmPayment")}
+                  </Button>
+                ) : null,
+            },
+          ]}
+        />
       </Card>
     </div>
   );

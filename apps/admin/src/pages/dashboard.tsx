@@ -15,9 +15,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AdminStatsDto, OrdersTimeseriesPoint } from "@topup-hub/types";
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+import type { AdminPeriodComparisonDto, AdminPeriodTotals, AdminStatsDto, OrdersTimeseriesPoint } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
+import { percentChange } from "@/lib/table";
 import { Card } from "@/components/ui/card";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,15 +37,17 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<AdminStatsDto | null>(null);
   const [series, setSeries] = useState<OrdersTimeseriesPoint[]>([]);
+  const [comparison, setComparison] = useState<AdminPeriodComparisonDto | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
 
   function load(period: number) {
     setLoading(true);
-    Promise.all([api.getAdminStats(), api.getOrdersTimeseries(period)])
-      .then(([s, ts]) => {
+    Promise.all([api.getAdminStats(), api.getOrdersTimeseries(period), api.getAdminPeriodComparison(period)])
+      .then(([s, ts, cmp]) => {
         setStats(s);
         setSeries(ts);
+        setComparison(cmp);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -59,12 +63,9 @@ export default function DashboardPage() {
       }))
     : [];
 
-  const totalVolume = series.reduce((sum, p) => sum + Number(p.volumeTmt), 0);
-  const totalOrdersInPeriod = series.reduce((sum, p) => sum + p.orderCount, 0);
   const completedOrders = stats?.ordersByStatus.COMPLETED ?? 0;
   const pendingOrders = (stats?.ordersByStatus.PENDING_PAYMENT ?? 0) + (stats?.ordersByStatus.PAID ?? 0) + (stats?.ordersByStatus.PROCESSING ?? 0);
   const completionRate = stats?.totals.orders ? Math.round((completedOrders / stats.totals.orders) * 100) : 0;
-  const averageOrder = totalOrdersInPeriod ? totalVolume / totalOrdersInPeriod : 0;
 
   return (
     <div className="space-y-6">
@@ -88,12 +89,38 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard label={t("admin.dashboard.totalOrders")} value={stats.totals.orders} hint={`${completedOrders} завершено`} onClick={() => navigate("/orders")} />
-          <MetricCard label={t("admin.dashboard.ordersInPeriod", { days })} value={totalOrdersInPeriod} hint={`${pendingOrders} требуют внимания`} onClick={() => navigate("/orders")} />
-          <MetricCard label={t("admin.dashboard.volumeInPeriod", { days })} value={`${totalVolume.toFixed(0)} TMT`} hint={`Средний заказ ${averageOrder.toFixed(0)} TMT`} />
-          <MetricCard label={t("admin.dashboard.customers")} value={stats.totals.customers} hint={`${completionRate}% заказов завершено`} onClick={() => navigate("/users")} />
+      {stats && comparison && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard
+            label={t("admin.trend.ordersInPeriod", { days })}
+            value={comparison.current.orders}
+            trend={percentChange(comparison.current.orders, comparison.previous.orders)}
+            trendHint={t("admin.trend.vsPrevious", { days })}
+            hint={t("admin.trend.totalHint", { total: stats.totals.orders })}
+            onClick={() => navigate("/orders")}
+          />
+          <MetricCard
+            label={t("admin.trend.volumeInPeriod", { days })}
+            value={`${comparison.current.volumeTmt.toFixed(0)} TMT`}
+            trend={percentChange(comparison.current.volumeTmt, comparison.previous.volumeTmt)}
+            trendHint={t("admin.trend.vsPrevious", { days })}
+            hint={`${pendingOrders} требуют внимания`}
+          />
+          <MetricCard
+            label={t("admin.trend.averageOrder")}
+            value={`${average(comparison.current).toFixed(0)} TMT`}
+            trend={percentChange(average(comparison.current), average(comparison.previous))}
+            trendHint={t("admin.trend.vsPrevious", { days })}
+            hint={`${completionRate}% заказов завершено`}
+          />
+          <MetricCard
+            label={t("admin.trend.newCustomers", { days })}
+            value={comparison.current.newCustomers}
+            trend={percentChange(comparison.current.newCustomers, comparison.previous.newCustomers)}
+            trendHint={t("admin.trend.vsPrevious", { days })}
+            hint={t("admin.trend.totalHint", { total: stats.totals.customers })}
+            onClick={() => navigate("/users")}
+          />
         </div>
       )}
 
@@ -183,12 +210,57 @@ export default function DashboardPage() {
   );
 }
 
-function MetricCard({ label, value, hint, onClick }: { label: string; value: string | number; hint: string; onClick?: () => void }) {
+function average(p: AdminPeriodTotals) {
+  return p.orders ? p.volumeTmt / p.orders : 0;
+}
+
+function TrendBadge({ value, hint }: { value: number | null; hint: string }) {
+  const { t } = useTranslation();
+  if (value === null) {
+    return (
+      <span title={t("admin.trend.noBaseline")} className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+        —
+      </span>
+    );
+  }
+  const rounded = Math.abs(value) < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+  const tone =
+    rounded > 0 ? "bg-emerald-50 text-emerald-700" : rounded < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-500";
+  const Icon = rounded > 0 ? TrendingUp : rounded < 0 ? TrendingDown : Minus;
+  // Colour is never the only signal: the sign and the arrow say the same thing.
+  return (
+    <span title={hint} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${tone}`}>
+      <Icon className="h-3 w-3" aria-hidden="true" />
+      {rounded > 0 ? "+" : rounded < 0 ? "−" : ""}
+      {Math.abs(rounded).toLocaleString("ru-RU")}%
+      <span className="sr-only"> {hint}</span>
+    </span>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  trend,
+  trendHint,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  trend?: number | null;
+  trendHint?: string;
+  onClick?: () => void;
+}) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick} className="text-left disabled:cursor-default">
       <Card className={`h-full p-4 transition ${onClick ? "hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md" : ""}`}>
         <p className="text-xs font-medium uppercase text-slate-400">{label}</p>
-        <p className="mt-1 text-2xl font-bold">{value}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <p className="text-2xl font-bold tabular-nums">{value}</p>
+          {trend !== undefined && <TrendBadge value={trend} hint={trendHint ?? ""} />}
+        </div>
         <p className="mt-1 text-xs text-slate-500">{hint}</p>
       </Card>
     </button>
