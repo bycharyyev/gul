@@ -43,6 +43,7 @@ accessibility test (large text scale).
 | U-06 | P2 | The update prompt has no destination until `update_url` is set | device test |
 | U-07 | P2 | Release APK is larger than it needs to be | build |
 | U-08 | P2 | *Partly fixed 2026-09-28* (grouped sidebar, Ctrl+K). The admin console is large for a small team | code |
+| U-09 | P1 | *Fixed 2026-09-28.* Avatars broke across all three surfaces after the move to S3 | code |
 
 ### U-01 · "Completed" without delivery
 
@@ -91,6 +92,22 @@ without a native reviewer. Wrong wording in a payments product costs trust quick
   *Partly fixed 2026-09-28:* the sidebar is grouped into nine sections that fold, collapses to an
   icon rail, becomes a drawer on phones, and any section can be opened by name with Ctrl+K.
   Hiding sections a role cannot use is still open.
+
+### U-09 · Broken avatar rendering across web, admin and the API's own responses
+
+`avatarUrl`/`avatarPath` can be either a relative local-disk path (`/api/avatar/<uuid>.<ext>`) or a
+full absolute S3 URL, depending on which storage mode is active — a distinction the move to S3
+storage introduced that three call sites did not account for. The web
+storefront's header and account page, and the admin console's customer/staff table, all
+unconditionally prefixed `API_ORIGIN` onto the value, which produced an unparseable `src` for every
+user whose avatar was an absolute S3 URL — so any avatar uploaded after the S3 migration rendered
+broken everywhere it was shown. Server-side, `UsersService`'s `SAFE_SELECT` also returned the raw,
+unresolved `avatarPath` column on `listStaff`/`listCustomers`/`getCustomerDetail`/`createStaff`/
+`updateUser`, unlike `auth.service.ts` which already resolved it correctly.
+**Fixed 2026-09-28:** a shared `resolveAvatarSrc()` helper on the frontend (web) and a shared
+`toAvatarUrl()` helper on the backend (`apps/api/src/common/avatar-url.util.ts`) apply the
+absolute-vs-relative branch consistently everywhere the field is read or returned; `avatarPath` was
+renamed to `avatarUrl` on the shared DTO schema so the API always hands out a resolved value.
 
 ### Admin console against a reference template (2026-09-28)
 
