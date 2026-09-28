@@ -51,7 +51,7 @@ Two VPS, both bootstrapped identically from GitHub Actions (no hand-configured s
 
 - **Primary** (`DEPLOY_HOST`) — serves all production traffic: api/web/admin containers,
   read-write Postgres, Redis, live nginx+TLS.
-- **Secondary** (`91.184.250.89`) — warm standby, different subnet from primary. Streaming
+- **Secondary** (`SECONDARY_HOST`) — warm standby, different subnet from primary. Streaming
   Postgres replica (async), app containers shipped but not running day-to-day, nginx/TLS already
   installed and idle. Full reasoning and the failover runbook: see
   [`HIGH_AVAILABILITY.md`](HIGH_AVAILABILITY.md).

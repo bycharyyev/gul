@@ -5,13 +5,13 @@ few options along the way. Written after a real audit of the codebase, not aspir
 
 ## Topology
 
-| | Primary (`DEPLOY_HOST`) | Secondary (`91.184.250.89`) |
+| | Primary (`DEPLOY_HOST`) | Secondary (`SECONDARY_HOST`) |
 |---|---|---|
 | Role | Serves production traffic | **Also serves production traffic** — app tier is active/active |
 | Postgres | Read-write primary — the one authoritative database | Streaming replica (`pg-standby` container, async) **and** where secondary's own api container talks over the network by default |
 | App containers | api/web/admin running, DB = local | api/web/admin running continuously, DB = **primary's, over the network** (not the local standby — that's read-only) |
 | nginx + TLS | Live | Live, same certs, ready to serve real traffic today — just needs DNS to send it any |
-| Subnet | `109.238.95.0/24` | `91.184.250.0/24` — a genuinely different network |
+| Subnet | the primary provider's /24 | the secondary provider's /24 — a genuinely different network |
 | Redis | Read-write Redis used by both app nodes in normal operation | Warm local Redis is started only during database failover |
 
 Both are bootstrapped identically from GitHub Actions (`deploy` user, docker group, SSH key) —
@@ -159,7 +159,7 @@ down"** — nothing pages a human on that condition today. What exists:
      connects changes.
    - Starts the secondary's local Redis, switches `PRIMARY_REDIS_HOST=redis`, recreates API, and
      health-checks it against the freshly promoted database and emergency queue.
-5. **DNS**: if the second A record for `gulyaly.com` → `91.184.250.89` (see "what's left" below)
+5. **DNS**: if the second A record for `gulyaly.com` → `SECONDARY_HOST` (see "what's left" below)
    already exists, most clients fail over on their own via normal A-record retry — nothing to do.
    If it doesn't exist yet, add it via `manage-dns.yml` (Timeweb Cloud API — **not** the reg.ru
    panel; NS moved to Timeweb on 2026-08-27, see the "DNS management" section in `CLAUDE.md`). TTL
@@ -220,7 +220,7 @@ nothing financially authoritative lives only in Redis.
 
 `enable-active-active.yml` has run successfully — both nodes are up, both pass
 `/api/health/ready` against the same primary database. What's still needed is purely on the DNS
-side: **add a second A record for `gulyaly.com` pointing at `91.184.250.89`**, alongside the
+side: **add a second A record for `gulyaly.com` pointing at `SECONDARY_HOST`**, alongside the
 existing one for the primary. Until that exists, DNS still only ever hands out primary's IP, so
 the secondary — while fully healthy and serving correctly if asked — never actually receives real
 traffic today. This is no longer blocked on DNS-panel access (see the Timeweb API section above)

@@ -12,7 +12,7 @@ Prometheus/Grafana/Loki — see [[feedback-architecture-discuss-first-topup-hub|
   `/netdata-login` + `/netdata-check`) since Netdata has no auth of its own. Credentials: rotate
   via `.github/workflows/rotate-netdata-gate.yml` (generates fresh `GATE_PASS`/`GATE_SECRET` on
   the runner, applies them, never prints them to a log).
-- **Secondary** (`91.184.250.89`) runs Netdata as a streaming "child" — pushes its metrics to
+- **Secondary** (`SECONDARY_HOST`) runs Netdata as a streaming "child" — pushes its metrics to
   primary over port 19999, firewalled to secondary's IP only (`ufw`). No separate login/dashboard
   on secondary; view both nodes from the one primary dashboard's node switcher.
 - Set up / re-set-up via `.github/workflows/setup-observability.yml` (idempotent — safe to rerun
