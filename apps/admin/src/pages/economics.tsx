@@ -208,11 +208,15 @@ export default function EconomicsPage() {
           )}
         </Card>
 
-        {/* ---- Referral cost: styled distinctly as a cost, never a negative number ---- */}
-        <Card className="border-amber-200 bg-amber-50/40 p-5">
+        {/* ---- Referral cost: distinguished from the plain revenue cards by the "Издержка" label
+             badge alone, never a card-level color treatment -- amber and rose are both already
+             spoken for elsewhere in this app (pending/warning and error, respectively), and this
+             card is neither of those, so no tint reads correctly here. Zinc is unused anywhere
+             else in apps/admin, so it carries no borrowed status meaning. ---- */}
+        <Card className="p-5">
           <div className="mb-3 flex items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-500">Реферальная программа</h2>
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-600">
               Издержка
             </span>
           </div>
