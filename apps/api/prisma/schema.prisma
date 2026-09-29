@@ -1264,6 +1264,7 @@ enum SellerLedgerEntryType {
   SLIDE_AD_DEBIT
   REFERRAL_CREDIT
   ADJUSTMENT
+  MARKETPLACE_PLATFORM_FEE
 }
 
 // Append-only financial evidence. amountTmt is signed: credits positive, debits negative.
@@ -1540,6 +1541,12 @@ model GalleryOrder {
   createdAt       DateTime           @default(now())
   deliveredAt     DateTime?
 
+  // Frozen at order creation from MarketplaceSettings.takeRatePercent -- see that model's
+  // comment. Null for orders placed before this feature existed; those are read as 0% (no
+  // platform cut), never as "unknown", so historical deliveries keep crediting the seller in
+  // full exactly as they did before this column existed.
+  takeRatePercentSnapshot Decimal? @db.Decimal(5, 2)
+
   @@index([status])
   @@index([userId])
 }
@@ -1609,6 +1616,19 @@ model ReferralSettings {
   customerRewardTmt Decimal  @default(0) @db.Decimal(12, 2)
   sellerRewardTmt   Decimal  @default(0) @db.Decimal(12, 2)
   updatedAt         DateTime @updatedAt
+}
+
+// ---------- Marketplace settings (gallery/seller marketplace take rate) ----------
+// Not to be confused with the "marketplace purchase" vertical below (buying from a foreign
+// site on the customer's behalf) -- this is the commission the platform takes on GalleryOrder
+// sales made through a seller's own shop. Singleton row, same shape as ReferralSettings.
+// The rate is read live only when a GalleryOrder is *created* (GalleryService.createOrder
+// snapshots it onto GalleryOrder.takeRatePercentSnapshot); a later change here never rewrites
+// the economics of an order already placed, mirroring the Shipment pricing-snapshot precedent.
+model MarketplaceSettings {
+  id              String   @id @default("singleton")
+  takeRatePercent Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt       DateTime @updatedAt
 }
 
 // ---------- Cargo (logistics vertical) ----------

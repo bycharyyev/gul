@@ -12,6 +12,7 @@ function target(prisma: Record<string, unknown>) {
     null as never,
     null as never,
     null as never,
+    null as never,
   );
 }
 

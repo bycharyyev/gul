@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import EconomicsPage from "@/pages/economics";
 import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
 import CatalogPage from "@/pages/catalog";
@@ -71,6 +72,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/economics"
+        element={
+          <ProtectedRoute>
+            <EconomicsPage />
           </ProtectedRoute>
         }
       />

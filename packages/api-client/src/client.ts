@@ -17,6 +17,9 @@ import type {
   AdminSocialLinkInput,
   AdminStatsDto,
   AdminPeriodComparisonDto,
+  AdminEconomicsDto,
+  MarketplaceSettingsDto,
+  UpdateMarketplaceSettingsInput,
   AdminStoryInput,
   AdPricingDto,
   ApiKeyDto,
@@ -646,6 +649,19 @@ export class ApiClient {
     );
   }
 
+  // ---- Marketplace settings (gallery/seller take rate) ----
+
+  getMarketplaceSettings() {
+    return this.request<MarketplaceSettingsDto>("/admin/marketplace-settings");
+  }
+
+  updateMarketplaceSettings(input: UpdateMarketplaceSettingsInput) {
+    return this.request<MarketplaceSettingsDto>("/admin/marketplace-settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
   // ---- Admin: subdomains ----
   listSubdomains() {
     return this.request<ManagedSubdomainDto[]>("/admin/subdomains");
@@ -719,6 +735,11 @@ export class ApiClient {
     return this.request<OrdersTimeseriesPoint[]>(
       `/admin/stats/orders-timeseries?days=${days}`,
     );
+  }
+
+  /** Gross revenue/cost per stream -- see AdminEconomicsDto: deliberately never a margin figure. */
+  getAdminEconomics(days = 30) {
+    return this.request<AdminEconomicsDto>(`/admin/stats/economics?days=${days}`);
   }
 
   getDatabaseOverview() {

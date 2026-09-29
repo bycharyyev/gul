@@ -15,6 +15,7 @@ import type { GalleryOrderStatus } from "@prisma/client";
 import { canTransition } from "../common/state-machine";
 import { ADMIN_GALLERY_ORDER_TRANSITIONS, SELLER_GALLERY_ORDER_TRANSITIONS } from "./gallery-order-state-machine";
 import { SellerLedgerService } from "../seller-ledger/seller-ledger.service";
+import { MarketplaceSettingsService } from "../marketplace-settings/marketplace-settings.service";
 
 const SELLER_SELECT = { id: true, handle: true, shopName: true } as const;
 /** A ceiling on sections, so one account cannot fill a shop page with empty shelves. */
@@ -36,6 +37,7 @@ export class GalleryService {
     private email: EmailService,
     private auditLog: AuditLogService,
     private ledger: SellerLedgerService,
+    private marketplaceSettings: MarketplaceSettingsService,
     @Optional() private push?: PushEventsService,
   ) {}
 
@@ -104,6 +106,13 @@ export class GalleryService {
     const product = await this.prisma.galleryProduct.findUnique({ where: { id: dto.productId } });
     if (!product || !product.isEnabled) throw new BadRequestException("Товар недоступен");
 
+    // Snapshotted now, not read again at delivery: a later change to the platform's take rate
+    // must never rewrite the economics of an order already placed (same precedent as Shipment's
+    // pricing snapshot). House products (product.sellerId === null) still get a snapshot for
+    // consistency, but it is never applied -- updateOrderStatus's DELIVERED branch only ever
+    // credits a seller ledger, which a house product has none of.
+    const takeRatePercentSnapshot = await this.marketplaceSettings.getCurrentTakeRatePercent();
+
     const order = await this.prisma.galleryOrder.create({
       data: {
         userId,
@@ -114,6 +123,7 @@ export class GalleryService {
         deliveryAddress: dto.deliveryAddress,
         cardMessage: dto.cardMessage,
         amountTmt: product.priceTmt,
+        takeRatePercentSnapshot,
       },
       include: ORDER_INCLUDE,
     });
@@ -316,16 +326,32 @@ export class GalleryService {
     // Claim the not-yet-DELIVERED -> DELIVERED transition atomically: two concurrent calls for
     // the same order (a double-click, a retried request) would otherwise both read
     // order.status !== "DELIVERED" before either write commits and both credit the seller.
-    const credited = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.galleryOrder.updateMany({
         where: { id, status: order.status },
         data: { status, deliveredAt: new Date() },
       });
-      if (claimed.count === 0 || !order.product.sellerId) return false;
+      if (claimed.count === 0 || !order.product.sellerId) return null;
+
+      // Frozen at order creation, never read live here -- see GalleryOrder.takeRatePercentSnapshot's
+      // comment. Null (an order placed before this feature existed) reads as 0%, so an old order
+      // credits its seller exactly as it always did: no cut, no extra ledger row.
+      const takeRatePercent = order.takeRatePercentSnapshot ? Number(order.takeRatePercentSnapshot) : 0;
+      const platformCutTmt =
+        takeRatePercent > 0
+          ? Math.round(((Number(order.amountTmt) * takeRatePercent) / 100) * 100) / 100
+          : 0;
+      // Subtraction, never independently rounded -- the two legs must always sum back to exactly
+      // the gross amount, and rounding each side on its own could drift them apart by a cent.
+      const netToSellerTmt = Number(order.amountTmt) - platformCutTmt;
+
       await tx.seller.update({
         where: { id: order.product.sellerId },
-        data: { balanceTmt: { increment: order.amountTmt } },
+        data: { balanceTmt: { increment: netToSellerTmt } },
       });
+      // Unchanged: still the full gross sale, so existing "gross sales" analytics built on this
+      // entry type keep working. The platform's cut is the separate debit below, not a smaller
+      // credit here.
       await this.ledger.record(tx, {
         sellerId: order.product.sellerId,
         type: "GALLERY_SALE_CREDIT",
@@ -334,13 +360,26 @@ export class GalleryService {
         referenceId: order.id,
         idempotencyKey: `gallery-order:${order.id}:delivered`,
       });
-      return true;
+      if (platformCutTmt > 0) {
+        await this.ledger.record(tx, {
+          sellerId: order.product.sellerId,
+          type: "MARKETPLACE_PLATFORM_FEE",
+          amountTmt: -platformCutTmt,
+          referenceType: "GalleryOrder",
+          referenceId: order.id,
+          idempotencyKey: `gallery-order:${order.id}:platform-fee`,
+          metadata: { takeRatePercent },
+        });
+      }
+      return { platformCutTmt, netToSellerTmt };
     });
-    if (credited && order.product.sellerId) {
+    if (result && order.product.sellerId) {
       this.auditLog.record(actorUserId, "seller.balance_credit", "Seller", order.product.sellerId, {
         reason: "gallery_order_delivered",
         orderId: id,
-        amountTmt: order.amountTmt,
+        amountTmt: result.netToSellerTmt,
+        grossAmountTmt: order.amountTmt,
+        platformCutTmt: result.platformCutTmt,
       });
     }
 

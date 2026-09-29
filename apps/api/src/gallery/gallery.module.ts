@@ -6,9 +6,17 @@ import { TelegramBotModule } from "../telegram-bot/telegram-bot.module";
 import { AdminTelegramBotModule } from "../admin-telegram-bot/admin-telegram-bot.module";
 import { EmailModule } from "../email/email.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { MarketplaceSettingsModule } from "../marketplace-settings/marketplace-settings.module";
 
 @Module({
-  imports: [SellersModule, TelegramBotModule, AdminTelegramBotModule, EmailModule, NotificationsModule],
+  imports: [
+    SellersModule,
+    TelegramBotModule,
+    AdminTelegramBotModule,
+    EmailModule,
+    NotificationsModule,
+    MarketplaceSettingsModule,
+  ],
   controllers: [GalleryController],
   providers: [GalleryService],
   // The Seller API reaches a shop's products through the same service the cabinet uses.

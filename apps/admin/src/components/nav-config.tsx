@@ -30,6 +30,7 @@ import {
   MessagesSquare,
   Scale,
   Gauge,
+  PieChart,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "@topup-hub/i18n";
@@ -56,6 +57,7 @@ export function useNavGroups(): NavGroup[] {
       label: t("admin.navGroup.overview"),
       items: [
         { to: "/", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
+        { to: "/economics", label: t("admin.nav.economics"), icon: PieChart },
         { to: "/analytics", label: t("admin.nav.analytics"), icon: BarChart3 },
       ],
     },
