@@ -301,9 +301,9 @@
       "id": "TASK-7e0a6540",
       "title": "Referral program with auto-generated changeable username",
       "description": "Port and adapt the well-designed referral system already built on the (unmerged, stale) feature/sku-username-referrals branch (based at commit 0d4cff2, missing this session's 16 commits worth of main -- Document model, health-check, SSL automation, agent-orchestrator, monitoring page) onto current main. That branch's design (see apps/api/src/referrals/referrals.service.ts and the schema.prisma diff on that branch): User.referralCode (unique, auto-generated 8-char alphanumeric at registration, retry-loop for uniqueness), User.referredByCode/referredById (denormalized audit trail), User.referralBalanceTmt (accrued reward), a Referral model tracking PENDING->REWARDED->VOID lifecycle keyed to a qualifying order, a ReferralSettings singleton (enabled toggle + configurable customer/seller reward amounts), automatic capped discount applied at order-creation via a race-safe conditional updateMany (not read-then-write), and an admin ledger/leaderboard page. Sellers already use their existing Seller.handle (already on main) as their own referral code -- do not duplicate that. NEW requirement not in the old branch: the user must be able to CHANGE their auto-generated referralCode/username later (uniqueness re-checked on change, reject duplicates). Do NOT port the old branch's apps/seller extraction or its seller-login-by-handle auth.service.ts changes -- out of scope, unrelated, and would conflict with this session's work already on main. Must coexist cleanly with the current Document model and everything else added to main since 0d4cff2. This is a prerequisite for the separate 'full profile editing' task, which will surface/let the user change this username in the apps/web account page.",
-      "state": "PRODUCTION",
+      "state": "COMPLETED",
       "createdAt": "2026-08-22T15:45:00.789Z",
-      "updatedAt": "2026-08-22T19:27:11.867Z",
+      "updatedAt": "2026-09-28T19:39:21.775Z",
       "dependencies": [],
       "approvalPolicy": {
         "qa": "AUTO",
@@ -366,6 +366,13 @@
           "timestamp": "2026-08-22T18:52:48.801Z",
           "result": "PASSED",
           "summary": "Cold-start staging validation: killed the api dev process, restarted from scratch, confirmed ReferralsController + AdminReferralsController map cleanly on boot with no DI errors. Full referral lifecycle re-verified against the freshly-started process (register with code -> pending -> order completes -> reward credited -> discount applied on a new order -> username change -> admin ledger/leaderboard render real data in the browser). Sits at the production_deployment gate now alongside its dependent TASK-474505ac; per user instruction both wait for local review before deploy."
+        },
+        {
+          "agent": "devops",
+          "state": "PRODUCTION",
+          "timestamp": "2026-09-28T19:39:21.773Z",
+          "result": "PASSED",
+          "summary": "Corrected stale bookkeeping: code has been live in production since before the 2026-09-23 git history reset (confirmed via live 401 on /api/referrals/me and deploy.yml run history matching current main HEAD). Fresh independent re-review against current main: SAFE AS-IS -- auth/IDOR/race-condition/i18n/typecheck all clean, only a cosmetic stale schema comment noted."
         }
       ]
     },
@@ -373,9 +380,9 @@
       "id": "TASK-474505ac",
       "title": "Full customer profile editing on account page",
       "description": "The apps/web /account page currently only shows order history and the documents section (DOCS-001) -- there is no way for a customer to edit their own info. Add a proper profile editor: full name, phone number, password change (requires current password), and a profile picture (avatar upload -- follow the existing Document upload pattern in apps/api/src/documents/ for local-disk storage conventions, but this is a distinct concern: one avatar per user, replaces on re-upload rather than accumulating, no per-user quota needed). Also surface the user's auto-generated username/referral code (from TASK-7e0a6540, must land first or in parallel) with a 'change username' control, client-side validating the same format/uniqueness rules as the backend. Depends on TASK-7e0a6540 for the username/referralCode field and its change-endpoint; can proceed on name/phone/password/avatar in parallel if that lands first. User explicitly wants this fully built out ('a full profile'), asked to decide autonomously what belongs (e.g. don't ask permission for each field), and wants critical invariants respected: no duplicate usernames, no duplicate user IDs (already guaranteed by cuid()/unique constraints -- verify, don't weaken). Build and verify locally first (web dev server); do not deploy to the VPS until the user reviews.",
-      "state": "PRODUCTION",
+      "state": "COMPLETED",
       "createdAt": "2026-08-22T15:45:28.200Z",
-      "updatedAt": "2026-08-22T19:27:33.908Z",
+      "updatedAt": "2026-09-28T19:39:23.060Z",
       "dependencies": [],
       "approvalPolicy": {
         "qa": "AUTO",
@@ -438,6 +445,120 @@
           "timestamp": "2026-08-22T18:51:40.534Z",
           "result": "PASSED",
           "summary": "Staging-equivalent cold validation performed: killed the warm api process entirely, restarted from scratch, confirmed clean boot with all new routes mapped (Avatar, Referrals, AdminReferrals) and zero DI/module wiring errors. Ran the full golden path fresh against the cold-started process: register -> edit profile (name+phone) via the actual rendered web UI (not just curl) -> confirmed change persisted server-side -> password change -> avatar upload/replace/delete -> username change, all clean. Task now sits at the production_deployment gate; per explicit user instruction this stops here for their own local review before any push to main / VPS deploy."
+        },
+        {
+          "agent": "devops",
+          "state": "PRODUCTION",
+          "timestamp": "2026-09-28T19:39:23.058Z",
+          "result": "PASSED",
+          "summary": "Corrected stale bookkeeping: code has been live in production since before the 2026-09-23 git history reset (confirmed via live 401 on POST /api/avatar and deploy.yml run history matching current main HEAD). Fresh independent re-review found the deploy itself is sound (auth/ownership/storage/validation all clean) but surfaced a real, currently-live bug: avatar rendering broken in site-header.tsx, account/page.tsx, and admin/users.tsx since the S3 migration (client code doesn't branch on relative-vs-absolute avatarUrl). Follow-up fix needed, tracked separately -- not a blocker to this task's own completion since the original scope (profile editing + avatar upload/replace/delete) is correctly deployed and functioning; the bug is a frontend rendering regression from an unrelated later change."
+        }
+      ]
+    },
+    "AVATAR-FIX-001": {
+      "id": "AVATAR-FIX-001",
+      "title": "Fix broken avatar rendering since S3 migration",
+      "description": "Avatar rendering is broken in production in 3 places since the S3 migration: apps/web/src/components/site-header.tsx:76, apps/web/src/app/account/page.tsx:126, and apps/admin/src/pages/users.tsx:50-56 (CustomerAvatar). Root cause: the backend's avatarUrl/avatarPath can be either a relative local path (/api/avatar/<uuid>.<ext>) or a full absolute S3 URL (https://open.s3.regru.cloud/avatars/<uuid>.<ext>) depending on storage mode, but these 3 frontend call sites unconditionally prefix API_ORIGIN onto it, producing a garbage unparseable URL when the value is already absolute. The correct fix pattern already exists and is proven in this codebase: apps/api/src/social-feed/social-feed.service.ts:412-420 branches with avatarPath.startsWith('http') ? avatarPath : (prefixed). Apply the equivalent branch at all 3 broken call sites. For apps/admin/src/pages/users.tsx specifically, the cleaner fix may be to stop leaking the raw storage-backend-dependent avatarPath from UsersService's SAFE_SELECT and instead resolve it server-side the same way auth.service.ts's toAvatarUrl() does -- use your own judgment on which approach is cleaner given the actual current code, but the end result must be correct rendering in both local-disk and S3 storage modes.",
+      "state": "COMPLETED",
+      "createdAt": "2026-09-28T19:57:48.571Z",
+      "updatedAt": "2026-09-29T08:52:10.633Z",
+      "dependencies": [],
+      "approvalPolicy": {
+        "qa": "AUTO",
+        "security": "AUTO",
+        "devops": "AUTO",
+        "staging": "AUTO",
+        "production_deployment": "HUMAN_APPROVAL"
+      },
+      "attempts": {
+        "qa": 0,
+        "security": 0,
+        "devops": 0
+      },
+      "artifacts": [
+        {
+          "agent": "planner",
+          "state": "PLANNING",
+          "timestamp": "2026-09-28T20:00:11.343Z",
+          "result": "COMPLETED",
+          "summary": "Root cause confirmed: web's 2 call sites need the same startsWith(http) branch already proven in social-feed.service.ts. Admin's case is structurally different -- UsersService leaks the raw unresolved avatarPath DB column across 5 return sites; cleaner fix is resolving it server-side into avatarUrl (extract shared toAvatarUrl helper) and renaming the DTO field, not patching admin client-side. No migration needed, no dependency between the two fixes."
+        },
+        {
+          "agent": "designer",
+          "state": "DESIGN",
+          "timestamp": "2026-09-28T20:01:15.829Z",
+          "result": "COMPLETED",
+          "summary": "Confirmed zero UI/UX design surface -- all 3 sites already have correct fallback states (icon/placeholder/initials) for the no-avatar case; fix only touches URL construction / DTO field, not markup, layout, or a11y. No design changes needed."
+        },
+        {
+          "agent": "developer",
+          "state": "READY_FOR_DEVELOPMENT",
+          "timestamp": "2026-09-28T20:08:18.350Z",
+          "result": "COMPLETED",
+          "summary": "Fixed on branch fix/avatar-url-rendering (commit 5b49f6e, off main, not pushed). Web: shared resolveAvatarSrc helper applied at both call sites. API: extracted shared avatar-url util, UsersService now resolves avatarUrl server-side across all 5 return sites (incl. createStaff/updateUser) instead of leaking raw avatarPath; DTO field renamed. Admin: CustomerAvatar consumes the new resolved field. Tests added for the actual regression (absolute vs relative branch). typecheck clean across all 8 packages, apps/api jest 834/837 (3 unrelated pre-existing skips)."
+        },
+        {
+          "agent": "qa",
+          "state": "QA",
+          "timestamp": "2026-09-28T20:13:40.241Z",
+          "result": "PASSED",
+          "summary": "Independently re-ran typecheck (fresh, --force) and full jest suite (834/837, matches claim). Verified all 5 UsersService return sites genuinely return resolved avatarUrl by reading the diff. Repo-wide grep confirms no stale .avatarPath reference to the renamed DTO field anywhere (web/admin/mobile) -- a separate unrelated avatarPath field in chat/social-feed/notifications is untouched and correctly so. Null-fallback logic unchanged at all 3 sites. Edge cases (empty string, malformed http-prefixed value) reasoned through, no regression. Minor non-blocking note: test coverage for the rename only directly exercises 1 of 5 UsersService sites (others verified via code reading, not a new test)."
+        },
+        {
+          "agent": "security",
+          "state": "SECURITY_REVIEW",
+          "timestamp": "2026-09-28T20:16:52.420Z",
+          "result": "PASSED",
+          "summary": "SSRF/open-redirect concern investigated and ruled out: avatarPath is written only by server (randomUUID local filename, or storage.uploadPublic's own S3 URL construction) -- never attacker-influenced, upload gated by MIME allowlist, GET path validated against STORED_NAME_PATTERN. No auth/guard changes (grep confirms zero @Roles/@UseGuards hits in the diff). Extraction of toAvatarUrl into shared util is byte-identical to the original. No new dependencies. Data exposure unchanged or improved (S3-mode exposure identical to before, local-mode arguably less revealing than the old raw filename)."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-09-28T20:29:33.820Z",
+          "result": "FAILED",
+          "summary": "Local pnpm build succeeded, branch pushed, PR #33 opened. But the repo's docs-check CI gate (Docs facts workflow) FAILED: docs/analysis/FACTS.md wasn't regenerated after the new avatar-url.util.spec.ts test shifted the tracked test count -- a real, repo-enforced requirement per CLAUDE.md ('Docs travel with code'), not flaky CI. No separate typecheck/build CI gate exists on PRs in this repo (deploy.yml only triggers on push to main) -- the local pnpm build is the only build verification pre-merge. Needs: pnpm docs:facts, commit, push, re-verify docs-check passes."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-09-28T20:34:26.936Z",
+          "result": "PASSED",
+          "summary": "Regenerated FACTS.md (minimal diff, exactly matches branch changes), added U-09 finding to docs/analysis/UX_AND_BEHAVIOR.md marked Fixed 2026-09-28, pushed as a separate follow-up commit 6ad604e (original reviewed commit 5b49f6e untouched). docs-check CI now green. PR #33 is OPEN/MERGEABLE, only registered check passing, mobile-ci correctly did not trigger (no apps/mobile changes)."
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-09-28T20:48:10.130Z",
+          "result": "FAILED",
+          "summary": "Environment-blocked, not a code issue: Docker Desktop's backend is crashing on startup (stale/corrupted AI-inference unix socket, unrelated to this repo), so Postgres/Redis never came up locally and no dev servers, test account, avatar upload, or screenshots could be produced. Agent correctly refused to touch the OS-level socket file (outside repo scope, no standing authorization). Fresh code-level review (5th independent look) still confirms the fix is correct: reviewed the actual diff, confirmed avatar-url.util.spec.ts covers the exact regression, and confirmed the extracted pattern is byte-identical to social-feed.service.ts's already-live-in-production S3-mode handling."
+        },
+        {
+          "agent": "devops",
+          "state": "STAGING",
+          "timestamp": "2026-09-29T08:32:07.867Z",
+          "result": "PASSED",
+          "summary": "Staging visual check waived by explicit human decision (local Docker Desktop is broken, unrelated to code) -- proceeding on the strength of 5 independent code-level passes (Developer, QA, Security, DevOps x2) confirming correctness, a dedicated regression unit test, and the fact the exact same URL-resolution pattern is already live in production (social-feed.service.ts) correctly serving S3-mode avatars today. User explicit instruction: 'Мержи на основе код-ревью, без визуальной проверки.'"
+        },
+        {
+          "agent": "devops",
+          "state": "PRODUCTION",
+          "timestamp": "2026-09-29T08:35:19.132Z",
+          "result": "FAILED",
+          "summary": "Not a code/CI/deploy failure: PR #33 confirmed OPEN/MERGEABLE/CLEAN, docs-check still green, nothing regressed. The actual merge command (gh pr merge 33 --squash --delete-branch) was blocked by the harness's own permission classifier, tagged [Production Deploy], with an explicit instruction not to route around it via another tool or subagent and to hand back to the user. This requires the human to either run the merge themselves or grant permission for this action -- it is not something a retry of this pipeline step can resolve."
+        },
+        {
+          "agent": "devops",
+          "state": "DEVOPS",
+          "timestamp": "2026-09-29T08:51:05.169Z",
+          "result": "PASSED",
+          "summary": "Merged PR #33 (squash, commit 62f6225) directly by the orchestrating session after the human granted explicit permission for the merge command that the harness's auto-mode classifier had blocked. Full deploy.yml run (36544148672) succeeded end to end: build-and-test (typecheck/tests/migration-safety/architecture-boundary checks), all 3 Docker images built+pushed to GHCR, deploy to primary with health-check-gated auto-rollback, deploy-secondary, smoke tests green on both primary and secondary. Live-verified post-deploy: /api/health/ready returns ok, /api/referrals/me still 401 (unrelated endpoints unaffected). Avatar fix is now live in production."
+        },
+        {
+          "agent": "orchestrator",
+          "state": "STAGING",
+          "timestamp": "2026-09-29T08:52:10.630Z",
+          "result": "COMPLETED",
+          "summary": "Bookkeeping correction: PR #33 was actually merged (commit 62f6225) and deploy.yml run 36544148672 succeeded fully (build-and-test, all 3 images, deploy+deploy-secondary with health-check-gated auto-rollback, smoke tests green on both hosts). Live-verified: /api/health/ready ok, unrelated endpoints unaffected. The prior PASSED record was misattributed to the DEVOPS build state by the retry-routing logic; this task is genuinely COMPLETED, not pending another staging/production cycle."
         }
       ]
     }
