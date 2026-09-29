@@ -11,6 +11,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import { randomBytes, createHash } from "crypto";
 import { countryFromPhone } from "../common/phone-country";
+import { toAvatarUrl } from "../common/avatar-url.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { ReferralsService } from "../referrals/referrals.service";
 import { ACCESS_TOKEN_SECRET } from "./jwt-secret";
@@ -28,14 +29,6 @@ import type { UpdateMeDto } from "./dto/update-me.dto";
 /// back within one request.
 const REFRESH_GRACE_MS = 30_000;
 import type { UpdateLocaleDto } from "./dto/update-locale.dto";
-
-// avatarPath is either a bare local-disk filename or a full S3 public URL (see
-// avatar.service.ts) -- pass the URL through as-is, only build the API-proxy path for the
-// legacy/local-disk case.
-function toAvatarUrl(avatarPath: string | null): string | null {
-  if (!avatarPath) return null;
-  return avatarPath.startsWith("http") ? avatarPath : `/api/avatar/${avatarPath}`;
-}
 
 function ms(duration: string): number {
   const match = /^(\d+)([smhd])$/.exec(duration);

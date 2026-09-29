@@ -21,7 +21,8 @@ import {
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
 import { useTranslation, translateError, LOCALE_BCP47 } from "@topup-hub/i18n";
-import { api, isAuthenticated, API_ORIGIN } from "@/lib/api";
+import { api, isAuthenticated } from "@/lib/api";
+import { resolveAvatarSrc } from "@/lib/avatar";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,7 +124,7 @@ function ProfileSection({
         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
           {profile.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- user-uploaded, arbitrary origin/size, not worth next/image here
-            <img src={`${API_ORIGIN}${profile.avatarUrl}`} alt="" className="h-full w-full object-cover" />
+            <img src={resolveAvatarSrc(profile.avatarUrl) ?? undefined} alt="" className="h-full w-full object-cover" />
           ) : (
             <UserCircle size={64} className="text-slate-300 dark:text-slate-600" aria-hidden="true" />
           )}

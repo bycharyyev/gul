@@ -5,9 +5,11 @@ describe("UsersService customer detail", () => {
     const lastSeenAt = new Date("2026-09-23T10:00:00.000Z");
     const prisma = {
       user: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({ id: "customer-1", phone: "+99360000000" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "customer-1",
+          phone: "+99360000000",
+          avatarPath: null,
+        }),
       },
       order: { findMany: jest.fn().mockResolvedValue([]) },
       pushToken: {
@@ -24,7 +26,7 @@ describe("UsersService customer detail", () => {
     const service = new UsersService(prisma as never, {} as never, {} as never);
 
     await expect(service.getCustomerDetail("customer-1")).resolves.toEqual({
-      user: { id: "customer-1", phone: "+99360000000" },
+      user: { id: "customer-1", phone: "+99360000000", avatarUrl: null },
       orders: [],
       devices: { count: 3, lastAppSeenAt: lastSeenAt, android: 2, ios: 1 },
     });

@@ -260,7 +260,7 @@ export const staffUserSchema = z.object({
   role: z.enum(USER_ROLES),
   isBlocked: z.boolean(),
   createdAt: z.string(),
-  avatarPath: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
 });
 export type StaffUserDto = z.infer<typeof staffUserSchema>;
 

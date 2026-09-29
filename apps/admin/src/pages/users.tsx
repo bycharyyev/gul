@@ -47,10 +47,15 @@ function CustomerAvatar({
   user: CustomerDto | CustomerDetailDto["user"];
   className?: string;
 }) {
-  if (user.avatarPath)
+  // avatarUrl is already resolved server-side into either a relative API-proxy path
+  // (/api/avatar/<name>) or, under S3 storage, a full absolute URL. Admin runs on its own
+  // origin/port, so a relative result still needs API_ORIGIN prefixed -- but prefixing it onto an
+  // already-absolute URL produced a garbage unparseable src, which is why every avatar broke once
+  // storage moved to S3.
+  if (user.avatarUrl)
     return (
       <img
-        src={`${API_ORIGIN}/api/avatar/${encodeURIComponent(user.avatarPath)}`}
+        src={user.avatarUrl.startsWith("http") ? user.avatarUrl : `${API_ORIGIN}${user.avatarUrl}`}
         alt=""
         className={`shrink-0 object-cover ${className}`}
       />
