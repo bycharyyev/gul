@@ -5,15 +5,24 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./dictionaries": {
+      "types": "./dist/dictionaries.d.ts",
+      "default": "./dist/dictionaries.js"
+    },
+    "./locales/web/*": {
+      "types": "./dist/locales/web/*.d.ts",
+      "default": "./dist/locales/web/*.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+    "build": "tsc -p tsconfig.json && node scripts/build-locales.mjs",
+    "dev": "tsc -p tsconfig.json && node scripts/build-locales.mjs && tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
