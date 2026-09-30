@@ -12,11 +12,33 @@ const STORY_DURATION_MS = 6000;
 export function StoriesRow() {
   const { t } = useTranslation();
   const [stories, setStories] = useState<StoryDetailDto[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    api.listStories().then(setStories).catch(() => {});
+    api
+      .listStories()
+      .then(setStories)
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
+
+  // Reserve the row's height while loading: popping in after first paint pushed the top-up
+  // wizard and everything under it down (part of the homepage's CLS).
+  if (!loaded) {
+    return (
+      <section aria-hidden="true" className="border-b border-slate-200/70 dark:border-white/10">
+        <div className="mx-auto flex max-w-6xl gap-4 overflow-hidden px-4 py-5">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="flex shrink-0 flex-col items-center gap-1.5">
+              <span className="h-16 w-16 animate-pulse rounded-full bg-slate-200/70 dark:bg-white/10" />
+              <span className="h-4 w-12 animate-pulse rounded bg-slate-200/70 dark:bg-white/10" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   if (stories.length === 0) return null;
 
