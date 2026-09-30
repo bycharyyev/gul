@@ -180,7 +180,7 @@ export function TopupWizard() {
               <button
                 key={service.id}
                 onClick={() => selectService(service)}
-                className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 text-sm font-medium transition hover:border-brand-400 hover:bg-brand-50 dark:border-white/10 dark:hover:bg-white/5"
+                className="flex h-[122px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-4 text-sm font-medium transition hover:border-brand-400 hover:bg-brand-50 dark:border-white/10 dark:hover:bg-white/5"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-brand-100 to-accent-100 text-brand-700 dark:from-brand-900/40 dark:to-accent-900/40 dark:text-brand-200">
                   {service.logoUrl ? (
@@ -189,21 +189,24 @@ export function TopupWizard() {
                     service.name.slice(0, 2).toUpperCase()
                   )}
                 </span>
-                {service.name}
+                <span className="line-clamp-2 text-center">{service.name}</span>
               </button>
             ))}
             {services.length === 0 && !error && (
               // Placeholder tiles, not a one-line "loading" note: the grid growing from one line to
-              // several rows after first paint pushed the rest of the homepage down (CLS).
+              // several rows after first paint pushed the rest of the homepage down (CLS). Tiles are a
+              // fixed 122px (a two-line name) so a placeholder is exactly a real tile; the count
+              // mirrors the live catalog (8 services) -- a catalog of a different size still shifts
+              // by the row difference.
               <>
                 <p role="status" className="sr-only">
                   {t("web.topupWizard.loadingServices")}
                 </p>
-                {Array.from({ length: 6 }, (_, i) => (
+                {Array.from({ length: 8 }, (_, i) => (
                   <div
                     key={i}
                     aria-hidden="true"
-                    className="flex h-[108px] animate-pulse flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 dark:border-white/10"
+                    className="flex h-[122px] animate-pulse flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-4 dark:border-white/10"
                   >
                     <span className="h-10 w-10 rounded-lg bg-slate-200/70 dark:bg-white/10" />
                     <span className="h-4 w-20 rounded bg-slate-200/70 dark:bg-white/10" />
