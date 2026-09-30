@@ -39,12 +39,15 @@ export function ImageWithFallback({
   alt,
   className,
   sizes = "100vw",
+  fetchPriority,
 }: {
   src: string | null | undefined;
   alt: string;
   className?: string;
   /** The rendered width, as for <img sizes>; picks which resized variant the browser downloads. */
   sizes?: string;
+  /** "high" for the page's largest image (LCP), "low" for ones that are present but not shown yet. */
+  fetchPriority?: "high" | "low" | "auto";
 }) {
   const [stage, setStage] = useState<"optimized" | "raw" | "broken">(src ? "optimized" : "broken");
 
@@ -70,10 +73,13 @@ export function ImageWithFallback({
         alt={alt}
         className={className}
         decoding="async"
+        fetchPriority={fetchPriority}
         onError={() => setStage("raw")}
       />
     );
   }
 
-  return <img src={src} alt={alt} className={className} onError={() => setStage("broken")} />;
+  return (
+    <img src={src} alt={alt} className={className} fetchPriority={fetchPriority} onError={() => setStage("broken")} />
+  );
 }

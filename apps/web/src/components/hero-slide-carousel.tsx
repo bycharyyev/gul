@@ -9,11 +9,13 @@ import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 
 const AUTO_ADVANCE_MS = 6000;
 
-export function HeroSlideCarousel() {
+/** `initialSlides` comes from the server-rendered homepage; null means that fetch failed and the
+ *  carousel loads its own copy in the browser. */
+export function HeroSlideCarousel({ initialSlides = null }: { initialSlides?: HomeSlideDetailDto[] | null }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const [slides, setSlides] = useState<HomeSlideDetailDto[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [slides, setSlides] = useState<HomeSlideDetailDto[]>(initialSlides ?? []);
+  const [loaded, setLoaded] = useState(initialSlides !== null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -22,11 +24,14 @@ export function HeroSlideCarousel() {
   const tiltRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (loaded) return;
     api
       .listHomeSlides()
       .then(setSlides)
       .catch(() => {})
       .finally(() => setLoaded(true));
+    // Mount-only: `loaded` only says whether the server already supplied the slides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -160,6 +165,7 @@ export function HeroSlideCarousel() {
                 src={s.imageUrl}
                 alt=""
                 sizes="(min-width: 1152px) 1120px, calc(100vw - 32px)"
+                fetchPriority={i === 0 ? "high" : "low"}
                 className={`absolute inset-0 h-full w-full object-cover ${
                   reducedMotion ? "" : "transition-opacity duration-500 ease-out"
                 } ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}
