@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { cn } from "@/lib/utils";
 
 type Step = "service" | "details" | "payment" | "done";
@@ -183,8 +184,7 @@ export function TopupWizard() {
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-brand-100 to-accent-100 text-brand-700 dark:from-brand-900/40 dark:to-accent-900/40 dark:text-brand-200">
                   {service.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={service.logoUrl} alt="" className="h-full w-full object-cover" />
+                    <ImageWithFallback src={service.logoUrl} alt="" sizes="40px" className="h-full w-full object-cover" />
                   ) : (
                     service.name.slice(0, 2).toUpperCase()
                   )}

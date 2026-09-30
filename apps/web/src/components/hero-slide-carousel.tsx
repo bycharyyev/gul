@@ -139,6 +139,7 @@ export function HeroSlideCarousel() {
                 key={s.id}
                 src={s.imageUrl}
                 alt=""
+                sizes="(min-width: 1152px) 1120px, calc(100vw - 32px)"
                 className={`absolute inset-0 h-full w-full object-cover ${
                   reducedMotion ? "" : "transition-opacity duration-500 ease-out"
                 } ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}

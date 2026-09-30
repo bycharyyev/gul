@@ -641,6 +641,7 @@ export function CommerceFeed() {
                   <ImageWithFallback
                     src={post.media.url}
                     alt={post.media.alt}
+                    sizes="(min-width: 640px) 600px, 100vw"
                     className="aspect-[4/5] w-full object-cover"
                   />
                 )}
@@ -659,6 +660,7 @@ export function CommerceFeed() {
                       <ImageWithFallback
                         src={post.product.image}
                         alt=""
+                        sizes="64px"
                         className="h-16 w-16 rounded-xl object-cover"
                       />
                       <div className="min-w-0 flex-1">
