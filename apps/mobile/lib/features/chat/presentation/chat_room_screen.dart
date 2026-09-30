@@ -11,6 +11,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/format/dates.dart';
 import '../../../core/l10n/strings.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/remote_image.dart';
 import '../domain/chat_models.dart';
 import 'chat_inbox_screen.dart';
 import 'group_info_screen.dart';
@@ -547,8 +548,14 @@ class _AttachmentView extends StatelessWidget {
         // Capped, or a tall photo fills the screen and pushes the conversation out of view.
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220),
-          child: Image.network(
-            attachment.url,
+          child: Image(
+            image: cachedImageProvider(
+              attachment.url,
+              decodeWidth: decodeWidthFor(
+                Size(MediaQuery.sizeOf(context).width, 220),
+                MediaQuery.devicePixelRatioOf(context),
+              ),
+            ),
             fit: BoxFit.cover,
             // A broken or still-loading picture must not collapse the bubble to nothing.
             errorBuilder: (_, _, _) =>

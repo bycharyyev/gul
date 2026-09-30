@@ -378,7 +378,13 @@ class _PostMeta extends StatelessWidget {
               backgroundColor: Colors.white24,
               backgroundImage: post.authorAvatarUrl == null
                   ? null
-                  : NetworkImage(post.authorAvatarUrl!),
+                  : cachedImageProvider(
+                      post.authorAvatarUrl!,
+                      decodeWidth: decodeWidthFor(
+                        const Size.square(32),
+                        MediaQuery.devicePixelRatioOf(context),
+                      ),
+                    ),
             ),
             const SizedBox(width: 9),
             Expanded(

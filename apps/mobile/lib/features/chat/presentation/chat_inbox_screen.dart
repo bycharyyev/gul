@@ -7,6 +7,7 @@ import '../../../app/shell.dart';
 import '../../../core/format/dates.dart';
 import '../../../core/l10n/strings.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/remote_image.dart';
 import '../domain/chat_models.dart';
 import 'channels_screen.dart';
 import 'chat_room_screen.dart';
@@ -257,7 +258,13 @@ class _ConversationTile extends StatelessWidget {
           foregroundImage:
               (conversation.imageUrl != null &&
                   conversation.imageUrl!.isNotEmpty)
-              ? NetworkImage(conversation.imageUrl!)
+              ? cachedImageProvider(
+                  conversation.imageUrl!,
+                  decodeWidth: decodeWidthFor(
+                    const Size.square(40),
+                    MediaQuery.devicePixelRatioOf(context),
+                  ),
+                )
               : null,
           // Shown when there is no picture, and again if one fails to load.
           child: Icon(switch (conversation.kind) {
