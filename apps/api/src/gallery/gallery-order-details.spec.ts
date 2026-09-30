@@ -9,6 +9,7 @@ function target(prisma: Record<string, unknown>) {
     {} as never,
     { record: jest.fn() } as never,
     {} as never,
+    {} as never,
   );
 }
 

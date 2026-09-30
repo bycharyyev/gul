@@ -8,19 +8,19 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 23658 | 339 |
+| API (NestJS) | 23960 | 345 |
 | Web (Next.js) | 10342 | 82 |
-| Admin (Vite) | 13375 | 71 |
+| Admin (Vite) | 13739 | 72 |
 | Mobile (Flutter) | 25679 | 130 |
-| packages/types | 2226 | 13 |
-| packages/api-client | 2198 | 5 |
-| packages/i18n | 5109 | 11 |
+| packages/types | 2295 | 13 |
+| packages/api-client | 2219 | 5 |
+| packages/i18n | 5112 | 11 |
 
 ## Automated tests
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 74 | 10852 |
+| API (jest) | 76 | 11248 |
 | Mobile (flutter test) | 53 | 7391 |
 | Web + Admin | 0 | 0 |
 | packages/* | 1 | 0 |
@@ -29,20 +29,20 @@
 
 | Metric | Value |
 | --- | --- |
-| Feature modules (directories under apps/api/src) | 42 |
-| Controllers | 42 |
-| HTTP route handlers | 344 |
-|   of which under /admin/* | 86 |
+| Feature modules (directories under apps/api/src) | 43 |
+| Controllers | 43 |
+| HTTP route handlers | 347 |
+|   of which under /admin/* | 89 |
 
-Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, metrics, notifications, orders, partner, payments, platform-settings, prisma, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
+Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, marketplace-settings, metrics, notifications, orders, partner, payments, platform-settings, prisma, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
 
 ## Database (Prisma)
 
 | Metric | Value |
 | --- | --- |
-| Models | 70 |
+| Models | 71 |
 | Enums | 42 |
-| Migrations | 56 |
+| Migrations | 57 |
 | Migrations carrying allow-destructive | 2 |
 
 ## Clients
@@ -66,7 +66,7 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 | Client | Value |
 | --- | --- |
 | Web pages (Next.js app router) | 38 |
-| Admin pages | 44 |
+| Admin pages | 45 |
 | Mobile locales | ru, en, tkm |
 
 ## Infrastructure as code

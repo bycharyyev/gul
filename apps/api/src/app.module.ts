@@ -38,6 +38,7 @@ import { HealthModule } from "./health/health.module";
 import { MetricsModule } from "./metrics/metrics.module";
 import { ApiQuotaModule } from "./api-quota/api-quota.module";
 import { ReferralsModule } from "./referrals/referrals.module";
+import { MarketplaceSettingsModule } from "./marketplace-settings/marketplace-settings.module";
 import { AvatarModule } from "./avatar/avatar.module";
 import { UploadsModule } from "./uploads/uploads.module";
 import { SubdomainsModule } from "./subdomains/subdomains.module";
@@ -93,6 +94,7 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
     // rejected by the quota is still counted as the 429 it became.
     ApiQuotaModule,
     ReferralsModule,
+    MarketplaceSettingsModule,
     AvatarModule,
     UploadsModule,
     SubdomainsModule,

@@ -241,6 +241,7 @@ const coreDictionaries: Record<Locale, Dictionary> = {
 
     // ---- admin: nav ----
     "admin.nav.dashboard": "Дашборд",
+    "admin.nav.economics": "Экономика",
     "admin.login.username": "Логин",
     "admin.login.password": "Пароль",
     "admin.login.submit": "Войти",
@@ -560,6 +561,7 @@ const coreDictionaries: Record<Locale, Dictionary> = {
     "web.account.deleteDoc": "Delete “{name}”",
 
     "admin.nav.dashboard": "Dashboard",
+    "admin.nav.economics": "Economics",
     "admin.login.username": "Login",
     "admin.login.password": "Password",
     "admin.login.submit": "Log in",
@@ -878,6 +880,7 @@ const coreDictionaries: Record<Locale, Dictionary> = {
     "web.account.deleteDoc": "«{name}» faýlyny poz",
 
     "admin.nav.dashboard": "Dolandyryş paneli",
+    "admin.nav.economics": "Ykdysadyýet",
     "admin.login.username": "Login",
     "admin.login.password": "Parol",
     "admin.login.submit": "Girmek",

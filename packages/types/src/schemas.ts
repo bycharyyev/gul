@@ -381,6 +381,56 @@ export interface DatabaseTableStatDto {
   managePath: string | null;
 }
 
+// ---- Admin: economics (gross revenue/cost per stream -- never a margin figure, see
+// docs/analysis/UNIT_ECONOMICS.md finding E-01: cost of goods isn't tracked, so a computed
+// margin here would misrepresent itself as real. Field names always say what they are. ----
+
+/** One Service × currency slice of top-up volume in the window. */
+export interface AdminEconomicsTopupStreamDto {
+  serviceCode: string;
+  currency: CurrencyCode;
+  count: number;
+  /** SUM(Order.amountTmt) -- gross manat volume topped up, not what the customer paid in their currency. */
+  gmvTmt: number;
+  /** SUM(Order.feeAmount) -- fees collected, before any payment-processing or supplier cost. */
+  feesTmt: number;
+  avgAmountTmt: number;
+}
+
+export interface AdminEconomicsDto {
+  days: number;
+  topups: AdminEconomicsTopupStreamDto[];
+  gallery: {
+    /** SUM(GalleryOrder.amountTmt) for orders delivered in the window -- the full sale price,
+     *  unaffected by any take rate (the seller-credit ledger records the split separately). */
+    grossSalesTmt: number;
+    /** Story/slide ad debits in the window, as positive revenue. */
+    adRevenueTmt: number;
+    /** MARKETPLACE_PLATFORM_FEE ledger debits in the window, as positive revenue. Always 0 while
+     *  MarketplaceSettings.takeRatePercent has never been set above 0%. */
+    platformFeeTmt: number;
+  };
+  marketplacePurchases: {
+    count: number;
+    serviceFeesTmt: number;
+    shippingTmt: number;
+  };
+  cargo: {
+    count: number;
+    /** SUM of the shipment's snapshotted total price for shipments paid in the window. */
+    tariffRevenueTmt: number;
+  };
+  referralCost: {
+    count: number;
+    /** Money paid out, not saved -- a cost, never shown as a negative revenue number. */
+    costTmt: number;
+  };
+  sellerFloat: {
+    /** SUM(Seller.balanceTmt) -- a point-in-time liability, not windowed by `days`. */
+    owedTmt: number;
+  };
+}
+
 // ---- Admin: order editing ----
 
 export const updateOrderDetailsSchema = z.object({

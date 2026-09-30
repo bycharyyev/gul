@@ -11,8 +11,10 @@ is an example, it says so.
 
 1. The system records **revenue but not cost**. An order stores the customer's charge, fee and rate,
    never what the platform paid a supplier. Margin per order cannot be computed from the database.
-2. The marketplace has **no take rate**. When an order is delivered the seller is credited 100% of
-   its amount. Seller-side revenue comes only from advertising, which is sold at fixed prices.
+2. The marketplace take rate is now a **configurable setting** (`MarketplaceSettings.takeRatePercent`,
+   `Fixed 2026-09-29`), but it still defaults to, and has never been set above, 0% — so today the
+   seller is still credited 100% of the sale. Seller-side revenue beyond that comes only from
+   advertising, which is sold at fixed prices.
 3. Several revenue levers are configurable without a deploy (top-up fee per payment method,
    marketplace-purchase fee and shipping, cargo tariffs and exchange rates) and several are not (ad
    prices are constants in code).
@@ -24,7 +26,7 @@ is an example, it says so.
 | Stream | What the customer pays | What the platform keeps | Cost tracked in the database? |
 |---|---|---|---|
 | Top-up order | `amountTmt × Rate(currency)` plus `PaymentMethod.feePercent` (default 0) | fee + the gap between the rate charged and the real cost of the currency and of the top-up | **No.** No supplier cost, no margin field |
-| Marketplace (gallery) sale | product price (`GalleryProduct.priceTmt`) | **nothing**: `increment: order.amountTmt` credits the seller in full on delivery | n/a |
+| Marketplace (gallery) sale | product price (`GalleryProduct.priceTmt`) | `takeRatePercent`% of the sale, `MARKETPLACE_PLATFORM_FEE` ledger entry, snapshotted onto the order at creation (`GalleryOrder.takeRatePercentSnapshot`) so a later rate change never rewrites an order already placed. Rate defaults to, and has never been set above, 0% — so the seller is still credited the full amount today | n/a |
 | Seller advertising | Story 50 TMT / 3 days, home slide 200 TMT / 3 days, debited from the seller's balance | 100% of the price | n/a (no cost) |
 | Marketplace purchase (buy on a foreign site for the customer) | `subtotal + max(minimumFee, subtotal × serviceFeePercent) + weightKg × shippingPerKgTmt`; default fee 10% | the service fee, plus any shipping margin | Shipping cost: **No** |
 | Cargo shipment | weight bracket `pricePerKgRub` (+ pickup fee) converted through USD cross-rates, snapshotted on the shipment | tariff minus the carrier's real charge | **No** |
@@ -39,7 +41,7 @@ manual withdrawals (`WithdrawalRequest`, no payment gateway).
 |---|---|---|
 | E-01 | P0 | No cost basis on orders or shipments: margin, contribution and break-even cannot be measured |
 | E-02 | P0 | Top-up fulfilment is mocked; the real cost of goods is unknown, and orders "complete" without delivery |
-| E-03 | P1 | Marketplace take rate is 0%: gross sales grow, platform revenue does not |
+| E-03 | P1 | **Fixed 2026-09-29** (still defaults to, and has never been set above, 0%). Marketplace take rate is now a setting, not the absence of code; the admin Economics tab reports the rate and the resulting platform fee per period |
 | E-04 | P1 | Seller float is unmanaged: balances owed vs cash held is not reported |
 | E-05 | P1 | Ad prices are constants in code (`STORY_AD_PRICE_TMT`, `SLIDE_AD_PRICE_TMT`) |
 | E-06 | P1 | Foreign-exchange exposure: rates and cargo cross-rates are edited by hand, with no staleness alert |
@@ -55,10 +57,19 @@ marks paid orders `COMPLETED` without contacting anyone. That is right for a dem
 customer: a real payment would produce a "completed" order with no top-up. It must be removed at
 launch (already noted in `CLAUDE.md`); treat it as a launch blocker, not a to-do.
 
-**E-03.** Decide whether the marketplace should take a commission (common ranges are 5-15% of the
-sale) and implement it as a ledger entry type (for example `PLATFORM_FEE`, negative on the seller
-side) so the append-only ledger and its reconciliation keep working. Even 0% should be a
-*setting*, not the absence of code.
+**E-03.** *Fixed 2026-09-29:* `MarketplaceSettings.takeRatePercent` (admin-configurable, 0-100%,
+`GET`/`PATCH /admin/marketplace-settings`) is read once at `GalleryOrder` creation and snapshotted
+onto the order (`takeRatePercentSnapshot`), so a later change to the rate never rewrites an order
+already placed — the same snapshot precedent `Shipment` already used for its pricing. On delivery,
+`GalleryService.updateOrderStatus` splits the sale: the seller is credited `amountTmt -
+platformCutTmt`, the existing `GALLERY_SALE_CREDIT` ledger entry keeps recording the full gross
+amount (so existing "gross sales" analytics are unaffected), and a new `MARKETPLACE_PLATFORM_FEE`
+ledger entry (negative, only written when the cut is non-zero) records the platform's cut — the two
+entries still sum to exactly what the seller's balance moved by, so `SellerLedgerService.reconcile()`
+keeps working unchanged. The rate is still 0% today (common ranges elsewhere are 5-15% of the sale);
+this closes the "absence of code" half of the finding, not the pricing decision itself. The admin
+Economics tab (`/economics`) reports `gallery.platformFeeTmt` per period alongside every other
+stream's gross figures — see `GET /admin/stats/economics`.
 
 **E-04.** Report `SUM(Seller.balanceTmt)` (owed to sellers) next to the cash actually held, and
 alert when the ratio drops. Withdrawals are manual, so this is a real cash-management task.

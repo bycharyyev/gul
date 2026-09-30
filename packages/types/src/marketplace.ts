@@ -121,6 +121,10 @@ export interface GalleryOrderDto {
   status: GalleryOrderStatus;
   createdAt: string;
   deliveredAt: string | null;
+  /** The take rate frozen in at order creation, or null for an order placed before this feature
+   *  existed (read as 0% -- see GalleryOrder's schema comment). Never affected by a later change
+   *  to MarketplaceSettings.takeRatePercent. */
+  takeRatePercentSnapshot: number | null;
   product: {
     id: string;
     name: string;
@@ -328,7 +332,8 @@ export type SellerLedgerEntryType =
   | "STORY_AD_DEBIT"
   | "SLIDE_AD_DEBIT"
   | "REFERRAL_CREDIT"
-  | "ADJUSTMENT";
+  | "ADJUSTMENT"
+  | "MARKETPLACE_PLATFORM_FEE";
 
 export interface SellerLedgerEntryDto {
   id: string;
@@ -349,3 +354,17 @@ export interface SellerBalanceMismatchDto {
   ledgerBalance: number;
   difference: number;
 }
+
+// ---- Marketplace settings (gallery/seller marketplace take rate) ----
+// Mirrors ReferralSettingsDto/UpdateReferralSettingsInput's shape and singleton pattern.
+
+export interface MarketplaceSettingsDto {
+  id: string;
+  takeRatePercent: number;
+  updatedAt: string;
+}
+
+export const updateMarketplaceSettingsSchema = z.object({
+  takeRatePercent: z.number().min(0).max(100),
+});
+export type UpdateMarketplaceSettingsInput = z.infer<typeof updateMarketplaceSettingsSchema>;

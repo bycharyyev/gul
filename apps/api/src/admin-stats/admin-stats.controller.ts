@@ -36,6 +36,11 @@ export class AdminStatsController {
     return this.stats.getOrdersTimeseries(days ? Number(days) : 30);
   }
 
+  @Get("economics")
+  getEconomics(@Query("days") days?: string) {
+    return this.stats.getEconomics(days ? Number(days) : 30);
+  }
+
   @Roles("ADMIN")
   @Get("database")
   getDatabaseOverview() {
