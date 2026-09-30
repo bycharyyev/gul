@@ -38,6 +38,18 @@ export function HeroSlideCarousel() {
     return () => observer.disconnect();
   }, []);
 
+  // Auto-advance used to swap `key={slide.id}` on a single <img>, which made React tear down and
+  // recreate that DOM node every AUTO_ADVANCE_MS. The image is the page's largest element, so each
+  // recreation re-fired as a fresh Largest Contentful Paint candidate -- LCP kept resetting to
+  // whatever rotation the page happened to be on when the browser stopped observing (first
+  // click/tap, or the Lighthouse trace ending), measuring 20s+ instead of the real ~2s paint.
+  // Fix: mount each slide's <img> once (the first time it becomes active) and keep it mounted
+  // forever after, crossfading via opacity instead of remounting.
+  const [seenIndices, setSeenIndices] = useState<Set<number>>(() => new Set([0]));
+  useEffect(() => {
+    setSeenIndices((prev) => (prev.has(index) ? prev : new Set(prev).add(index)));
+  }, [index]);
+
   const goNext = useCallback(() => {
     setIndex((i) => (slides.length ? (i + 1) % slides.length : 0));
   }, [slides.length]);
@@ -122,14 +134,18 @@ export function HeroSlideCarousel() {
                 "radial-gradient(600px circle at var(--glow-x, 50%) var(--glow-y, 50%), rgba(255,255,255,0.18), transparent 45%)",
             }}
           >
-            <ImageWithFallback
-              key={slide.id}
-              src={slide.imageUrl}
-              alt=""
-              className={`absolute inset-0 h-full w-full object-cover ${
-                reducedMotion ? "" : "animate-hero-slide-fade-in"
-              }`}
-            />
+            {slides.map((s, i) =>
+              seenIndices.has(i) ? (
+                <ImageWithFallback
+                  key={s.id}
+                  src={s.imageUrl}
+                  alt=""
+                  className={`absolute inset-0 h-full w-full object-cover ${
+                    reducedMotion ? "" : "transition-opacity duration-500 ease-out"
+                  } ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}
+                />
+              ) : null,
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/0" />
 
             {/* Glass panel */}
