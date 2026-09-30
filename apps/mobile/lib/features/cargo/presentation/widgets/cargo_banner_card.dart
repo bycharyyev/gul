@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/providers.dart';
+import '../../../../core/widgets/remote_image.dart';
 import '../../domain/cargo_models.dart';
 
 /// Ad slot at the top of the Cargo screens, filled from the admin console.
@@ -62,8 +63,14 @@ class _CargoBannerCardState extends ConsumerState<CargoBannerCard> {
                 SizedBox(
                   height: 132,
                   width: double.infinity,
-                  child: Image.network(
-                    banner.imageUrl,
+                  child: Image(
+                    image: cachedImageProvider(
+                      banner.imageUrl,
+                      decodeWidth: decodeWidthFor(
+                        Size(MediaQuery.sizeOf(context).width, 132),
+                        MediaQuery.devicePixelRatioOf(context),
+                      ),
+                    ),
                     fit: BoxFit.cover,
                     // A broken image URL collapses the slot rather than showing a grey box.
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
