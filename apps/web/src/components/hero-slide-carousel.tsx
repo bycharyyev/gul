@@ -13,6 +13,7 @@ export function HeroSlideCarousel() {
   const { t } = useTranslation();
   const router = useRouter();
   const [slides, setSlides] = useState<HomeSlideDetailDto[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -21,7 +22,11 @@ export function HeroSlideCarousel() {
   const tiltRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.listHomeSlides().then(setSlides).catch(() => {});
+    api
+      .listHomeSlides()
+      .then(setSlides)
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -93,6 +98,21 @@ export function HeroSlideCarousel() {
     } else if (slide.externalUrl) {
       window.open(slide.externalUrl, "_blank", "noopener,noreferrer");
     }
+  }
+
+  // Hold the carousel's final height while the slides load. Rendering nothing until then let the
+  // page paint first and then shoved everything below it ~340px down (CLS 0.7 on mobile). Same
+  // <section> + ref as the loaded state, so React keeps the node and the onscreen observer, which
+  // attaches once on mount, is watching the real carousel instead of nothing.
+  if (!loaded) {
+    return (
+      <section ref={rootRef} aria-hidden="true" className="border-b border-slate-200/70 dark:border-white/10">
+        <div className="mx-auto max-w-6xl px-4 py-5">
+          <div className="h-[220px] animate-pulse rounded-[28px] bg-slate-200/70 sm:h-[300px] lg:h-[380px] dark:bg-white/10" />
+          <div className="mt-3 h-6" />
+        </div>
+      </section>
+    );
   }
 
   if (slides.length === 0) return null;

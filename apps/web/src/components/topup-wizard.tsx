@@ -192,9 +192,26 @@ export function TopupWizard() {
                 {service.name}
               </button>
             ))}
-            {services.length === 0 && (
-              <p className="col-span-full text-sm text-slate-400">{t("web.topupWizard.loadingServices")}</p>
+            {services.length === 0 && !error && (
+              // Placeholder tiles, not a one-line "loading" note: the grid growing from one line to
+              // several rows after first paint pushed the rest of the homepage down (CLS).
+              <>
+                <p role="status" className="sr-only">
+                  {t("web.topupWizard.loadingServices")}
+                </p>
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div
+                    key={i}
+                    aria-hidden="true"
+                    className="flex h-[108px] animate-pulse flex-col items-center gap-2 rounded-xl border border-slate-200 p-4 dark:border-white/10"
+                  >
+                    <span className="h-10 w-10 rounded-lg bg-slate-200/70 dark:bg-white/10" />
+                    <span className="h-4 w-20 rounded bg-slate-200/70 dark:bg-white/10" />
+                  </div>
+                ))}
+              </>
             )}
+            {services.length === 0 && error && <p className="col-span-full text-sm text-rose-600">{error}</p>}
           </div>
         </div>
       )}
