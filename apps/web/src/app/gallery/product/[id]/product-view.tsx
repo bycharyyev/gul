@@ -55,6 +55,7 @@ export function ProductView({ id }: { id: string }) {
         <ImageWithFallback
           src={product.imageUrl}
           alt={product.name}
+          sizes="(min-width: 768px) 50vw, 100vw"
           className="aspect-square w-full rounded-xl2 object-cover"
         />
         <div className="flex flex-col">

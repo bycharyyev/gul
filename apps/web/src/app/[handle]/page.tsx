@@ -65,7 +65,7 @@ export default function SellerStorefrontPage() {
       <Card className="mb-8 flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-brand text-xl font-bold text-white">
           {seller.logoUrl ? (
-            <ImageWithFallback src={seller.logoUrl} alt="" className="h-full w-full object-cover" />
+            <ImageWithFallback src={seller.logoUrl} alt="" sizes="64px" className="h-full w-full object-cover" />
           ) : (
             seller.shopName.slice(0, 1).toUpperCase()
           )}
@@ -117,7 +117,7 @@ export default function SellerStorefrontPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {visible.map((product) => (
           <Card key={product.id} className="flex flex-col overflow-hidden">
-            <ImageWithFallback src={product.imageUrl} alt={product.name} className="aspect-square w-full object-cover" />
+            <ImageWithFallback src={product.imageUrl} alt={product.name} sizes="(min-width: 1024px) 280px, (min-width: 640px) 33vw, 50vw" className="aspect-square w-full object-cover" />
             <div className="flex flex-1 flex-col p-3">
               <p className="text-sm font-semibold leading-snug">{product.name}</p>
               <p className="mt-0.5 text-[11px] text-slate-400">{t("web.shopPage.sku", { sku: product.sku })}</p>

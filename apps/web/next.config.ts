@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@topup-hub/api-client", "@topup-hub/types", "@topup-hub/i18n"],
   outputFileTracingRoot: path.join(__dirname, "../.."),
   output: "standalone",
+  images: {
+    // Only our own public upload bucket -- keep in sync with OPTIMIZABLE_HOSTS in
+    // components/ui/image-with-fallback.tsx. Anything wider turns /_next/image into an open proxy.
+    remotePatterns: [{ protocol: "https", hostname: "open.s3.regru.cloud", pathname: "/**" }],
+    formats: ["image/avif", "image/webp"],
+    // Uploads get a fresh UUID filename and are never overwritten in place, so a long cache is safe.
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+  },
 };
 
 // Uploads source maps for a readable Sentry stack trace, then strips them back out of the built

@@ -28,6 +28,13 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 ### S-01 · Next.js critical advisories
 
 > **Fixed 2026-09-26:** `next` bumped to 15.5.26 (`apps/web`). The text below records the finding as reviewed.
+>
+> **Exposure widened 2026-09-30:** `next.config` now sets `images.remotePatterns` to the public
+> upload bucket (`open.s3.regru.cloud`) so seller/admin uploads are resized and re-encoded by the
+> optimiser (the homepage was ~4.5 MB of raw PNG/JPEG). The optimiser, and `sharp`/libvips under
+> it, now decodes files any seller can upload -- untrusted input. The "lowers exposure" note below
+> no longer holds: keep `next` and `sharp` on patched releases promptly, and never widen
+> `remotePatterns` beyond our own bucket (that would also make `/_next/image` an open proxy).
 
 `apps/web` resolves to `next@15.5.23`. Two critical advisories are fixed in `15.5.24`:
 GHSA-p293-qw3h-jr36 (remote code execution, **Windows-hosted** servers only) and GHSA-2xp9-vwfh-vxw4
