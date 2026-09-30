@@ -16,7 +16,11 @@ int decodeWidthFor(Size box, double devicePixelRatio) =>
 /// A disk-cached network image decoded at [decodeWidth] pixels wide, for places that need an
 /// [ImageProvider] (e.g. [CircleAvatar]) rather than a [RemoteImage] widget.
 ImageProvider cachedImageProvider(String url, {required int decodeWidth}) =>
-    ResizeImage.resizeIfNeeded(decodeWidth, null, CachedNetworkImageProvider(url));
+    ResizeImage.resizeIfNeeded(
+      decodeWidth,
+      null,
+      CachedNetworkImageProvider(url),
+    );
 
 /// A network image that cannot break the layout.
 ///
@@ -61,18 +65,26 @@ class RemoteImage extends StatelessWidget {
                 builder: (context, constraints) {
                   final screen = MediaQuery.sizeOf(context);
                   final box = Size(
-                    constraints.maxWidth.isFinite ? constraints.maxWidth : screen.width,
-                    constraints.maxHeight.isFinite ? constraints.maxHeight : screen.height,
+                    constraints.maxWidth.isFinite
+                        ? constraints.maxWidth
+                        : screen.width,
+                    constraints.maxHeight.isFinite
+                        ? constraints.maxHeight
+                        : screen.height,
                   );
                   return CachedNetworkImage(
                     imageUrl: url!,
                     width: width,
                     height: height,
                     fit: fit,
-                    memCacheWidth: decodeWidthFor(box, MediaQuery.devicePixelRatioOf(context)),
+                    memCacheWidth: decodeWidthFor(
+                      box,
+                      MediaQuery.devicePixelRatioOf(context),
+                    ),
                     fadeInDuration: const Duration(milliseconds: 180),
                     placeholder: (_, __) => const _Placeholder(),
-                    errorWidget: (_, __, ___) => _Placeholder(icon: fallbackIcon),
+                    errorWidget: (_, __, ___) =>
+                        _Placeholder(icon: fallbackIcon),
                   );
                 },
               ),
