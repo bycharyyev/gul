@@ -43,12 +43,12 @@ export function HeroSlideCarousel() {
   // recreation re-fired as a fresh Largest Contentful Paint candidate -- LCP kept resetting to
   // whatever rotation the page happened to be on when the browser stopped observing (first
   // click/tap, or the Lighthouse trace ending), measuring 20s+ instead of the real ~2s paint.
-  // Fix: mount each slide's <img> once (the first time it becomes active) and keep it mounted
-  // forever after, crossfading via opacity instead of remounting.
-  const [seenIndices, setSeenIndices] = useState<Set<number>>(() => new Set([0]));
-  useEffect(() => {
-    setSeenIndices((prev) => (prev.has(index) ? prev : new Set(prev).add(index)));
-  }, [index]);
+  // Lazily mounting each slide's image on its first rotation (an earlier version of this fix)
+  // only bounded the damage -- each still-unseen slide's first appearance was itself a fresh
+  // large element, so LCP kept drifting until every slide had been auto-advanced through once.
+  // There are only a couple of home slides in practice, so mount all of them eagerly from the
+  // first render: no slide's image is ever a *new* DOM node after initial paint, only opacity
+  // changes on nodes that already exist.
 
   const goNext = useCallback(() => {
     setIndex((i) => (slides.length ? (i + 1) % slides.length : 0));
@@ -134,18 +134,16 @@ export function HeroSlideCarousel() {
                 "radial-gradient(600px circle at var(--glow-x, 50%) var(--glow-y, 50%), rgba(255,255,255,0.18), transparent 45%)",
             }}
           >
-            {slides.map((s, i) =>
-              seenIndices.has(i) ? (
-                <ImageWithFallback
-                  key={s.id}
-                  src={s.imageUrl}
-                  alt=""
-                  className={`absolute inset-0 h-full w-full object-cover ${
-                    reducedMotion ? "" : "transition-opacity duration-500 ease-out"
-                  } ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}
-                />
-              ) : null,
-            )}
+            {slides.map((s, i) => (
+              <ImageWithFallback
+                key={s.id}
+                src={s.imageUrl}
+                alt=""
+                className={`absolute inset-0 h-full w-full object-cover ${
+                  reducedMotion ? "" : "transition-opacity duration-500 ease-out"
+                } ${i === index ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              />
+            ))}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/0" />
 
             {/* Glass panel */}
