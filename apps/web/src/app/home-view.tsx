@@ -7,7 +7,7 @@ import { TopupWizard } from "@/components/topup-wizard";
 import { StoriesRow } from "@/components/stories-row";
 import { HeroSlideCarousel } from "@/components/hero-slide-carousel";
 
-export function HomePage({ initialSlides }: { initialSlides: HomeSlideDetailDto[] | null }) {
+export function HomeView({ initialSlides }: { initialSlides: HomeSlideDetailDto[] | null }) {
   const { t } = useTranslation();
 
   const titleBefore = t("web.home.titleBefore");

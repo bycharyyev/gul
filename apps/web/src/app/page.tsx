@@ -1,5 +1,5 @@
 import type { HomeSlideDetailDto } from "@topup-hub/types";
-import { HomePage } from "./home-page";
+import { HomeView } from "./home-view";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.gulyaly.com/api";
 
@@ -28,5 +28,5 @@ async function fetchSlides(): Promise<HomeSlideDetailDto[] | null> {
 }
 
 export default async function Page() {
-  return <HomePage initialSlides={await fetchSlides()} />;
+  return <HomeView initialSlides={await fetchSlides()} />;
 }
