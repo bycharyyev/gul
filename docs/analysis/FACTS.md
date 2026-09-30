@@ -9,7 +9,7 @@
 | Area | Source lines | Files |
 | --- | --- | --- |
 | API (NestJS) | 23960 | 345 |
-| Web (Next.js) | 10342 | 82 |
+| Web (Next.js) | 10340 | 82 |
 | Admin (Vite) | 13739 | 72 |
 | Mobile (Flutter) | 25679 | 130 |
 | packages/types | 2295 | 13 |
@@ -99,4 +99,4 @@ Mobile (pubspec) direct dependencies: 29. App version: 1.0.6+7.
 
 ## Documentation
 
-Markdown documents under docs/: 40.
+Markdown documents under docs/: 42.
