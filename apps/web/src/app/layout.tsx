@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { preconnect } from "react-dom";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import { SiteHeader, BottomNav } from "@/components/site-header";
@@ -61,6 +62,12 @@ async function fetchSocialSameAs(): Promise<string[]> {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Nearly every page calls the API from the browser straight after hydration (stories, services,
+  // the account). Opening that connection while the HTML is still arriving takes DNS + TCP + TLS
+  // off the critical path -- PageSpeed put it at ~300ms on mobile. `anonymous` because those are
+  // CORS fetches without cookies; a preconnect in the wrong credentials mode is simply not reused.
+  preconnect(new URL(API_URL).origin, { crossOrigin: "anonymous" });
+
   const sameAs = await fetchSocialSameAs();
 
   // Static aside from sameAs (fetched from our own API, never user input), so JSON.stringify

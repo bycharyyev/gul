@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { I18nProvider, useI18n, isLocale, type Locale } from "@topup-hub/i18n";
 import { api, isAuthenticated } from "@/lib/api";
+import { loadWebDictionary, webDictionaries } from "@/lib/i18n";
 
 function LocaleSync() {
   const { locale, setLocale } = useI18n();
@@ -32,7 +33,11 @@ function handleLocaleChange(locale: Locale) {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <I18nProvider onLocaleChange={handleLocaleChange}>
+    <I18nProvider
+      onLocaleChange={handleLocaleChange}
+      dictionaries={webDictionaries}
+      loadDictionary={loadWebDictionary}
+    >
       <LocaleSync />
       {children}
     </I18nProvider>

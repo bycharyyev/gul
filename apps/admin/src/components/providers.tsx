@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { I18nProvider, useI18n, isLocale, type Locale } from "@topup-hub/i18n";
+import { dictionaries } from "@topup-hub/i18n/dictionaries";
 import { api, isAuthenticated, getCurrentUser, storeCurrentUser } from "@/lib/api";
 
 function LocaleSync() {
@@ -26,7 +27,7 @@ function handleLocaleChange(locale: Locale) {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <I18nProvider onLocaleChange={handleLocaleChange}>
+    <I18nProvider onLocaleChange={handleLocaleChange} dictionaries={dictionaries}>
       <LocaleSync />
       {children}
     </I18nProvider>
