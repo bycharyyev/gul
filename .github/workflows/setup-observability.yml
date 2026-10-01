@@ -85,7 +85,7 @@ jobs:
     needs: configure-primary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh

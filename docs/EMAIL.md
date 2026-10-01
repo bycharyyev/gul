@@ -438,8 +438,11 @@ accepts us. `email.smtp-integration.spec.ts` does a real handshake, and a real d
 given a recipient. It is `describe.skip` unless `SMTP_INTEGRATION_TEST=true`, so a run that did
 nothing is reported as *skipped* rather than mistaken for a pass.
 
-Run it from CI with production credentials via `smtp-integration-test.yml` (manual dispatch,
-optional recipient), or locally:
+To check production itself, dispatch `smtp-integration-test.yml` (optional recipient) instead:
+it runs `infra/checks/smtp-check.js` inside each host's api container, so it uses the real
+`MAIL_*` settings and the real network path to the secondary's relay. The relay only accepts
+the primary's IP, so this spec cannot reach it from a GitHub runner. Run the spec locally against
+any server you can reach:
 
 ```bash
 SMTP_INTEGRATION_TEST=true MAIL_HOST=mail.hosting.reg.ru MAIL_PORT=465 MAIL_SECURE=true \

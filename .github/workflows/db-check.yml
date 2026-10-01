@@ -36,7 +36,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run ${{ inputs.script }}
         # The SQL arrives on stdin rather than as -c: quoted identifiers like "User" do not survive
