@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminEconomicsDto, MarketplaceSettingsDto, UpdateMarketplaceSettingsInput } from "@topup-hub/types";
+import type { AdminEconomicsDto, MarketplaceSettingsDto, ServiceCostDto, UpdateMarketplaceSettingsInput } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -107,9 +107,10 @@ export default function EconomicsPage() {
         <div>
           <h1 className="text-2xl font-bold">Экономика</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Валовая выручка и издержки по потокам — не итоговая прибыль. Себестоимость товаров и
-            услуг в базе не отслеживается (см. docs/analysis/UNIT_ECONOMICS.md, находка E-01), так
-            что общей суммы «прибыль» здесь намеренно нет.
+            Валовая выручка и издержки по потокам — не итоговая прибыль. Маржа пополнений
+            считается только по заказам, у которых при создании была задана себестоимость
+            сервиса (см. docs/analysis/UNIT_ECONOMICS.md, находка E-01), поэтому общей суммы
+            «прибыль» здесь намеренно нет.
           </p>
         </div>
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
@@ -148,12 +149,24 @@ export default function EconomicsPage() {
                     <StatRow label="Валовый оборот (GMV)" value={fmt(row.gmvTmt)} />
                     <StatRow label="Комиссии, удержанные с заказа" value={fmt(row.feesTmt)} />
                     <StatRow label="Средний чек" value={fmt(row.avgAmountTmt)} />
+                    {row.costedCount > 0 ? (
+                      <StatRow
+                        label="Маржа на номинале"
+                        value={fmt(row.costedGmvTmt - row.costTmt)}
+                        hint={row.costedCount < row.count ? `по ${row.costedCount} из ${row.count}` : undefined}
+                      />
+                    ) : (
+                      <p className="mt-1 text-xs text-slate-400">Маржа: себестоимость не задана</p>
+                    )}
                   </div>
                 ))}
               </div>
             )
           )}
         </Card>
+
+        {/* ---- Cost basis per service: the input behind the top-up margin above ---- */}
+        <ServiceCostCard />
 
         {/* ---- Take-rate setting: directly above the gallery-sales card ---- */}
         <TakeRateCard />
@@ -250,6 +263,119 @@ export default function EconomicsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Parses a cost-percent input: "" clears the cost (null), otherwise 0..100 with ≤2 decimals. */
+function parseCostPercent(raw: string): number | null | undefined {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100 || Math.round(n * 100) !== n * 100) return undefined;
+  return n;
+}
+
+function ServiceCostCard() {
+  const [rows, setRows] = useState<ServiceCostDto[] | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const toDraft = (r: ServiceCostDto) => (r.costPercent === null ? "" : String(r.costPercent));
+
+  function load() {
+    setLoading(true);
+    setLoadError(false);
+    api
+      .listServiceCosts()
+      .then((list) => {
+        setRows(list);
+        setDrafts(Object.fromEntries(list.map((r) => [r.serviceId, toDraft(r)])));
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function save(row: ServiceCostDto) {
+    const parsed = parseCostPercent(drafts[row.serviceId] ?? "");
+    if (parsed === undefined) return;
+    setSavingId(row.serviceId);
+    setSaveError(null);
+    try {
+      const updated = await api.setServiceCost(row.serviceId, parsed);
+      setRows((prev) => prev?.map((r) => (r.serviceId === updated.serviceId ? updated : r)) ?? null);
+      setDrafts((d) => ({ ...d, [updated.serviceId]: toDraft(updated) }));
+    } catch {
+      setSaveError(`Не удалось сохранить себестоимость ${row.code} (нужна роль ADMIN)`);
+      setDrafts((d) => ({ ...d, [row.serviceId]: toDraft(row) }));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 text-sm font-semibold text-slate-500">Себестоимость сервисов пополнения</h2>
+      {loading && <p className="py-6 text-center text-sm text-slate-400">Загрузка…</p>}
+      {!loading && loadError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-3 text-sm text-rose-700">
+          <span>Не удалось загрузить себестоимость</span>
+          <button type="button" onClick={load} className="font-semibold underline underline-offset-2">
+            Повторить
+          </button>
+        </div>
+      )}
+      {!loading && !loadError && rows && (
+        <>
+          {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-400">Нет сервисов</p>}
+          <div className="divide-y divide-slate-100">
+            {rows.map((row) => {
+              const draft = drafts[row.serviceId] ?? "";
+              const parsed = parseCostPercent(draft);
+              const unchanged = parsed === row.costPercent;
+              const busy = savingId === row.serviceId;
+              return (
+                <div key={row.serviceId} className="flex items-center gap-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{row.name}</div>
+                    <div className="text-xs uppercase text-slate-400">{row.code}</div>
+                  </div>
+                  <div className="relative w-28">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="не задана"
+                      aria-label={`Себестоимость ${row.code}, %`}
+                      aria-invalid={parsed === undefined}
+                      value={draft}
+                      disabled={busy}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [row.serviceId]: e.target.value }))}
+                      className="pr-7"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+                  </div>
+                  <Button type="button" onClick={() => save(row)} disabled={busy || parsed === undefined || unchanged}>
+                    {busy ? "…" : "Сохранить"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          {saveError && <p className="mt-2 text-xs text-rose-600">{saveError}</p>}
+          <p className="mt-3 text-xs text-slate-400">
+            Сколько процентов от номинала пополнения платформа платит поставщику (например, 97,5).
+            Фиксируется в заказе в момент создания: изменение влияет только на новые заказы. Пустое
+            поле — себестоимость не задана, маржа по таким заказам не считается. Маржа на номинале
+            не учитывает курсовую разницу и комиссии эквайринга.
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 

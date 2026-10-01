@@ -39,7 +39,7 @@ manual withdrawals (`WithdrawalRequest`, no payment gateway).
 
 | ID | Pri | Finding |
 |---|---|---|
-| E-01 | P0 | No cost basis on orders or shipments: margin, contribution and break-even cannot be measured |
+| E-01 | P0 | **Partly fixed 2026-10-01** (top-ups: per-service cost percent set in the admin, snapshotted into `OrderCost` at order creation; shipments still open). No cost basis on orders or shipments: margin, contribution and break-even cannot be measured |
 | E-02 | P0 | Top-up fulfilment is mocked; the real cost of goods is unknown, and orders "complete" without delivery |
 | E-03 | P1 | **Fixed 2026-09-29** (still defaults to, and has never been set above, 0%). Marketplace take rate is now a setting, not the absence of code; the admin Economics tab reports the rate and the resulting platform fee per period |
 | E-04 | P1 | Seller float is unmanaged: balances owed vs cash held is not reported |
@@ -51,6 +51,15 @@ manual withdrawals (`WithdrawalRequest`, no payment gateway).
 **E-01.** Add `costTmt` (and a supplier reference) to the order at the moment the top-up is
 fulfilled, and a `costRub` snapshot to the shipment. Until then, margin is a spreadsheet exercise.
 Nothing else in this document can be turned into a real number without it.
+
+*Partly fixed 2026-10-01 (top-ups only):* an ADMIN sets each service's cost as a percent of face
+value in the admin Economics tab (`ServiceCost`, audited as `service-cost.set`). Order creation
+copies it into `OrderCost` (`costPercent`, `costTmt`), so later edits never rewrite history. Both
+live in separate tables because `Service` and `Order` rows are returned whole to customers and
+partners. The Economics tab shows "margin on face value" only over orders that carry a snapshot,
+and says how many of the slice that is; it excludes the FX spread and acquiring fees. Still
+open: a supplier reference per order, the real supplier price once E-02's gateway exists, and a
+cost snapshot on shipments.
 
 **E-02.** `TOPUP_GATEWAY=mock` with `TOPUP_ALLOW_MOCK_IN_PRODUCTION=true` is set on both hosts and
 marks paid orders `COMPLETED` without contacting anyone. That is right for a demo and wrong for a

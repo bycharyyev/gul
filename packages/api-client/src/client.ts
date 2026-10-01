@@ -22,6 +22,7 @@ import type {
   UpdateMarketplaceSettingsInput,
   AdminStoryInput,
   AdPricingDto,
+  ServiceCostDto,
   ApiKeyDto,
   AuthResponse,
   ChangePasswordInput,
@@ -653,6 +654,17 @@ export class ApiClient {
 
   getMarketplaceSettings() {
     return this.request<MarketplaceSettingsDto>("/admin/marketplace-settings");
+  }
+
+  listServiceCosts() {
+    return this.request<ServiceCostDto[]>("/catalog/admin/service-costs");
+  }
+
+  setServiceCost(serviceId: string, costPercent: number | null) {
+    return this.request<ServiceCostDto>(`/catalog/admin/services/${encodeURIComponent(serviceId)}/cost`, {
+      method: "PUT",
+      body: JSON.stringify({ costPercent }),
+    });
   }
 
   updateMarketplaceSettings(input: UpdateMarketplaceSettingsInput) {

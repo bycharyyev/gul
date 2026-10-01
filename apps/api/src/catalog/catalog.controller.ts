@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { CatalogService } from "./catalog.service";
 import { UpsertServiceDto } from "./dto/upsert-service.dto";
 import { UpsertRateDto } from "./dto/upsert-rate.dto";
+import { SetServiceCostDto } from "./dto/set-service-cost.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -66,6 +67,28 @@ export class CatalogController {
     @CurrentUser() user: { userId: string },
   ) {
     return this.catalog.upsertRate(id, dto, user.userId);
+  }
+
+  // Cost basis (E-01). Never part of a Service response -- see ServiceCost in the schema.
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Get("admin/service-costs")
+  listServiceCosts() {
+    return this.catalog.listServiceCosts();
+  }
+
+  /// ADMIN only: it changes what every future order's margin is computed against.
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @Put("admin/services/:id/cost")
+  setServiceCost(
+    @Param("id") id: string,
+    @Body() dto: SetServiceCostDto,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.catalog.setServiceCost(id, dto.costPercent, user.userId);
   }
 
   @ApiBearerAuth()

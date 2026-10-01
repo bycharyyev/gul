@@ -65,6 +65,38 @@ export class CatalogService {
     return rate;
   }
 
+  /** Every service with its cost percentage, or null where none is set. */
+  async listServiceCosts() {
+    const services = await this.prisma.service.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, code: true, name: true, cost: { select: { costPercent: true, updatedAt: true } } },
+    });
+    return services.map((s) => ({
+      serviceId: s.id,
+      code: s.code,
+      name: s.name,
+      costPercent: s.cost ? Number(s.cost.costPercent) : null,
+      updatedAt: s.cost ? s.cost.updatedAt.toISOString() : null,
+    }));
+  }
+
+  /** Sets (or, with null, clears) a service's cost percentage. Applies to orders created from now
+   *  on; existing orders keep the OrderCost frozen at their creation. Audited. */
+  async setServiceCost(serviceId: string, costPercent: number | null, adminId: string) {
+    await this.getService(serviceId);
+    if (costPercent === null) {
+      await this.prisma.serviceCost.deleteMany({ where: { serviceId } });
+    } else {
+      await this.prisma.serviceCost.upsert({
+        where: { serviceId },
+        create: { serviceId, costPercent, updatedById: adminId },
+        update: { costPercent, updatedById: adminId },
+      });
+    }
+    this.auditLog.record(adminId, "service-cost.set", "Service", serviceId, { costPercent });
+    return (await this.listServiceCosts()).find((c) => c.serviceId === serviceId);
+  }
+
   async deleteService(id: string) {
     await this.getService(id);
     const orderCount = await this.prisma.order.count({ where: { serviceId: id } });

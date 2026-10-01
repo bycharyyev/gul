@@ -87,9 +87,9 @@ describe("AdminStatsService.getEconomics", () => {
     await expect(makeEconomicsService().service.getEconomics(-5)).resolves.toMatchObject({ days: 1 });
   });
 
-  it("shapes every stream with field names that say what they are, never a margin", async () => {
+  it("shapes every stream with field names that say what they are", async () => {
     const { service } = makeEconomicsService({
-      topupRows: [{ serviceCode: "TMCELL", currency: "USD", count: 3n, gmvTmt: 300, feesTmt: 9, avgAmountTmt: 100 }],
+      topupRows: [{ serviceCode: "TMCELL", currency: "USD", count: 3n, gmvTmt: 300, feesTmt: 9, avgAmountTmt: 100, costedCount: 2n, costedGmvTmt: 200, costTmt: 195 }],
       purchaseRow: { count: 2n, serviceFeesTmt: 40, shippingTmt: 15 },
       galleryGrossSum: 500,
       adDebitsSum: -80, // ledger debits are negative -- revenue is the negation
@@ -103,7 +103,7 @@ describe("AdminStatsService.getEconomics", () => {
 
     await expect(service.getEconomics(7)).resolves.toEqual({
       days: 7,
-      topups: [{ serviceCode: "TMCELL", currency: "USD", count: 3, gmvTmt: 300, feesTmt: 9, avgAmountTmt: 100 }],
+      topups: [{ serviceCode: "TMCELL", currency: "USD", count: 3, gmvTmt: 300, feesTmt: 9, avgAmountTmt: 100, costedCount: 2, costedGmvTmt: 200, costTmt: 195 }],
       gallery: { grossSalesTmt: 500, adRevenueTmt: 80, platformFeeTmt: 25 },
       marketplacePurchases: { count: 2, serviceFeesTmt: 40, shippingTmt: 15 },
       cargo: { count: 4, tariffRevenueTmt: 640 },

@@ -383,9 +383,9 @@ export interface DatabaseTableStatDto {
   managePath: string | null;
 }
 
-// ---- Admin: economics (gross revenue/cost per stream -- never a margin figure, see
-// docs/analysis/UNIT_ECONOMICS.md finding E-01: cost of goods isn't tracked, so a computed
-// margin here would misrepresent itself as real. Field names always say what they are. ----
+// ---- Admin: economics (gross revenue/cost per stream). Top-up margin exists only for orders
+// with a cost snapshot (docs/analysis/UNIT_ECONOMICS.md finding E-01); field names always say
+// what they are. ----
 
 /** One Service × currency slice of top-up volume in the window. */
 export interface AdminEconomicsTopupStreamDto {
@@ -397,6 +397,24 @@ export interface AdminEconomicsTopupStreamDto {
   /** SUM(Order.feeAmount) -- fees collected, before any payment-processing or supplier cost. */
   feesTmt: number;
   avgAmountTmt: number;
+  /** Orders in this slice that carry a cost snapshot (OrderCost) -- only orders created after
+   *  the service's cost was set in the admin. */
+  costedCount: number;
+  /** SUM(Order.amountTmt) over just those costed orders, so a margin is never computed against
+   *  volume that has no known cost. */
+  costedGmvTmt: number;
+  /** SUM(OrderCost.costTmt) -- what those orders cost the platform at face value. */
+  costTmt: number;
+}
+
+/** Admin-only cost basis of one Service (E-01). Never part of any public catalog response. */
+export interface ServiceCostDto {
+  serviceId: string;
+  code: string;
+  name: string;
+  /** Percent of the face value the platform pays the supplier; null when not set. */
+  costPercent: number | null;
+  updatedAt: string | null;
 }
 
 export interface AdminEconomicsDto {
