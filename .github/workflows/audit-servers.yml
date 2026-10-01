@@ -56,7 +56,7 @@ jobs:
             user_secret: SECONDARY_USER
     name: audit (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: inputs.host == 'both' || inputs.host == matrix.name
 
       - name: Set up SSH
@@ -86,7 +86,7 @@ jobs:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up pinned SSH trust
         run: |
           mkdir -p ~/.ssh
