@@ -136,6 +136,11 @@ Flutter/Web -> Gulyaly API -> business transaction ---+--> EmailOutbox row (same
 - Sends are never made inline inside an HTTP request. Order mail goes through the outbox; other
   kinds enqueue directly. Three BullMQ queues share the Redis instance that already ran
   `topup-queue` — no second queue technology was introduced.
+- **All app mail goes through REG.RU** since 2026-10-02 (`switch-mail-to-regru.yml`, both hosts).
+  The `MAIL_*_MARKETING` overrides are unset, so marketing uses the same REG.RU transport and
+  sends as `news@gulyaly.com`. Mail sent through the self-hosted Postfix relay landed in spam;
+  the relay now only carries the hosts' own alert scripts. Do not re-run `setup-mail-relay.yml`:
+  it repoints the primary at the relay. The rest of this bullet describes the old split.
 - **Two independent transporters**: "main" (transactional — order mail, REG.RU) and "marketing"
   (newsletter — kept on the old self-hosted Postfix relay, its own SASL login; sent as
   `news@gulyaly.com`, signed with the same `mail._domainkey.gulyaly.com` DKIM key as everything

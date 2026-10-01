@@ -68,8 +68,9 @@ recoverable by re-running or reverting · *disruptive* — restarts or recreates
 | `setup-observability.yml` | Netdata streaming secondary → primary, bounded journald. | writes |
 | `setup-replication.yml` | Postgres streaming replica on the secondary. | writes |
 | `enable-active-active.yml` | Secondary's app tier running against the primary's DB. | writes |
-| `setup-mail-relay.yml` | Postfix submission relay on the secondary. | writes |
+| `setup-mail-relay.yml` | Postfix submission relay on the secondary. **Do not re-run for app mail** (repoints the primary at the relay; that mail went to spam). | writes |
 | `sync-mail-config.yml` | Makes the secondary send mail like the primary: copies `MAIL_*` from the primary's `.env`, allows 587 from the secondary's own api network, then runs the SMTP check on both. Re-run after any `MAIL_*` change on the primary. | writes |
+| `switch-mail-to-regru.yml` | Puts all app mail (transactional + marketing) on the REG.RU mailbox on both hosts, then runs the SMTP check (optional test recipient). | writes |
 | `fetch-latest-backup.yml` | Not setup: downloads the newest encrypted dump as an artifact for `restore-drill.sh` on the owner's PC. | read-only |
 
 ## Retired — don't run

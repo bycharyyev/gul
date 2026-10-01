@@ -1,6 +1,7 @@
 name: Sync mail config to the secondary
 
-# Makes the secondary's api send mail exactly like the primary's: same MAIL_* settings, same relay.
+# Makes the secondary's api send mail exactly like the primary's: same MAIL_* settings.
+# App mail goes through REG.RU (switch-mail-to-regru.yml). This copies whatever the primary has.
 #
 # Why it exists: both api nodes take jobs from the one shared queue, so either node can send any
 # email. smtp-integration-test.yml (2026-10-01) found the two had drifted:

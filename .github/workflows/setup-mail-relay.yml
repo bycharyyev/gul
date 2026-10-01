@@ -1,5 +1,9 @@
 name: Set up mail relay on secondary VPS
 
+# DO NOT re-run for app mail. Its last step points the primary's MAIL_* at this relay, and mail
+# sent through it landed in spam. App mail goes through REG.RU (switch-mail-to-regru.yml,
+# docs/EMAIL.md); the relay is kept only for the hosts' own alert scripts (infra/alerts).
+
 # One-time (idempotent) setup: installs Postfix on the secondary VPS as an authenticated
 # SMTP submission relay (port 587, SASL, STARTTLS) and wires the primary's production .env to
 # use it. mail.gulyaly.com currently resolves to the PRIMARY (the *.gulyaly.com wildcard covers
