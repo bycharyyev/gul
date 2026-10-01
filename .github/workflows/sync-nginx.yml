@@ -53,11 +53,18 @@ jobs:
               echo "#!/bin/sh"
               echo "set -e"
               echo "mkdir -p /var/cache/nginx/gul && chown -R www-data:www-data /var/cache/nginx/gul"
+              echo "missing=\$(grep -ho \"ssl_certificate[_a-z]* [^;]*\" /tmp/nginx-sync/*.conf | sort -u | while read -r d c; do [ -f \"\$c\" ] || echo \"\$c\"; done)"
+              echo "if [ -n \"\$missing\" ]; then echo \"missing on this host: \$missing -- refusing to install vhosts that point at it\" >&2; exit 1; fi"
               echo "cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/"
               echo "for f in /etc/nginx/sites-available/*.conf; do ln -sf \"\$f\" \"/etc/nginx/sites-enabled/\$(basename \"\$f\")\"; done"
               echo "rm -f /etc/nginx/sites-enabled/default"
               echo "nginx -t"
               echo "systemctl reload nginx"
+              echo "if grep -qs /etc/ssl/gulyaly/ /etc/nginx/sites-enabled/*.conf; then"
+              echo "  systemctl disable --now gul-cert-sync.timer 2>/dev/null || true"
+              echo "  if [ -f /etc/letsencrypt/renewal/gulyaly.com.conf ]; then mv /etc/letsencrypt/renewal/gulyaly.com.conf /etc/letsencrypt/renewal/gulyaly.com.conf.retired; fi"
+              echo "  echo host-side certbot for gulyaly.com retired, renew-certs.yml owns it"
+              echo "fi"
             } > /tmp/nginx-sync/apply.sh
             chmod +x /tmp/nginx-sync/apply.sh
             docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/nginx-sync/apply.sh
