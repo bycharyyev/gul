@@ -41,7 +41,7 @@ The graph ranks nodes by connections. The top ones are the places every change p
 | A-04 | P1 | Single-writer PostgreSQL and Redis; failover is manual and unrehearsed | L |
 | A-05 | P1 | **Fixed 2026-10-01** (ad prices/durations → `MarketplaceSettings`, see E-05). Business constants live in code (ad prices) instead of settings | S |
 | A-06 | P2 | Translations exist in three places | M |
-| A-07 | P2 | The ops workflows are not indexed for an operator | S |
+| A-07 | P2 | **Fixed 2026-10-01** ([`docs/OPS_WORKFLOWS.md`](../OPS_WORKFLOWS.md)). The ops workflows are not indexed for an operator | S |
 | A-08 | P2 | Framework debt: NestJS 10 (a security fix needs 11) | M |
 
 ### A-09 · Database backups (found 2026-09-26)
@@ -136,6 +136,9 @@ overlapping ru/en/tkm text. Turkmen was written without a native reviewer. Drift
 one source of truth (a JSON catalogue exported to both) and have the Turkmen strings reviewed.
 
 ### A-07 · Operations workflows
+
+> **Fixed 2026-10-01:** [`docs/OPS_WORKFLOWS.md`](../OPS_WORKFLOWS.md) groups every workflow by situation
+> (automatic, diagnose, incident, change config, one-time setup, retired) with its risk.
 
 `.github/workflows/` holds the deploy pipeline plus failover, backups, DNS and diagnostics tooling
 (count and list in FACTS.md). They are reusable tooling and the documents refer to them, so they stay, but nothing
