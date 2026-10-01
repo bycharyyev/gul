@@ -69,6 +69,9 @@ export class OrdersService {
 
     const rateValue = Number(rate.rate);
     const feePercent = Number(paymentMethod.feePercent);
+    // Cost basis (E-01), read now and frozen onto the order below, so a later change to the
+    // percentage never rewrites orders already placed. No ServiceCost -> no OrderCost: unknown.
+    const serviceCost = await this.prisma.serviceCost.findUnique({ where: { serviceId: dto.serviceId } });
 
     // Order and the obligation to email about it commit together. Previously the email was
     // fired off after the write, leaving a window where a crash in between lost the
@@ -98,6 +101,17 @@ export class OrdersService {
           referralDiscountTmt,
         },
       });
+      if (serviceCost) {
+        const costPercent = Number(serviceCost.costPercent);
+        await tx.orderCost.create({
+          data: {
+            orderId: created.id,
+            costPercent,
+            // Of the face value delivered, not of what the customer paid in their currency.
+            costTmt: Math.round(dto.amountTmt * costPercent) / 100,
+          },
+        });
+      }
       await this.outbox.record(tx, {
         kind: "ORDER_CREATED",
         orderId: created.id,

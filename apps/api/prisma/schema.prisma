@@ -448,6 +448,9 @@ model Service {
   orders     Order[]
   stories    Story[]
   homeSlides HomeSlide[]
+  // Admin-only cost basis (E-01). A separate model so it can never ride along in the public
+  // catalog or a partner response, which return Service rows whole.
+  cost       ServiceCost?
 
   @@index([isEnabled, sortOrder])
 }
@@ -534,6 +537,8 @@ model Order {
   failureReason       String?
   deliveryNote        String? // e.g. activation key / promo code, included in the completion email
   referralDiscountTmt Decimal?    @db.Decimal(12, 2) // amount auto-deducted from referral balance, for audit
+  // Cost basis frozen at creation (E-01) -- separate model: customers receive Order rows whole.
+  cost                OrderCost?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1625,6 +1630,29 @@ model ReferralSettings {
 // The rate is read live only when a GalleryOrder is *created* (GalleryService.createOrder
 // snapshots it onto GalleryOrder.takeRatePercentSnapshot); a later change here never rewrites
 // the economics of an order already placed, mirroring the Shipment pricing-snapshot precedent.
+// What a top-up of this service costs us, as a share of its face value (amountTmt): what the
+// operator/supplier is paid. Unit economics finding E-01. Lives apart from Service on purpose --
+// the public catalog and the partner API return Service rows whole, and this is commercial data.
+model ServiceCost {
+  serviceId   String   @id
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  costPercent Decimal  @db.Decimal(5, 2)
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+// The cost basis of one top-up order, frozen when the order is created from ServiceCost -- a later
+// change to the percentage never rewrites the economics of orders already placed. Absent when no
+// ServiceCost was set at the time (unknown, not zero). Separate from Order because customers and
+// partners receive Order rows whole.
+model OrderCost {
+  orderId     String   @id
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  costPercent Decimal  @db.Decimal(5, 2)
+  costTmt     Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+}
+
 model MarketplaceSettings {
   id                  String   @id @default("singleton")
   takeRatePercent     Decimal  @default(0) @db.Decimal(5, 2)

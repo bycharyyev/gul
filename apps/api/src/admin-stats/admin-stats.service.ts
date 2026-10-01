@@ -219,6 +219,9 @@ export class AdminStatsService {
             gmvTmt: number | null;
             feesTmt: number | null;
             avgAmountTmt: number | null;
+            costedCount: bigint;
+            costedGmvTmt: number | null;
+            costTmt: number | null;
           }>
         >`
           SELECT
@@ -227,9 +230,13 @@ export class AdminStatsService {
             COUNT(*) AS "count",
             COALESCE(SUM(o."amountTmt"), 0)::float AS "gmvTmt",
             COALESCE(SUM(o."feeAmount"), 0)::float AS "feesTmt",
-            COALESCE(AVG(o."amountTmt"), 0)::float AS "avgAmountTmt"
+            COALESCE(AVG(o."amountTmt"), 0)::float AS "avgAmountTmt",
+            COUNT(oc."orderId") AS "costedCount",
+            COALESCE(SUM(o."amountTmt") FILTER (WHERE oc."orderId" IS NOT NULL), 0)::float AS "costedGmvTmt",
+            COALESCE(SUM(oc."costTmt"), 0)::float AS "costTmt"
           FROM "Order" o
           JOIN "Service" s ON s.id = o."serviceId"
+          LEFT JOIN "OrderCost" oc ON oc."orderId" = o.id
           WHERE o.status = 'COMPLETED' AND o."createdAt" >= ${start} AND o."createdAt" < ${now}
           GROUP BY s.code, o.currency
           ORDER BY s.code, o.currency
@@ -298,6 +305,9 @@ export class AdminStatsService {
         gmvTmt: row.gmvTmt ?? 0,
         feesTmt: row.feesTmt ?? 0,
         avgAmountTmt: row.avgAmountTmt ?? 0,
+        costedCount: Number(row.costedCount),
+        costedGmvTmt: row.costedGmvTmt ?? 0,
+        costTmt: row.costTmt ?? 0,
       })),
       gallery: {
         grossSalesTmt: Number(galleryGross._sum.amountTmt ?? 0),
