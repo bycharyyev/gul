@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableE
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { ALLOWED_AVATAR_MIME_TYPES } from "./avatar.constants";
+import { contentMatchesDeclaredType } from "../common/file-signature";
 
 // Server-generated names only ever look like "<uuid>.<ext>" -- this also doubles as the
 // defensive check against path traversal on the public GET, which takes the filename
@@ -27,6 +28,7 @@ export class AvatarService {
 
     const ext = ALLOWED_AVATAR_MIME_TYPES[file.mimetype];
     if (!ext) throw new BadRequestException("Unsupported file type");
+    if (!contentMatchesDeclaredType(file.buffer, file.mimetype)) throw new BadRequestException("Unsupported file type");
 
     const storedName = `${randomUUID()}.${ext}`;
     const previous = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatarPath: true } });

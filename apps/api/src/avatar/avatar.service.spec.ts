@@ -42,7 +42,8 @@ function makeImageFile(overrides: Partial<Express.Multer.File> = {}): Express.Mu
     originalname: "photo.jpg",
     encoding: "7bit",
     mimetype: "image/jpeg",
-    buffer: Buffer.from("fake-image-bytes"),
+    // JPEG signature: the service checks content against the declared type.
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1]),
     size: 16,
     stream: undefined as never,
     destination: "",
