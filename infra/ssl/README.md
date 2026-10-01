@@ -1,4 +1,32 @@
-# SSL auto-coverage for new nginx vhosts
+# SSL for gulyaly.com
+
+## Current scheme (2026-10-01): one wildcard cert, issued in CI, installed on both hosts
+
+`gulyaly.com`, `www` and `api` resolve to **both** hosts (DNS round-robin). An HTTP-01 challenge is
+answered by whichever node the validator reaches, but only the node running certbot has the token,
+so renewing on the hosts was a coin toss per validation, and the secondary's certificate was a
+one-off copy nothing refreshed. The certificate is therefore issued by
+`.github/workflows/renew-certs.yml` on the GitHub runner:
+
+- **DNS-01** for `gulyaly.com` + `*.gulyaly.com`; `dns01/timeweb-auth.sh` publishes the TXT record
+  through the Timeweb API (`TIMEWEB_API_TOKEN`) and waits for Timeweb's nameservers,
+  `dns01/timeweb-cleanup.sh` removes exactly that record afterwards. Neither host takes part in
+  validation.
+- The same `fullchain.pem` / `privkey.pem` go to **both** hosts at `/etc/ssl/gulyaly/` (atomic
+  `mv`; `nginx -t` before reload, so a mismatched pair never goes live). The wildcard covers every
+  vhost, managed subdomains and the catch-all included.
+- **Weekly** (Mondays 04:23 UTC); renews only below 30 days left. A failed scheduled run emails the
+  repo owner. Manual: dispatch with `force` (renew now) or `staging` (Let's Encrypt staging CA,
+  proves the DNS-01 path, installs nothing).
+- Check from outside: `openssl s_client -connect <host-ip>:443 -servername gulyaly.com` against
+  each IP; both must show the same expiry.
+
+The certbot setup described below (`gul-cert-sync`, `certbot --nginx`) is the previous scheme. Once
+the vhosts point at `/etc/ssl/gulyaly/` it must be off: `certbot --nginx` rewrites
+`ssl_certificate` lines back to its own lineage.
+
+## Previous scheme: per-host certbot (`gul-cert-sync`)
+
 
 Installed and running on the production VPS (`/opt/gul/scripts/sync-ssl-domains.sh` +
 `gul-cert-sync.{service,timer}` in `/etc/systemd/system/`) as of 2026-08-21.

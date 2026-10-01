@@ -1,0 +1,140 @@
+name: Renew the gulyaly.com certificate (DNS-01) on both hosts
+
+# Why this exists: DNS round-robins gulyaly.com/www/api across BOTH hosts, so an HTTP-01
+# challenge lands on whichever node the validator happens to resolve -- and the token only exists
+# on the node running certbot. Renewal on the hosts was therefore a coin toss per validation
+# perspective, and the secondary's certificate was a one-off copy nothing refreshed: the
+# 2026-12-17 expiry would have taken half (or all) of HTTPS down.
+#
+# Instead the certificate is issued HERE, on the runner, with a DNS-01 challenge published
+# through the Timeweb API (infra/ssl/dns01/), for gulyaly.com + *.gulyaly.com, and the same
+# cert/key pair is installed on both hosts at /etc/ssl/gulyaly/. Neither host takes part in
+# validation, so round-robin no longer matters. The wildcard also covers every managed subdomain
+# and the catch-all vhost. Details and recovery: infra/ssl/README.md.
+#
+# Weekly; renews only when fewer than RENEW_DAYS remain (Let's Encrypt certs last 90 days), so
+# four or more attempts happen before an expiry. A failed scheduled run emails the repo owner.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Renew even if the installed certificate is not due"
+        type: boolean
+        default: false
+      staging:
+        description: "Use the Let's Encrypt STAGING CA: proves the DNS-01 automation, installs nothing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: certs
+  cancel-in-progress: false
+
+env:
+  RENEW_DAYS: "30"
+  CERT_DIR: /etc/ssl/gulyaly
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Decide whether a renewal is due
+        id: due
+        run: |
+          if [ "${{ inputs.staging }}" = "true" ] || [ "${{ inputs.force }}" = "true" ]; then
+            echo "Forced (staging=${{ inputs.staging }}, force=${{ inputs.force }})."
+            echo "renew=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          due=false
+          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+            end=$(ssh -i ~/.ssh/deploy_key "$target" "openssl x509 -enddate -noout -in $CERT_DIR/fullchain.pem 2>/dev/null" < /dev/null | cut -d= -f2)
+            if [ -z "$end" ]; then
+              echo "no certificate at $CERT_DIR on a host -- issuing"; due=true; continue
+            fi
+            days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+            echo "installed certificate expires $end ($days days left)"
+            [ "$days" -lt "$RENEW_DAYS" ] && due=true
+          done
+          echo "renew=$due" >> "$GITHUB_OUTPUT"
+
+      - name: Install certbot
+        if: steps.due.outputs.renew == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq certbot dnsutils jq > /dev/null && certbot --version
+
+      - name: Issue gulyaly.com + *.gulyaly.com via DNS-01
+        if: steps.due.outputs.renew == 'true'
+        env:
+          TIMEWEB_API_TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
+        run: |
+          chmod +x infra/ssl/dns01/*.sh
+          LE="$RUNNER_TEMP/le"
+          certbot certonly --non-interactive --agree-tos -m malobiznes@gmail.com \
+            --config-dir "$LE/config" --work-dir "$LE/work" --logs-dir "$LE/logs" \
+            --manual --preferred-challenges dns \
+            --manual-auth-hook "$GITHUB_WORKSPACE/infra/ssl/dns01/timeweb-auth.sh" \
+            --manual-cleanup-hook "$GITHUB_WORKSPACE/infra/ssl/dns01/timeweb-cleanup.sh" \
+            --cert-name gulyaly --key-type ecdsa \
+            ${{ inputs.staging && '--staging' || '' }} \
+            -d gulyaly.com -d '*.gulyaly.com'
+          openssl x509 -in "$LE/config/live/gulyaly/fullchain.pem" -noout -issuer -enddate -ext subjectAltName
+
+      - name: Install on both hosts and reload nginx
+        if: steps.due.outputs.renew == 'true' && !inputs.staging
+        run: |
+          umask 077
+          LIVE="$RUNNER_TEMP/le/config/live/gulyaly"
+          mkdir -p /tmp/cert-install
+          cp -L "$LIVE/fullchain.pem" "$LIVE/privkey.pem" /tmp/cert-install/
+
+          # Root on the host via the docker-group chroot trick (see the devops skill). Swapped in
+          # with mv so nginx never reads a half-written file; nginx -t refuses a key that does not
+          # match the certificate before anything is reloaded. Reloads only once a vhost actually
+          # points at $CERT_DIR -- until then this just stages the files.
+          cat > /tmp/cert-install/apply.sh <<'SCRIPT'
+          set -e
+          D=/etc/ssl/gulyaly
+          install -d -m 755 "$D"
+          install -m 644 /tmp/cert-install/fullchain.pem "$D/fullchain.pem.new"
+          install -m 600 /tmp/cert-install/privkey.pem "$D/privkey.pem.new"
+          mv -f "$D/fullchain.pem.new" "$D/fullchain.pem"
+          mv -f "$D/privkey.pem.new" "$D/privkey.pem"
+          rm -rf /tmp/cert-install
+          if grep -rqs "$D/" /etc/nginx/sites-enabled/; then
+            nginx -t && systemctl reload nginx && echo "nginx reloaded"
+          else
+            echo "staged only: no vhost references $D yet"
+          fi
+          SCRIPT
+
+          install_on() {
+            ssh -i ~/.ssh/deploy_key "$1" "rm -rf /tmp/cert-install && mkdir -m 700 /tmp/cert-install" < /dev/null
+            scp -q -i ~/.ssh/deploy_key /tmp/cert-install/* "$1:/tmp/cert-install/"
+            ssh -i ~/.ssh/deploy_key "$1" \
+              "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/cert-install/apply.sh" < /dev/null
+          }
+          install_on "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          install_on "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"
+          rm -rf /tmp/cert-install
+
+      - name: Verify both hosts
+        if: steps.due.outputs.renew == 'true' && !inputs.staging
+        run: |
+          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+            echo "--- $( [ "$target" = "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" ] && echo primary || echo secondary ) ---"
+            ssh -i ~/.ssh/deploy_key "$target" \
+              "openssl x509 -in $CERT_DIR/fullchain.pem -noout -enddate -ext subjectAltName; \
+               echo -n 'served for gulyaly.com: '; echo | openssl s_client -connect 127.0.0.1:443 -servername gulyaly.com 2>/dev/null | openssl x509 -noout -enddate" < /dev/null
+          done
