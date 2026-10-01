@@ -48,7 +48,8 @@ function makeFile(overrides: Partial<Express.Multer.File> = {}): Express.Multer.
     originalname: "report.pdf",
     encoding: "7bit",
     mimetype: "application/pdf",
-    buffer: Buffer.from("hello world"),
+    // Starts with the PDF signature: the service checks content against the declared type.
+    buffer: Buffer.from("%PDF-1.4 hi"),
     size: 11,
     ...overrides,
   } as Express.Multer.File;

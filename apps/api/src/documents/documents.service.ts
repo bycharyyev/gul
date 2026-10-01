@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { MAX_DOCUMENTS_PER_USER } from "./documents.constants";
+import { contentMatchesDeclaredType } from "../common/file-signature";
 
 /** Resolved lazily (per-call, not at module load) so it reflects `UPLOADS_DIR` once dotenv has run. */
 function uploadsDir(): string {
@@ -33,6 +34,10 @@ export class DocumentsService {
   async upload(userId: string, file: Express.Multer.File) {
     if (!file.buffer || file.size === 0) {
       throw new BadRequestException("File is empty");
+    }
+    // The controller's fileFilter only checks the declared type; the bytes have to agree (S-11).
+    if (!contentMatchesDeclaredType(file.buffer, file.mimetype)) {
+      throw new BadRequestException("Unsupported file type");
     }
 
     const count = await this.prisma.document.count({ where: { userId } });
