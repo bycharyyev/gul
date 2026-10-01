@@ -1,0 +1,113 @@
+name: Send all app mail through REG.RU
+
+# Puts every email the API sends (transactional and marketing) on the paid REG.RU mailbox
+# noreply@gulyaly.com (mail.hosting.reg.ru:465), on both hosts. That is the documented setup in
+# docs/EMAIL.md and the one whose mail landed in the inbox.
+#
+# History: the primary's MAIL_* had drifted back to the self-hosted Postfix relay, and
+# sync-mail-config.yml (2026-10-01) then copied that to the secondary too. Mail sent through the
+# relay went to spam.
+#
+# The working REG.RU login comes from the secondary's own .env backup (taken by that sync), which
+# held it and passed a login check on 2026-10-01. The value is copied host to runner file to host,
+# never printed.
+#
+# The *_MARKETING transport settings are removed, so marketing falls back to the same REG.RU
+# transport and sends as news@gulyaly.com (senderAddress() in email-kinds.ts). The Postfix relay
+# stays installed only for the hosts' own disk/DB alert scripts (infra/alerts), not for app mail.
+#
+# REG.RU's hosting limit is 3,000 messages a day per account; EMAIL_DAILY_LIMIT already matches it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: Optional address for one test message after the switch (sent from the primary)
+        type: string
+        required: false
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      SECONDARY: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Recover the REG.RU login from the secondary's .env backup
+        run: |
+          umask 077
+          ssh -i ~/.ssh/deploy_key "$SECONDARY" '
+            cd /opt/gul-secondary
+            for f in $(ls -t .env.bak-mail-* .env 2>/dev/null); do
+              if grep -q "^MAIL_HOST=\"\?mail\.hosting\.reg\.ru" "$f"; then
+                grep -E "^MAIL_(HOST|PORT|SECURE|USER|PASS)=" "$f"
+                exit 0
+              fi
+            done
+            exit 3' < /dev/null > /tmp/regru.env || { echo "no .env or backup on the secondary has a REG.RU MAIL_HOST" >&2; exit 1; }
+          # Exactly the five keys, the host REG.RU's, and a password present.
+          [ "$(wc -l < /tmp/regru.env)" = 5 ] || { echo "expected 5 MAIL_* lines, got $(wc -l < /tmp/regru.env)" >&2; exit 1; }
+          grep -q '^MAIL_PASS="\?.' /tmp/regru.env || { echo "MAIL_PASS is empty" >&2; exit 1; }
+          echo "recovered keys: $(cut -d= -f1 /tmp/regru.env | tr '\n' ' ')"
+          grep -E '^MAIL_(HOST|PORT|SECURE|USER)=' /tmp/regru.env | sed 's/^MAIL_USER=.*@/MAIL_USER=***@/'
+
+      - name: Write it to both hosts and recreate api
+        run: |
+          apply() {
+            scp -i ~/.ssh/deploy_key /tmp/regru.env "$1:/tmp/regru.env"
+            ssh -i ~/.ssh/deploy_key "$1" '
+              set -e
+              cd '"$2"'
+              umask 077
+              cp -p .env ".env.bak-regru-$(date +%Y%m%d%H%M%S)"
+              # Drop the relay transport and every per-marketing override; keep MAIL_FROM,
+              # MAIL_REPLY_TO and MAIL_SENDER_DOMAIN as they are.
+              { grep -vE "^MAIL_(HOST|PORT|SECURE|USER|PASS|TLS_CA_BASE64|TLS_SERVERNAME)(_MARKETING)?=|^MAIL_FROM_MARKETING=" .env; cat /tmp/regru.env; } > /tmp/env.new
+              cat /tmp/env.new > .env
+              rm -f /tmp/env.new /tmp/regru.env
+              for attempt in 1 2 3; do
+                docker compose up -d --force-recreate --no-deps api && break
+                sleep $((attempt * 10))
+              done
+              for i in $(seq 1 30); do
+                curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo "healthy: '"$2"'" && exit 0
+                sleep 2
+              done
+              echo "api did NOT come back healthy: '"$2"'" >&2; exit 1' < /dev/null
+          }
+          apply "$PRIMARY" /opt/gul
+          apply "$SECONDARY" /opt/gul-secondary
+          rm -f /tmp/regru.env
+
+      - name: SMTP check on both nodes
+        env:
+          RECIPIENT: ${{ inputs.recipient }}
+        run: |
+          if [ -n "$RECIPIENT" ] && ! printf '%s' "$RECIPIENT" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; then
+            echo "recipient is not a plain email address" >&2; exit 1
+          fi
+          for t in "$PRIMARY /opt/gul $RECIPIENT" "$SECONDARY /opt/gul-secondary"; do
+            set -- $t
+            echo "== ${2##*/}"
+            scp -i ~/.ssh/deploy_key infra/checks/smtp-check.js "$1:/tmp/smtp-check.js"
+            ssh -i ~/.ssh/deploy_key "$1" "cd $2 && docker compose exec -T -e SMTP_TEST_RECIPIENT='${3:-}' api node - < /tmp/smtp-check.js; rc=\$?; rm -f /tmp/smtp-check.js; exit \$rc" || fail=1
+          done
+          exit ${fail:-0}
+
+      - name: MAIL_* identical on both hosts
+        run: |
+          fp='grep -E "^MAIL_[A-Z0-9_]*=" .env | sort | while IFS= read -r l; do printf "%s %s\n" "${l%%=*}" "$(printf %s "${l#*=}" | sha256sum | cut -c1-8)"; done'
+          a=$(ssh -i ~/.ssh/deploy_key "$PRIMARY" "cd /opt/gul && $fp" < /dev/null)
+          b=$(ssh -i ~/.ssh/deploy_key "$SECONDARY" "cd /opt/gul-secondary && $fp" < /dev/null)
+          echo "$a" | cut -d' ' -f1 | tr '\n' ' '; echo
+          [ "$a" = "$b" ] && echo "MAIL_* identical on both hosts" || { echo "MAIL_* differ" >&2; exit 1; }
