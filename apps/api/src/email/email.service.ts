@@ -123,6 +123,8 @@ export class EmailService {
   private fromAddressMarketing: string;
   private apiPublicUrl: string;
   private unsubscribeSecret: string;
+  /** Secrets an already-sent unsubscribe link may have been signed with; see the constructor. */
+  private acceptedUnsubscribeSecrets: string[];
 
   constructor(
     private prisma: PrismaService,
@@ -143,9 +145,14 @@ export class EmailService {
     // is actually provisioned.
     this.fromAddressMarketing = this.config.get<string>("MAIL_FROM_MARKETING") || this.fromAddress;
     this.apiPublicUrl = this.config.get<string>("API_PUBLIC_URL") || "https://api.gulyaly.com";
-    // Reused rather than a dedicated secret -- the HMAC below is domain-separated by a fixed
-    // prefix, so there's no cross-purpose collision with this secret's use for JWTs.
-    this.unsubscribeSecret = this.config.get<string>("JWT_ACCESS_SECRET") || "";
+    // Its own secret (S-10): signing these links with JWT_ACCESS_SECRET meant rotating the JWT
+    // secret -- the first thing to do after a leak -- silently broke every unsubscribe link in
+    // every newsletter already sent. Falls back to JWT_ACCESS_SECRET while UNSUBSCRIBE_SECRET is
+    // unset, and verification keeps accepting that one too, so links in mail sent before the
+    // switch still work.
+    const jwtSecret = this.config.get<string>("JWT_ACCESS_SECRET") || "";
+    this.unsubscribeSecret = this.config.get<string>("UNSUBSCRIBE_SECRET") || jwtSecret;
+    this.acceptedUnsubscribeSecrets = [...new Set([this.unsubscribeSecret, jwtSecret].filter(Boolean))];
     if (host) {
       this.transporter = this.buildTransport(
         host,
@@ -791,8 +798,8 @@ export class EmailService {
   }
 
   /** RFC 8058 one-click unsubscribe token: HMAC over the user id, domain-separated by prefix. */
-  private unsubscribeToken(userId: string): string {
-    return createHmac("sha256", this.unsubscribeSecret).update(`marketing-unsub:${userId}`).digest("hex");
+  private unsubscribeToken(userId: string, secret = this.unsubscribeSecret): string {
+    return createHmac("sha256", secret).update(`marketing-unsub:${userId}`).digest("hex");
   }
 
   private unsubscribeUrl(userId: string): string {
@@ -802,11 +809,12 @@ export class EmailService {
 
   /** Verifies the token and marks the user opted out. Returns false (no throw) on a bad/forged token. */
   async unsubscribe(userId: string, token: string): Promise<boolean> {
-    const expected = Buffer.from(this.unsubscribeToken(userId));
     const provided = Buffer.from(token || "");
-    if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
-      return false;
-    }
+    const valid = this.acceptedUnsubscribeSecrets.some((secret) => {
+      const expected = Buffer.from(this.unsubscribeToken(userId, secret));
+      return expected.length === provided.length && timingSafeEqual(expected, provided);
+    });
+    if (!valid) return false;
     // Written together: EmailPreference is what the send path consults, and marketingOptOut is
     // kept in step so the two can never disagree while the legacy column still exists.
     await this.prisma

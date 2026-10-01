@@ -1,3 +1,4 @@
+import { createHmac } from "crypto";
 import { EmailService } from "./email.service";
 
 // One shared mock transporter across tests -- sendMail's behavior is set per-test via
@@ -400,5 +401,46 @@ describe("EmailService", () => {
         expect.objectContaining({ jobId: "withdrawal:w1:SELLER_PAYOUT" }),
       );
     });
+  });
+});
+
+describe("EmailService one-click unsubscribe (S-10)", () => {
+  const sign = (secret: string, userId: string) =>
+    createHmac("sha256", secret).update(`marketing-unsub:${userId}`).digest("hex");
+
+  function serviceWith(config: Record<string, string | undefined>) {
+    const prisma = {
+      ...makePrismaMock(),
+      emailPreference: { findUnique: jest.fn(), upsert: jest.fn() },
+      $transaction: jest.fn().mockResolvedValue([]),
+    };
+    return new EmailService(
+      prisma as never,
+      makeConfig(config) as never,
+      makeQueueMock() as never,
+      makeQueueMock() as never,
+      makeQueueMock() as never,
+      makeTemplatesMock() as never,
+      makeQuotaMock() as never,
+      makeSuppressionMock() as never,
+    );
+  }
+
+  it("accepts links signed with UNSUBSCRIBE_SECRET and, for mail sent before it existed, the JWT secret", async () => {
+    const service = serviceWith({ JWT_ACCESS_SECRET: "jwt-secret", UNSUBSCRIBE_SECRET: "unsub-secret" });
+    await expect(service.unsubscribe("u1", sign("unsub-secret", "u1"))).resolves.toBe(true);
+    await expect(service.unsubscribe("u1", sign("jwt-secret", "u1"))).resolves.toBe(true);
+  });
+
+  it("rejects a token from another secret or for another user", async () => {
+    const service = serviceWith({ JWT_ACCESS_SECRET: "jwt-secret", UNSUBSCRIBE_SECRET: "unsub-secret" });
+    await expect(service.unsubscribe("u1", sign("someone-elses", "u1"))).resolves.toBe(false);
+    await expect(service.unsubscribe("u2", sign("unsub-secret", "u1"))).resolves.toBe(false);
+    await expect(service.unsubscribe("u1", "")).resolves.toBe(false);
+  });
+
+  it("falls back to the JWT secret while UNSUBSCRIBE_SECRET is unset", async () => {
+    const service = serviceWith({ JWT_ACCESS_SECRET: "jwt-secret" });
+    await expect(service.unsubscribe("u1", sign("jwt-secret", "u1"))).resolves.toBe(true);
   });
 });

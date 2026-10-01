@@ -1,0 +1,12 @@
+# Third-party actions are pinned to a commit SHA (S-12 in docs/analysis/SECURITY.md) -- a tag can be
+# moved by its publisher, a SHA cannot. Pins don't update themselves, so Dependabot opens a PR when
+# a pinned action releases a new version; review it like any other dependency bump.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

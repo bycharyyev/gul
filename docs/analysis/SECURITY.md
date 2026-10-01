@@ -20,10 +20,10 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
 | S-08 | P1 | No second factor for staff accounts | M |
 | S-09 | P1 | **Fixed 2026-10-01.** Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
-| S-10 | P2 | Unsubscribe links are signed with the JWT access secret | S |
+| S-10 | P2 | **Fixed in code 2026-10-01** (set `UNSUBSCRIBE_SECRET` on both hosts to complete). Unsubscribe links are signed with the JWT access secret | S |
 | S-11 | P2 | **Partly fixed 2026-10-01** (content signatures checked on every upload path; images not yet re-encoded). Upload type checks trust the client-declared MIME type | M |
-| S-12 | P2 | Third-party GitHub Actions are pinned by tag, not by commit | S |
-| S-13 | P2 | *Partly fixed 2026-09-28* (nginx version and X-Powered-By hidden). Framework and server versions are advertised in response headers | S |
+| S-12 | P2 | **Fixed 2026-10-01.** Third-party GitHub Actions are pinned by tag, not by commit | S |
+| S-13 | P2 | **Fixed 2026-10-01** (nginx 2026-09-28; Next `poweredByHeader: false`). Framework and server versions are advertised in response headers | S |
 
 ### S-01 · Next.js critical advisories
 
@@ -157,15 +157,15 @@ payment fields; state the recipients in the privacy page.
 
 ### S-10 to S-13 (hardening)
 
-- **S-10** The unsubscribe HMAC uses `JWT_ACCESS_SECRET`. Use a dedicated `UNSUBSCRIBE_SECRET`, so
+- **S-10** *Fixed in code 2026-10-01:* signed with `UNSUBSCRIBE_SECRET` when set, falling back to `JWT_ACCESS_SECRET`; verification accepts both so links in mail already sent keep working. Remaining step: set `UNSUBSCRIBE_SECRET` (same value) on both hosts. The unsubscribe HMAC uses `JWT_ACCESS_SECRET`. Use a dedicated `UNSUBSCRIBE_SECRET`, so
   rotating one secret does not silently break the other.
 - **S-11** *Partly fixed 2026-10-01:* `common/file-signature.ts` checks the leading bytes against the declared type on public uploads, avatars and documents (a page sent as image/png is refused); re-encoding images with `sharp` is still open. Uploads are filtered on `file.mimetype`, which the client chooses. Objects are stored with
   that Content-Type in a separate origin (S3), which limits harm, but add magic-byte sniffing and
   re-encode images with `sharp`, which is already a dependency.
-- **S-12** Five non-GitHub actions (`docker/setup-buildx-action`, `docker/login-action`,
+- **S-12** *Fixed 2026-10-01:* pinned by commit SHA, `.github/dependabot.yml` proposes updates weekly. Five non-GitHub actions (`docker/setup-buildx-action`, `docker/login-action`,
   `docker/build-push-action`, `pnpm/action-setup`, `subosito/flutter-action`) are pinned by tag,
   which the publisher can move. Pin them by commit SHA and let Dependabot update them.
-- **S-13** Set `poweredByHeader: false` in Next and `server_tokens off` in nginx.
+- **S-13** *Fixed 2026-10-01.* Set `poweredByHeader: false` in Next and `server_tokens off` in nginx.
 
 ## What is already done well
 
