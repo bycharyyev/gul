@@ -28,7 +28,7 @@ jobs:
       HOST: ${{ secrets[matrix.host_secret] }}
       USER_NAME: ${{ secrets[matrix.user_secret] }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure SSH
         run: |

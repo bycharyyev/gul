@@ -32,7 +32,7 @@ recoverable by re-running or reverting · *disruptive* — restarts or recreates
 | `db-check.yml` | A data question a green deploy can't answer (referral state, sellers, managed subdomains, cargo state). | read-only |
 | `check-exposed-ports.yml` | After any firewall / compose port change. | read-only |
 | `check-mail-blacklist.yml` | Mail landing in spam: is the relay IP on a DNSBL? | read-only |
-| `smtp-integration-test.yml` | Real handshake against the reg.ru mailbox. **Currently fails `535`: `MAIL_PASS_REGRU` is stale and production sends through the secondary's relay instead** — fix or retarget before trusting it. | read-only (sends mail only with a recipient) |
+| `smtp-integration-test.yml` | Can the API still send mail? Runs `infra/checks/smtp-check.js` inside each host's api container with its own `MAIL_*` settings: handshake + login for transactional and marketing transports. | read-only (sends one message only with a recipient, from the primary) |
 
 ## Incident — act
 

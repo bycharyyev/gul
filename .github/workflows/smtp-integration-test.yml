@@ -1,46 +1,74 @@
-name: SMTP integration test (real send)
+name: SMTP check (production sending path)
 
-# Runs the integration spec against the real REG.RU server, using the production mailbox
-# password from secrets. Manual only -- it authenticates for real and, when given a recipient,
-# actually delivers a message.
+# Checks that the API can still send mail, along the path production actually uses: the script
+# (infra/checks/smtp-check.js) runs inside each host's running api container, with that
+# container's own MAIL_* settings. It verifies the handshake and SASL login of the transactional
+# transport and, if configured, the marketing one. Manual only.
 #
-# Use it after changing anything on the sending path (credentials, host, port, TLS), where the
-# ordinary suite can only prove the logic and not that the provider still accepts us.
+# This used to run the jest integration spec on a GitHub runner against REG.RU's mailbox with a
+# MAIL_PASS_REGRU secret. Production stopped sending through REG.RU (it uses the Postfix relay on
+# the secondary, whose port 587 only accepts the primary's IP), so that run tested a path nobody
+# uses and failed 535 on a stale password. The jest spec stays for pointing at any server by hand.
+#
+# Use it after changing anything on the sending path (credentials, host, port, TLS, relay).
 
 on:
   workflow_dispatch:
     inputs:
+      host:
+        description: Which node's api container to check
+        type: choice
+        options: [both, primary, secondary]
+        default: both
       recipient:
         description: >-
-          Optional address to deliver a test message to. Leave empty to only verify the
-          handshake and auth. Use an inbox you can open -- the point is to read the received
-          message's Authentication-Results header (spf/dkim/dmarc).
+          Optional address to deliver one test message to (sent from the primary only). Leave
+          empty to only verify the handshake and login. Use an inbox you can open -- the point is
+          to read the received message's Authentication-Results header (spf/dkim/dmarc).
         type: string
         required: false
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: primary
+            host_secret: DEPLOY_HOST
+            user_secret: DEPLOY_USER
+            dir: /opt/gul
+          - name: secondary
+            host_secret: SECONDARY_HOST
+            user_secret: SECONDARY_USER
+            dir: /opt/gul-secondary
+    name: smtp (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @topup-hub/api prisma:generate
+      - uses: actions/checkout@v7
+        if: inputs.host == 'both' || inputs.host == matrix.name
 
-      - name: Run the integration spec
+      - name: Set up SSH (pinned host keys)
+        if: inputs.host == 'both' || inputs.host == matrix.name
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run the check inside the api container
+        if: inputs.host == 'both' || inputs.host == matrix.name
         env:
-          SMTP_INTEGRATION_TEST: "true"
-          MAIL_HOST: mail.hosting.reg.ru
-          MAIL_PORT: "465"
-          MAIL_SECURE: "true"
-          MAIL_USER: noreply@gulyaly.com
-          MAIL_PASS: ${{ secrets.MAIL_PASS_REGRU }}
-          MAIL_FROM: Gulyaly <noreply@gulyaly.com>
-          MAIL_REPLY_TO: support@gulyaly.com
-          SMTP_TEST_RECIPIENT: ${{ inputs.recipient }}
-        working-directory: apps/api
-        run: npx jest email.smtp-integration --verbose
+          TARGET: ${{ secrets[matrix.user_secret] }}@${{ secrets[matrix.host_secret] }}
+          DIR: ${{ matrix.dir }}
+          RECIPIENT: ${{ matrix.name == 'primary' && inputs.recipient || '' }}
+        run: |
+          # The recipient ends up on a remote command line, so only a plain address gets through.
+          if [ -n "$RECIPIENT" ] && ! printf '%s' "$RECIPIENT" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; then
+            echo "recipient is not a plain email address" >&2; exit 1
+          fi
+          scp -i ~/.ssh/deploy_key infra/checks/smtp-check.js "$TARGET:/tmp/smtp-check.js"
+          # stdin is the script file, never this step's own stdin (see the devops skill).
+          ssh -i ~/.ssh/deploy_key "$TARGET" \
+            "cd $DIR && docker compose exec -T -e SMTP_TEST_RECIPIENT='$RECIPIENT' api node - < /tmp/smtp-check.js; rc=\$?; rm -f /tmp/smtp-check.js; exit \$rc"
