@@ -1,6 +1,7 @@
 "use client";
 
 import Script from "next/script";
+import { useConsent } from "@/lib/consent";
 
 // Baked in at build time via Docker build-args (see Dockerfile + deploy.yml), same pattern as
 // NEXT_PUBLIC_API_URL -- not secrets, but also not committed, since they're specific to whichever
@@ -8,7 +9,15 @@ import Script from "next/script";
 const GOOGLE_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID;
 const YANDEX_METRIKA_ID = process.env.NEXT_PUBLIC_YM_ID;
 
+// Nothing is loaded until the visitor accepts in the cookie banner (S-09/U-04 in
+// docs/analysis): both trackers send data abroad, so loading them regardless of the answer made
+// the banner a promise the site didn't keep. Accepting mid-visit loads them on the spot. Metrika's
+// webvisor (session replay) stays off -- it records what people see and type, recipients' phone
+// numbers included.
 export function Analytics() {
+  const { consent } = useConsent();
+  if (consent !== "accepted") return null;
+
   return (
     <>
       {GOOGLE_MEASUREMENT_ID && (
@@ -41,7 +50,7 @@ export function Analytics() {
 
             ym(${YANDEX_METRIKA_ID}, 'init', {
               ssr: true,
-              webvisor: true,
+              webvisor: false,
               clickmap: true,
               ecommerce: 'dataLayer',
               referrer: document.referrer,

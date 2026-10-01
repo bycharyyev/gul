@@ -38,7 +38,7 @@ accessibility test (large text scale).
 | U-01 | P0 | A customer can pay and see "completed" for a top-up nobody delivered (mock gateway) | code and configuration |
 | U-02 | P1 | The app has no notion of being offline | code |
 | U-03 | P1 | Accessibility is shallow: few semantic labels, one test | code |
-| U-04 | P1 | The cookie banner does not control anything | code and live |
+| U-04 | P1 | **Fixed 2026-10-01.** The cookie banner does not control anything | code and live |
 | U-05 | P1 | Turkmen text has not been reviewed by a native speaker | process |
 | U-06 | P2 | The update prompt has no destination until `update_url` is set | device test |
 | U-07 | P2 | Release APK is larger than it needs to be | build |
@@ -69,6 +69,8 @@ missing alt text or labels on the page measured).
 label, check colour contrast of the gradient surfaces, and try the top-up flow with TalkBack.
 
 ### U-04 · Consent
+
+> **Fixed 2026-10-01:** "accept" / "decline"; analytics loads only after accept (see S-09).
 
 The banner says "Мы используем cookie…" and offers one button; analytics with session replay loads
 either way (see security finding S-09). For users it is a promise the product does not keep; for the

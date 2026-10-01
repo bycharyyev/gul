@@ -139,9 +139,11 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
 
     // ---- web: cookie-consent.tsx ----
     "web.cookieConsent.ariaLabel": "Уведомление о cookie",
-    "web.cookieConsent.message": "Мы используем cookie, чтобы сайт работал быстрее и удобнее.",
+    "web.cookieConsent.message":
+      "С вашего согласия мы используем cookie аналитики (Google Analytics, Яндекс Метрика), чтобы улучшать сайт.",
     "web.cookieConsent.moreLink": "Подробнее",
-    "web.cookieConsent.accept": "Хорошо",
+    "web.cookieConsent.accept": "Принять",
+    "web.cookieConsent.decline": "Отказаться",
 
     // ---- web: hero-slide-carousel.tsx ----
     "web.heroSlides.ariaLabel": "Главные предложения",
@@ -343,9 +345,11 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.footer.copyright": "© {year} Gulyaly. All transactions are secure, rates update in real time.",
 
     "web.cookieConsent.ariaLabel": "Cookie notice",
-    "web.cookieConsent.message": "We use cookies to make the site faster and more convenient.",
+    "web.cookieConsent.message":
+      "With your consent we use analytics cookies (Google Analytics, Yandex Metrica) to improve the site.",
     "web.cookieConsent.moreLink": "Learn more",
-    "web.cookieConsent.accept": "Got it",
+    "web.cookieConsent.accept": "Accept",
+    "web.cookieConsent.decline": "Decline",
 
     "web.heroSlides.ariaLabel": "Featured offers",
     "web.heroSlides.sponsoredLabel": "Ad",
@@ -541,9 +545,11 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.footer.copyright": "© {year} Gulyaly. Ähli amallar goralýar, kurslar hakyky wagtda täzelenýär.",
 
     "web.cookieConsent.ariaLabel": "Cookie barada bildiriş",
-    "web.cookieConsent.message": "Sahypanyň has çalt we amatly işlemegi üçin cookie ulanýarys.",
+    "web.cookieConsent.message":
+      "Siziň razylygyňyz bilen sahypany gowulandyrmak üçin analitika cookie-lerini (Google Analytics, Ýandeks Metrika) ulanýarys.",
     "web.cookieConsent.moreLink": "Giňişleýin",
-    "web.cookieConsent.accept": "Bolýar",
+    "web.cookieConsent.accept": "Kabul etmek",
+    "web.cookieConsent.decline": "Ret etmek",
 
     "web.heroSlides.ariaLabel": "Esasy teklipler",
     "web.heroSlides.sponsoredLabel": "Mahabat",

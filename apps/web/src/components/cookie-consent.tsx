@@ -1,25 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "@topup-hub/i18n";
+import { useConsent, writeConsent } from "@/lib/consent";
 
-const STORAGE_KEY = "gulyaly_cookie_consent";
-
+// A real choice: analytics (components/analytics.tsx) loads only after "accept", and "decline" is
+// as easy as accepting. The old banner offered one "OK" button while the trackers loaded anyway.
 export function CookieConsent() {
   const { t } = useTranslation();
-  const [visible, setVisible] = useState(false);
+  const { consent, ready } = useConsent();
 
-  useEffect(() => {
-    if (!window.localStorage.getItem(STORAGE_KEY)) setVisible(true);
-  }, []);
-
-  function accept() {
-    window.localStorage.setItem(STORAGE_KEY, "accepted");
-    setVisible(false);
-  }
-
-  if (!visible) return null;
+  if (!ready || consent !== null) return null;
 
   return (
     <div
@@ -34,12 +25,20 @@ export function CookieConsent() {
             {t("web.cookieConsent.moreLink")}
           </Link>
         </p>
-        <button
-          onClick={accept}
-          className="bg-gradient-brand shrink-0 cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-        >
-          {t("web.cookieConsent.accept")}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={() => writeConsent("declined")}
+            className="cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/20 dark:text-slate-200 dark:hover:bg-white/10"
+          >
+            {t("web.cookieConsent.decline")}
+          </button>
+          <button
+            onClick={() => writeConsent("accepted")}
+            className="bg-gradient-brand cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+          >
+            {t("web.cookieConsent.accept")}
+          </button>
+        </div>
       </div>
     </div>
   );

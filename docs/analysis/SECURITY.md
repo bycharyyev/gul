@@ -19,7 +19,7 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-06 | P1 | *Partly fixed 2026-09-28* (IPs out of the docs, secret scanning on, full leak sweep clean). The repository is public and documents the production servers | S |
 | S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
 | S-08 | P1 | No second factor for staff accounts | M |
-| S-09 | P1 | Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
+| S-09 | P1 | **Fixed 2026-10-01.** Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
 | S-10 | P2 | Unsubscribe links are signed with the JWT access secret | S |
 | S-11 | P2 | Upload type checks trust the client-declared MIME type | M |
 | S-12 | P2 | Third-party GitHub Actions are pinned by tag, not by commit | S |
@@ -142,6 +142,11 @@ then delays up to 300 s) and a per-IP limit. A one-time code exists only for pas
 **Fix:** TOTP for staff roles (mandatory for `ADMIN`), with recovery codes.
 
 ### S-09 · Analytics before consent
+
+> **Fixed 2026-10-01:** GA4 and Metrika load only after an explicit "accept" in the cookie banner
+> (`apps/web/src/lib/consent.ts`), which now also offers "decline"; webvisor is off. Still to do
+> outside the code: name both recipients on the CMS privacy page (`/pages/privacy`). The text below
+> records the finding as reviewed.
 
 `apps/web/src/components/analytics.tsx` loads Google Analytics 4 and Yandex Metrika unconditionally,
 with Metrika's `webvisor: true` (session replay) and `clickmap`. The cookie banner only informs
