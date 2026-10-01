@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           # Pinned, not `channel: stable`. An unpinned channel silently follows whatever stable is
           # on the day the job runs, so a repository that was green turns red with no commit to

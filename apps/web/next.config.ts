@@ -4,6 +4,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // nginx already strips X-Powered-By (S-13); this stops Next sending it in the first place, so it
+  // stays hidden if the container is ever reached without that proxy in front.
+  poweredByHeader: false,
   transpilePackages: ["@topup-hub/api-client", "@topup-hub/types", "@topup-hub/i18n"],
   outputFileTracingRoot: path.join(__dirname, "../.."),
   output: "standalone",
