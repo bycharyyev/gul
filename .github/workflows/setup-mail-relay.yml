@@ -139,6 +139,8 @@ jobs:
           ufw allow 80/tcp
           ufw allow 443/tcp
           ufw allow from ${{ secrets.DEPLOY_HOST }} to any port 587 proto tcp comment 'mail submission from primary'
+          # The secondary's own api containers need 587 too; sync-mail-config.yml adds that rule
+          # for their docker subnet (read from docker, so it isn't hardcoded here).
           ufw deny 25/tcp comment 'no public inbound smtp -- this box only relays outbound for our own app'
           ufw --force enable
           ufw reload
