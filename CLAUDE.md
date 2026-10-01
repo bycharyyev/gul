@@ -178,8 +178,8 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 ### Secondary VPS: active/active app tier + streaming replica
 
 A second, dedicated VPS (`SECONDARY_HOST`/`SECONDARY_USER` secrets; bootstrapped the same way as
-primary — `deploy` user, docker, SSH key, **password auth deliberately left enabled** on this one
-per an explicit ask, unlike the old reg.ru box) runs:
+primary — `deploy` user, docker, SSH key, key-only since 2026-10-01 via `harden-ssh.yml`; password login had been
+enabled on request until then) runs:
 
 - **api/web/admin continuously** (`enable-active-active.yml`), pointed at the **primary's**
   Postgres over the network rather than its own local standby — genuinely active/active for the

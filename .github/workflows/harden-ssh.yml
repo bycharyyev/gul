@@ -1,0 +1,87 @@
+name: Harden SSH (key-only login)
+
+# S-07 in docs/analysis/SECURITY.md: password SSH on an internet-facing host is brute-forced
+# around the clock. This makes a host key-only and proves it from outside.
+#
+# Lock-out safety: the job itself logs in with the deploy key before changing anything, sshd -t
+# validates the config before a reload (a reload keeps existing sessions), and the last step
+# logs in by key again. The hosting panel's console is the recovery path either way.
+#
+# The settings go in /etc/ssh/sshd_config.d/00-gul-hardening.conf: sshd keeps the FIRST value it
+# reads and the drop-ins are read in name order, so 00- wins over e.g. 50-cloud-init.conf, which
+# is where providers turn password login on. Idempotent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which host
+        type: choice
+        options: [secondary, primary, both]
+        default: secondary
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [primary, secondary]
+    steps:
+      - name: Skip hosts not selected
+        id: sel
+        run: |
+          if [ "${{ inputs.target }}" = "both" ] || [ "${{ inputs.target }}" = "${{ matrix.host }}" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Set up SSH (pinned host keys)
+        if: steps.sel.outputs.go == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          if [ "${{ matrix.host }}" = "primary" ]; then
+            echo "TARGET=${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" >> "$GITHUB_ENV"
+            echo "HOST=${{ secrets.DEPLOY_HOST }}" >> "$GITHUB_ENV"
+          else
+            echo "TARGET=${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" >> "$GITHUB_ENV"
+            echo "HOST=${{ secrets.SECONDARY_HOST }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Before -- what the server offers
+        if: steps.sel.outputs.go == 'true'
+        run: |
+          ssh -i ~/.ssh/deploy_key "$TARGET" true < /dev/null && echo "key login works"
+          ssh -v -o PubkeyAuthentication=no -o PreferredAuthentications=none -o BatchMode=yes "$HOST" true 2>&1 \
+            | grep -m1 "Authentications that can continue" || true
+
+      - name: Apply key-only config, validate, reload
+        if: steps.sel.outputs.go == 'true'
+        run: |
+          cat > /tmp/harden.sh <<'SCRIPT'
+          set -e
+          mkdir -p /etc/ssh/sshd_config.d
+          printf '%s\n' \
+            "# Managed by .github/workflows/harden-ssh.yml (S-07). Key-only login." \
+            "PasswordAuthentication no" \
+            "KbdInteractiveAuthentication no" \
+            "PermitRootLogin prohibit-password" \
+            > /etc/ssh/sshd_config.d/00-gul-hardening.conf
+          sshd -t
+          systemctl reload ssh 2>/dev/null || systemctl reload sshd
+          sshd -T | grep -Ei '^(passwordauthentication|kbdinteractiveauthentication|permitrootlogin) '
+          SCRIPT
+          scp -q -i ~/.ssh/deploy_key /tmp/harden.sh "$TARGET:/tmp/harden.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" \
+            "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/harden.sh; rc=\$?; rm -f /tmp/harden.sh; exit \$rc" < /dev/null
+
+      - name: After -- password no longer offered, key still works
+        if: steps.sel.outputs.go == 'true'
+        run: |
+          methods=$(ssh -v -o PubkeyAuthentication=no -o PreferredAuthentications=none -o BatchMode=yes "$HOST" true 2>&1 \
+            | grep -m1 "Authentications that can continue" || true)
+          echo "$methods"
+          if echo "$methods" | grep -qE "password|keyboard-interactive"; then
+            echo "password login still offered" >&2; exit 1
+          fi
+          ssh -i ~/.ssh/deploy_key "$TARGET" true < /dev/null && echo "key login still works"
