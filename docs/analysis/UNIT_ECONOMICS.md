@@ -44,7 +44,7 @@ manual withdrawals (`WithdrawalRequest`, no payment gateway).
 | E-03 | P1 | **Fixed 2026-09-29** (still defaults to, and has never been set above, 0%). Marketplace take rate is now a setting, not the absence of code; the admin Economics tab reports the rate and the resulting platform fee per period |
 | E-04 | P1 | Seller float is unmanaged: balances owed vs cash held is not reported |
 | E-05 | P1 | **Fixed 2026-10-01** (prices and durations are `MarketplaceSettings` columns, edited in the admin Economics tab). Ad prices are constants in code (`STORY_AD_PRICE_TMT`, `SLIDE_AD_PRICE_TMT`) |
-| E-06 | P1 | Foreign-exchange exposure: rates and cargo cross-rates are edited by hand, with no staleness alert |
+| E-06 | P1 | **Fixed 2026-10-01** (alert `fx-rates-stale` after 3 days; admin catalog shows each rate's age, stale ones in amber). Foreign-exchange exposure: rates and cargo cross-rates are edited by hand, with no staleness alert |
 | E-07 | P2 | Referral reward is a fixed amount, not tied to the margin of the qualifying order |
 | E-08 | P2 | No cost model for refunds, failed top-ups and manual payment handling |
 
@@ -74,7 +74,7 @@ stream's gross figures — see `GET /admin/stats/economics`.
 **E-04.** Report `SUM(Seller.balanceTmt)` (owed to sellers) next to the cash actually held, and
 alert when the ratio drops. Withdrawals are manual, so this is a real cash-management task.
 
-**E-06.** Show "rate last updated" in the admin and alert when a rate or cross-rate is older than a
+**E-06.** *Fixed 2026-10-01:* `EmailAlertService` raises `fx-rates-stale` (to `ALERT_EMAIL`, deduplicated across hosts) when an enabled service rate or the cargo cross-rates are older than 3 days; the admin catalog shows each rate's last update. Show "rate last updated" in the admin and alert when a rate or cross-rate is older than a
 chosen age. A stale rate is a silent loss on every order placed while it is wrong.
 
 ## A model you can fill in

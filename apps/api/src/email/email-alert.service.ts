@@ -29,6 +29,15 @@ const SENT_STUCK_MS = 30 * 60_000;
 const PAYMENT_RECONCILIATION_MS = 15 * 60_000;
 const WEBHOOK_INBOX_STUCK_MS = 10 * 60_000;
 
+/**
+ * How long a hand-edited exchange rate may go unchanged before someone is told (E-06). Service
+ * rates and the cargo USD cross-rates are typed in by staff; nothing fetches them. RUB moves daily,
+ * so a rate nobody has looked at for three days is likely wrong on every order placed meanwhile --
+ * a silent loss, not an error anyone would notice. Three days rather than one so a weekend alone
+ * doesn't fire it.
+ */
+const FX_STALE_MS = 3 * 24 * 60 * 60_000;
+
 /** How long a non-quota alert stays suppressed after firing. */
 const ALERT_COOLDOWN_SECONDS = 6 * 60 * 60;
 
@@ -208,6 +217,40 @@ export class EmailAlertService {
         body: [
           "Проверенные provider events находятся в durable inbox больше 10 минут.",
           "Автоматический replay не смог применить их. Проверьте PaymentEvent.processingError и журнал API.",
+        ].join("\n"),
+        ttlSeconds: ALERT_COOLDOWN_SECONDS,
+      });
+    }
+
+    // --- Hand-edited exchange rates nobody has touched for a while (E-06).
+    const fxCutoff = new Date(Date.now() - FX_STALE_MS);
+    const [staleRates, cargoFx] = await Promise.all([
+      this.prisma.rate.findMany({
+        where: { enabled: true, service: { isEnabled: true }, updatedAt: { lt: fxCutoff } },
+        select: { currency: true, updatedAt: true, service: { select: { name: true } } },
+        orderBy: { updatedAt: "asc" },
+      }),
+      this.prisma.cargoExchangeRate.findUnique({ where: { id: "singleton" }, select: { updatedAt: true } }),
+    ]);
+    const cargoFxStale = cargoFx !== null && cargoFx.updatedAt < fxCutoff;
+    if (staleRates.length > 0 || cargoFxStale) {
+      const day = (d: Date) => d.toISOString().slice(0, 10);
+      const lines = [
+        ...staleRates.slice(0, 15).map((r) => `${r.service.name} · ${r.currency} — обновлён ${day(r.updatedAt)}`),
+        ...(staleRates.length > 15 ? [`И ещё курсов: ${staleRates.length - 15}`] : []),
+        ...(cargoFxStale ? [`Карго: курсы RUB/TMT к USD — обновлены ${day(cargoFx.updatedAt)}`] : []),
+      ];
+      alerts.push({
+        key: "fx-rates-stale",
+        subject: `Gulyaly: курсы валют не обновлялись больше 3 дней (${staleRates.length + (cargoFxStale ? 1 : 0)})`,
+        body: [
+          "Эти курсы вводятся вручную и давно не менялись. Если валюта за это время сдвинулась,",
+          "каждый заказ по старому курсу продаётся в убыток или дороже рынка.",
+          "",
+          ...lines,
+          "",
+          "Проверьте и обновите курсы в админке (Каталог → курсы; Карго → курс). Если курс",
+          "действительно не изменился, сохраните его ещё раз — это сбросит отсчёт.",
         ].join("\n"),
         ttlSeconds: ALERT_COOLDOWN_SECONDS,
       });

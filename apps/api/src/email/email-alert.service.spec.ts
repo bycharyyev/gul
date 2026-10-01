@@ -25,6 +25,8 @@ function build(
     staleWebhookEvents?: number;
     ledgerMismatches?: unknown[];
     ledgerError?: Error;
+    staleRates?: { currency: string; updatedAt: Date; service: { name: string } }[];
+    cargoFxUpdatedAt?: Date | null;
   } = {},
 ) {
   const redis = { set: jest.fn().mockResolvedValue(opts.claimed === false ? null : "OK") };
@@ -43,6 +45,13 @@ function build(
       ),
     },
     paymentEvent: { count: jest.fn().mockResolvedValue(opts.staleWebhookEvents ?? 0) },
+    // Defaults to fresh rates and no cargo row, for the same reason as above.
+    rate: { findMany: jest.fn().mockResolvedValue(opts.staleRates ?? []) },
+    cargoExchangeRate: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue(opts.cargoFxUpdatedAt ? { updatedAt: opts.cargoFxUpdatedAt } : null),
+    },
   };
   const sellerLedger = {
     reconcile: opts.ledgerError
@@ -214,6 +223,38 @@ describe("EmailAlertService", () => {
 
       const alerts = await service.collect();
       expect(alerts.find((a) => a.key === "orders-stuck-sent")).toBeUndefined();
+    });
+  });
+
+  describe("stale exchange rates (E-06)", () => {
+    const DAY = 24 * 60 * 60_000;
+
+    it("lists hand-edited service rates nobody has updated for over three days", async () => {
+      const old = new Date(Date.now() - 5 * DAY);
+      const { service, prisma } = build(healthy(), {
+        staleRates: [{ currency: "RUB", updatedAt: old, service: { name: "TMCELL" } }],
+      });
+
+      const alert = (await service.collect()).find((a) => a.key === "fx-rates-stale");
+      expect(alert).toBeDefined();
+      expect(alert!.body).toContain("TMCELL · RUB");
+      // Only rates that can actually be sold: enabled, on an enabled service, older than the cutoff.
+      const where = prisma.rate.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ enabled: true, service: { isEnabled: true } });
+      expect(Date.now() - where.updatedAt.lt.getTime()).toBeGreaterThanOrEqual(3 * DAY - 1000);
+    });
+
+    it("reports the cargo USD cross-rates when they are stale", async () => {
+      const { service } = build(healthy(), { cargoFxUpdatedAt: new Date(Date.now() - 4 * DAY) });
+
+      const alert = (await service.collect()).find((a) => a.key === "fx-rates-stale");
+      expect(alert?.body).toContain("Карго");
+    });
+
+    it("says nothing while every rate is recent", async () => {
+      const { service } = build(healthy(), { cargoFxUpdatedAt: new Date(Date.now() - DAY) });
+
+      expect((await service.collect()).find((a) => a.key === "fx-rates-stale")).toBeUndefined();
     });
   });
 
