@@ -3,22 +3,17 @@ name: Sync mail config to the secondary
 # Makes the secondary's api send mail exactly like the primary's: same MAIL_* settings.
 # App mail goes through REG.RU (switch-mail-to-regru.yml). This copies whatever the primary has.
 #
-# Why it exists: both api nodes take jobs from the one shared queue, so either node can send any
-# email. smtp-integration-test.yml (2026-10-01) found the two had drifted:
-#   * the secondary still sent transactional mail through REG.RU, the primary through our relay;
-#   * the secondary's marketing transport timed out. The relay is Postfix on the secondary host,
-#     and ufw allows port 587 only from the primary's IP. The secondary's own containers reach it
-#     from a docker bridge address, which ufw dropped.
+# Both api nodes take jobs from the one shared queue, so either node can send any email and the
+# two must carry identical MAIL_*. Check first that the primary is the correct side (docs/EMAIL.md:
+# REG.RU) -- on 2026-10-01 this copied a primary that had drifted onto the relay, and mail went
+# to spam.
 #
-# What it does, idempotently:
-#   1. ufw on the secondary: allow 587 from the api container's docker network only. Port 587
-#      stays closed to the internet (check-exposed-ports.yml checks that from outside).
-#   2. Copy every MAIL_* line of /opt/gul/.env over the MAIL_* lines of /opt/gul-secondary/.env,
-#      backing the old file up next to it first. Values never touch a log: they go host to runner
-#      file to host, and only key names and short fingerprints are printed.
-#   3. Recreate the secondary's api, wait for health, then run the SMTP check on both nodes.
+# What it does: copies every MAIL_* line of /opt/gul/.env over the MAIL_* lines of
+# /opt/gul-secondary/.env (backing the old file up first; values never touch a log, only key names
+# and short fingerprints are printed), recreates the secondary's api, and runs the SMTP check on
+# both nodes.
 #
-# Re-run it after any change to the primary's MAIL_* (password rotation, relay move).
+# Re-run it after any change to the primary's MAIL_* (e.g. a mailbox password change).
 
 on:
   workflow_dispatch:
@@ -47,30 +42,6 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$SECONDARY" "cd /opt/gul-secondary && $fp" < /dev/null > /tmp/fp-secondary
           echo "primary | secondary"
           diff -y -W 60 /tmp/fp-primary /tmp/fp-secondary || true
-
-      - name: Allow 587 from the secondary's own api network
-        run: |
-          # The api container's network subnet, read from docker rather than assumed.
-          subnet=$(ssh -i ~/.ssh/deploy_key "$SECONDARY" '
-            cd /opt/gul-secondary
-            c=$(docker compose ps -q api)
-            for n in $(docker inspect -f "{{range \$k, \$v := .NetworkSettings.Networks}}{{\$k}} {{end}}" "$c"); do
-              docker network inspect -f "{{range .IPAM.Config}}{{.Subnet}}{{end}}" "$n"
-            done' < /dev/null | head -1)
-          echo "api network subnet: $subnet"
-          printf '%s' "$subnet" | grep -Eq '^(10|172|192)\.[0-9.]+/[0-9]+$' || { echo "unexpected subnet" >&2; exit 1; }
-
-          cat > /tmp/mail-ufw-local.sh <<'SCRIPT'
-          set -e
-          ufw allow from __SUBNET__ to any port 587 proto tcp comment 'mail submission from this host api containers'
-          ufw status | grep 587
-          SCRIPT
-          sed -i "s#__SUBNET__#$subnet#" /tmp/mail-ufw-local.sh
-          scp -i ~/.ssh/deploy_key /tmp/mail-ufw-local.sh "$SECONDARY:/tmp/mail-ufw-local.sh"
-          # --network=host: without it ufw would change the throwaway container's own firewall.
-          ssh -i ~/.ssh/deploy_key "$SECONDARY" '
-            docker run --rm --pid=host --network=host --privileged -v /:/host -v /tmp/mail-ufw-local.sh:/host/tmp/mail-ufw-local.sh alpine chroot /host /bin/sh /tmp/mail-ufw-local.sh
-            rc=$?; rm -f /tmp/mail-ufw-local.sh; exit $rc' < /dev/null
 
       - name: Copy MAIL_* from the primary to the secondary
         run: |
