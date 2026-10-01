@@ -1,0 +1,92 @@
+name: Send server alerts through REG.RU
+
+# Moves the hosts' own alert emails (infra/alerts: disk usage, primary-DB reachability) from the
+# self-hosted Postfix relay to the paid REG.RU mailbox the app already sends through
+# (switch-mail-to-regru.yml). The login is taken on each host from that host's own app .env, as
+# root inside the docker chroot, so it never passes through the runner or a log.
+#
+# With disable_relay=true it then stops Postfix/OpenDKIM on the secondary and removes the ufw 587
+# rules -- nothing sends through the relay any more. That is a stop and disable, not an uninstall:
+# `systemctl enable --now postfix opendkim` brings it back.
+
+on:
+  workflow_dispatch:
+    inputs:
+      disable_relay:
+        description: Also stop and disable the Postfix relay on the secondary (only once alerts pass)
+        type: boolean
+        default: false
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      SECONDARY: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Repoint alerts at REG.RU on both hosts and send a test alert from each
+        run: |
+          cat > /tmp/alerts-regru.sh <<'SCRIPT'
+          set -e
+          APPDIR="$1"
+          val() { grep -m1 "^$1=" "$APPDIR/.env" | cut -d= -f2- | sed 's/^"//; s/"$//'; }
+          host=$(val MAIL_HOST); user=$(val MAIL_USER); pass=$(val MAIL_PASS)
+          [ "$host" = mail.hosting.reg.ru ] || { echo "app MAIL_HOST is not REG.RU -- run switch-mail-to-regru.yml first" >&2; exit 1; }
+          [ -n "$user" ] && [ -n "$pass" ] || { echo "app MAIL_USER/MAIL_PASS empty" >&2; exit 1; }
+          case "$pass$user" in *"'"*) echo "login contains a single quote; refusing to write it" >&2; exit 1;; esac
+          f=/etc/gul-disk-alert.env
+          [ -f "$f" ] || { echo "$f missing -- install-disk-alert.yml was never run here" >&2; exit 1; }
+          cp -p "$f" "$f.bak-$(date +%Y%m%d%H%M%S)"
+          umask 077
+          {
+            grep -vE '^(MAIL_SMTP_URL|MAIL_ALERT_USER|MAIL_ALERT_PASS)=' "$f"
+            echo "MAIL_SMTP_URL='smtps://mail.hosting.reg.ru:465'"
+            echo "MAIL_ALERT_USER='$user'"
+            echo "MAIL_ALERT_PASS='$pass'"
+          } > "$f.new"
+          cat "$f.new" > "$f"; rm -f "$f.new"; chmod 600 "$f"
+          install -m 0755 /tmp/gul-disk-alert.sh /usr/local/bin/gul-disk-alert.sh
+          if [ -f /usr/local/bin/gul-primary-db-alert.sh ]; then
+            install -m 0755 /tmp/gul-primary-db-alert.sh /usr/local/bin/gul-primary-db-alert.sh
+            echo "updated gul-primary-db-alert.sh"
+          fi
+          /usr/local/bin/gul-disk-alert.sh --test && echo "test alert accepted by REG.RU"
+          rm -f /tmp/gul-disk-alert.sh /tmp/gul-primary-db-alert.sh
+          SCRIPT
+          run_on() {
+            scp -i ~/.ssh/deploy_key /tmp/alerts-regru.sh infra/alerts/gul-disk-alert.sh infra/alerts/gul-primary-db-alert.sh "$1:/tmp/"
+            ssh -i ~/.ssh/deploy_key "$1" "
+              docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/bash /tmp/alerts-regru.sh $2
+              rc=\$?; rm -f /tmp/alerts-regru.sh; exit \$rc" < /dev/null
+          }
+          echo "== primary";   run_on "$PRIMARY" /opt/gul
+          echo "== secondary"; run_on "$SECONDARY" /opt/gul-secondary
+
+      - name: Stop the Postfix relay on the secondary
+        if: inputs.disable_relay
+        run: |
+          cat > /tmp/relay-off.sh <<'SCRIPT'
+          set -e
+          systemctl disable --now postfix opendkim 2>&1 || true
+          # Delete every ufw rule for 587 (they only existed for the relay), highest number first.
+          for n in $(ufw status numbered | grep -E '\b587/tcp\b' | sed -E 's/^\[ *([0-9]+)\].*/\1/' | sort -rn); do
+            ufw --force delete "$n"
+          done
+          echo "postfix: $(systemctl is-active postfix || true), opendkim: $(systemctl is-active opendkim || true)"
+          ufw status | grep 587 || echo "no 587 rules left"
+          SCRIPT
+          scp -i ~/.ssh/deploy_key /tmp/relay-off.sh "$SECONDARY:/tmp/relay-off.sh"
+          # --network=host: ufw must act on the host's firewall, not the throwaway container's.
+          ssh -i ~/.ssh/deploy_key "$SECONDARY" '
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/bash /tmp/relay-off.sh
+            rc=$?; rm -f /tmp/relay-off.sh; exit $rc' < /dev/null

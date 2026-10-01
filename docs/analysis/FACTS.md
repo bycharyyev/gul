@@ -73,12 +73,12 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Metric | Value |
 | --- | --- |
-| GitHub Actions workflows | 41 |
+| GitHub Actions workflows | 42 |
 |   of which run on a schedule | 5 |
 | nginx vhosts (infra/nginx) | 5 |
 | Docker compose files | 3 |
 
-Workflows: audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
+Workflows: audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
 
 Scheduled: audit-servers.yml, check-exposed-ports.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml.
 

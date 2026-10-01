@@ -29,7 +29,13 @@ if [ "$FORCE" -ne 1 ] && [ -f "$STATE_FILE" ]; then
 fi
 
 # shellcheck source=/etc/gul-disk-alert.env
-source /etc/gul-disk-alert.env # MAIL_ALERT_USER, MAIL_ALERT_PASS, MAIL_ALERT_TO, MAIL_RELAY_HOST
+source /etc/gul-disk-alert.env # MAIL_ALERT_USER, MAIL_ALERT_PASS, MAIL_ALERT_TO, MAIL_SMTP_URL
+
+# MAIL_SMTP_URL is REG.RU (smtps://mail.hosting.reg.ru:465), which has a real certificate. Without
+# it, the old self-hosted relay with its self-signed certificate -- hence -k only on that path.
+SMTP_URL="${MAIL_SMTP_URL:-smtp://${MAIL_RELAY_HOST:-}:587}"
+SMTP_TLS=(--ssl-reqd)
+[ -z "${MAIL_SMTP_URL:-}" ] && SMTP_TLS+=(-k)
 
 BODY_FILE=$(mktemp)
 {
@@ -50,7 +56,7 @@ BODY_FILE=$(mktemp)
   du -h --max-depth=2 /var 2>/dev/null | sort -rh | head -5 || true
 } >"$BODY_FILE"
 
-curl -s -m 20 -k --url "smtp://${MAIL_RELAY_HOST}:587" --ssl-reqd \
+curl -s -m 20 "${SMTP_TLS[@]}" --url "$SMTP_URL" \
   --mail-from "alerts@gulyaly.com" --mail-rcpt "$MAIL_ALERT_TO" \
   --user "${MAIL_ALERT_USER}:${MAIL_ALERT_PASS}" --upload-file "$BODY_FILE"
 

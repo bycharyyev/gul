@@ -1,7 +1,10 @@
 # Disk usage email alert
 
-Emails when root disk usage crosses 80%, via the existing Postfix relay (no Telegram bot, no new
-service) -- see `.github/workflows/install-disk-alert.yml` for installation.
+Emails when root disk usage crosses 80%. Since 2026-10-02 alerts go through the REG.RU mailbox
+the app uses (`MAIL_SMTP_URL` in `/etc/gul-disk-alert.env`, set by
+`.github/workflows/switch-alerts-to-regru.yml`), not the old Postfix relay. Installation:
+`.github/workflows/install-disk-alert.yml`, then run the switch workflow, since the install still
+writes the relay settings.
 
 - `gul-disk-alert.sh` -- the check + send. Rate-limited to one email/hour via a timestamp file in
   `/var/lib/gul-disk-alert/`. `--test` forces a send regardless of current usage, for verification.

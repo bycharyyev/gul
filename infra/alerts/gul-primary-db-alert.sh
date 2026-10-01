@@ -25,7 +25,7 @@ send_alert() {
     echo "Target: ${PRIMARY_DB_HOST}:5432"
   } >"$message"
   curl --fail --silent --show-error --max-time 20 \
-    --url "smtp://${MAIL_RELAY_HOST}:587" --ssl-reqd \
+    --url "${MAIL_SMTP_URL:-smtp://${MAIL_RELAY_HOST:-}:587}" --ssl-reqd \
     --mail-from "alerts@gulyaly.com" --mail-rcpt "$MAIL_ALERT_TO" \
     --user "${MAIL_ALERT_USER}:${MAIL_ALERT_PASS}" --upload-file "$message"
 }
