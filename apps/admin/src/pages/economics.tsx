@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminEconomicsDto, MarketplaceSettingsDto } from "@topup-hub/types";
+import type { AdminEconomicsDto, MarketplaceSettingsDto, UpdateMarketplaceSettingsInput } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -233,6 +233,9 @@ export default function EconomicsPage() {
           )}
         </Card>
 
+        {/* ---- Seller ad pricing: a setting, full width, before the float row ---- */}
+        <AdPricingCard />
+
         {/* ---- Seller float: point-in-time liability, own full-width row, neutral background ---- */}
         <Card className="border-slate-300 bg-slate-50 p-5 lg:col-span-2">
           <h2 className="mb-3 text-sm font-semibold text-slate-500">Остаток на балансах продавцов</h2>
@@ -345,6 +348,136 @@ function TakeRateCard() {
             заказы сохраняют ставку, действовавшую в момент заказа.{" "}
             {settings.takeRatePercent === 0 && "Сейчас 0% — продавцы получают 100% суммы продажи."}
           </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
+type AdPricingField = "storyAdPriceTmt" | "storyAdDurationDays" | "slideAdPriceTmt" | "slideAdDurationDays";
+
+const AD_PRICING_FIELDS: { key: AdPricingField; label: string; unit: string; min: number; max: number; integer: boolean }[] = [
+  { key: "storyAdPriceTmt", label: "История — цена", unit: "TMT", min: 0, max: 100000, integer: false },
+  { key: "storyAdDurationDays", label: "История — срок показа", unit: "дн.", min: 1, max: 365, integer: true },
+  { key: "slideAdPriceTmt", label: "Слайд на главной — цена", unit: "TMT", min: 0, max: 100000, integer: false },
+  { key: "slideAdDurationDays", label: "Слайд на главной — срок показа", unit: "дн.", min: 1, max: 365, integer: true },
+];
+
+/** Prices sellers pay for story and home-slide ads -- were constants in code (E-05). */
+function AdPricingCard() {
+  const [settings, setSettings] = useState<MarketplaceSettingsDto | null>(null);
+  const [draft, setDraft] = useState<Record<AdPricingField, string> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const toDraft = (s: MarketplaceSettingsDto) =>
+    Object.fromEntries(AD_PRICING_FIELDS.map((f) => [f.key, String(s[f.key])])) as Record<AdPricingField, string>;
+
+  function load() {
+    setLoading(true);
+    setLoadError(false);
+    api
+      .getMarketplaceSettings()
+      .then((s) => {
+        setSettings(s);
+        setDraft(toDraft(s));
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  function parse(field: (typeof AD_PRICING_FIELDS)[number], raw: string): number | null {
+    if (raw.trim() === "") return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < field.min || n > field.max) return null;
+    if (field.integer && !Number.isInteger(n)) return null;
+    // At most two decimals, compared with a tolerance: 0.29 * 100 is 28.999999999999996 in floating point.
+    if (!field.integer && Math.abs(Math.round(n * 100) - n * 100) > 1e-6) return null;
+    return n;
+  }
+
+  const parsed = draft ? AD_PRICING_FIELDS.map((f) => ({ field: f, value: parse(f, draft[f.key]) })) : [];
+  const hasInvalid = parsed.some((p) => p.value === null);
+  const changed = settings ? parsed.filter((p) => p.value !== null && p.value !== settings[p.field.key]) : [];
+
+  async function save() {
+    if (!settings || hasInvalid || changed.length === 0) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const input: UpdateMarketplaceSettingsInput = Object.fromEntries(
+        changed.map((p) => [p.field.key, p.value as number]),
+      );
+      const updated = await api.updateMarketplaceSettings(input);
+      setSettings(updated);
+      setDraft(toDraft(updated));
+    } catch {
+      setSaveError("Не удалось сохранить цены рекламы");
+      setDraft(toDraft(settings));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="p-5 lg:col-span-2">
+      <h2 className="mb-1 text-sm font-semibold text-slate-500">Цены рекламы для продавцов</h2>
+      {loading && <p className="py-6 text-center text-sm text-slate-400">Загрузка…</p>}
+      {!loading && loadError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-3 text-sm text-rose-700">
+          <span>Не удалось загрузить настройки</span>
+          <button type="button" onClick={load} className="font-semibold underline underline-offset-2">
+            Повторить
+          </button>
+        </div>
+      )}
+      {!loading && !loadError && settings && draft && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {AD_PRICING_FIELDS.map((f) => {
+              const invalid = parse(f, draft[f.key]) === null;
+              return (
+                <div key={f.key}>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">{f.label}</label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min={f.min}
+                      max={f.max}
+                      step={f.integer ? "1" : "0.01"}
+                      value={draft[f.key]}
+                      disabled={saving}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                      className="pr-12"
+                      aria-invalid={invalid}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                      {f.unit}
+                    </span>
+                  </div>
+                  {invalid && (
+                    <p className="mt-1 text-xs text-rose-600">
+                      {f.integer ? `Целое число от ${f.min} до ${f.max}` : `Число от ${f.min} до ${f.max}, до 2 знаков`}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">
+              Применяется к рекламе, купленной после сохранения: уже оплаченная реклама сохраняет свою
+              цену и срок.
+            </p>
+            <Button type="button" onClick={save} disabled={saving || hasInvalid || changed.length === 0}>
+              {saving ? "Сохранение…" : "Сохранить"}
+            </Button>
+          </div>
+          {saveError && <p className="mt-2 text-xs text-rose-600">{saveError}</p>}
         </>
       )}
     </Card>

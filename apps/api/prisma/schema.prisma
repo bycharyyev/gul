@@ -1626,9 +1626,16 @@ model ReferralSettings {
 // snapshots it onto GalleryOrder.takeRatePercentSnapshot); a later change here never rewrites
 // the economics of an order already placed, mirroring the Shipment pricing-snapshot precedent.
 model MarketplaceSettings {
-  id              String   @id @default("singleton")
-  takeRatePercent Decimal  @default(0) @db.Decimal(5, 2)
-  updatedAt       DateTime @updatedAt
+  id                  String   @id @default("singleton")
+  takeRatePercent     Decimal  @default(0) @db.Decimal(5, 2)
+  // Paid seller ad placements -- were constants in code (E-05/A-05). The defaults are exactly
+  // the old constants, so nothing changes until an admin edits them. A purchased ad snapshots
+  // its price onto Story.priceTmt / HomeSlide.priceTmt, so a later edit never rewrites it.
+  storyAdPriceTmt     Decimal  @default(50) @db.Decimal(12, 2)
+  storyAdDurationDays Int      @default(3)
+  slideAdPriceTmt     Decimal  @default(200) @db.Decimal(12, 2)
+  slideAdDurationDays Int      @default(3)
+  updatedAt           DateTime @updatedAt
 }
 
 // ---------- Cargo (logistics vertical) ----------

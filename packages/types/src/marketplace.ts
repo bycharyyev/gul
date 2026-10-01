@@ -361,10 +361,20 @@ export interface SellerBalanceMismatchDto {
 export interface MarketplaceSettingsDto {
   id: string;
   takeRatePercent: number;
+  /** Seller ad placements: price (TMT) and run length, editable instead of constants in code. */
+  storyAdPriceTmt: number;
+  storyAdDurationDays: number;
+  slideAdPriceTmt: number;
+  slideAdDurationDays: number;
   updatedAt: string;
 }
 
+// All optional: the admin saves the take rate and the ad pricing as separate groups.
 export const updateMarketplaceSettingsSchema = z.object({
-  takeRatePercent: z.number().min(0).max(100),
+  takeRatePercent: z.number().min(0).max(100).optional(),
+  storyAdPriceTmt: z.number().min(0).max(100000).optional(),
+  storyAdDurationDays: z.number().int().min(1).max(365).optional(),
+  slideAdPriceTmt: z.number().min(0).max(100000).optional(),
+  slideAdDurationDays: z.number().int().min(1).max(365).optional(),
 });
 export type UpdateMarketplaceSettingsInput = z.infer<typeof updateMarketplaceSettingsSchema>;

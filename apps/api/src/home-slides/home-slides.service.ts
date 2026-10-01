@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { UpsertHomeSlideDto } from "./dto/upsert-home-slide.dto";
 import type { CreateSlideAdDto } from "./dto/create-slide-ad.dto";
 import { SellerLedgerService } from "../seller-ledger/seller-ledger.service";
+import { MarketplaceSettingsService } from "../marketplace-settings/marketplace-settings.service";
 
 const SERVICE_SELECT = { id: true, name: true, logoUrl: true } as const;
 const SELLER_SELECT = { id: true, handle: true, shopName: true } as const;
@@ -13,13 +14,14 @@ const SLIDE_INCLUDE = {
   galleryProduct: { select: PRODUCT_SELECT },
 } as const;
 
-// Paid seller ad pricing — hero placement, priced above story ads. Tune from here.
-export const SLIDE_AD_PRICE_TMT = 200;
-export const SLIDE_AD_DURATION_DAYS = 3;
 
 @Injectable()
 export class HomeSlidesService {
-  constructor(private prisma: PrismaService, private ledger: SellerLedgerService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ledger: SellerLedgerService,
+    private marketplaceSettings: MarketplaceSettingsService,
+  ) {}
 
   listActive() {
     const now = new Date();
@@ -127,13 +129,15 @@ export class HomeSlidesService {
       throw new BadRequestException("Product not found or not owned by this seller");
     }
 
+    // Price and run length are settings (E-05); the price is snapshotted onto the ad below.
+    const { priceTmt, durationDays } = await this.marketplaceSettings.getAdPricing("slide");
     const now = new Date();
-    const endsAt = new Date(now.getTime() + SLIDE_AD_DURATION_DAYS * 24 * 60 * 60 * 1000);
+    const endsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
     return this.prisma.$transaction(async (tx) => {
       const result = await tx.seller.updateMany({
-        where: { id: seller.id, balanceTmt: { gte: SLIDE_AD_PRICE_TMT } },
-        data: { balanceTmt: { decrement: SLIDE_AD_PRICE_TMT } },
+        where: { id: seller.id, balanceTmt: { gte: priceTmt } },
+        data: { balanceTmt: { decrement: priceTmt } },
       });
       if (result.count === 0) throw new BadRequestException("Недостаточно средств на балансе");
 
@@ -147,7 +151,7 @@ export class HomeSlidesService {
           galleryProductId: dto.galleryProductId,
           sellerId: seller.id,
           sponsorLabel: seller.shopName,
-          priceTmt: SLIDE_AD_PRICE_TMT,
+          priceTmt,
           startsAt: now,
           endsAt,
           isActive: true,
@@ -157,7 +161,7 @@ export class HomeSlidesService {
       await this.ledger.record(tx, {
         sellerId: seller.id,
         type: "SLIDE_AD_DEBIT",
-        amountTmt: -SLIDE_AD_PRICE_TMT,
+        amountTmt: -priceTmt,
         referenceType: "HomeSlide",
         referenceId: slide.id,
         idempotencyKey: `home-slide:${slide.id}:purchase`,

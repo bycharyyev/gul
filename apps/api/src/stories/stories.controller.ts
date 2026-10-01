@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { StoriesService, STORY_AD_PRICE_TMT, STORY_AD_DURATION_DAYS } from "./stories.service";
+import { MarketplaceSettingsService } from "../marketplace-settings/marketplace-settings.service";
+import { StoriesService } from "./stories.service";
 import { UpsertStoryDto } from "./dto/upsert-story.dto";
 import { CreateStoryAdDto } from "./dto/create-story-ad.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -13,7 +14,10 @@ type AuthedUser = { userId: string; role: string };
 @ApiTags("stories")
 @Controller("stories")
 export class StoriesController {
-  constructor(private stories: StoriesService) {}
+  constructor(
+    private stories: StoriesService,
+    private marketplaceSettings: MarketplaceSettingsService,
+  ) {}
 
   // ---- Public ----
 
@@ -24,7 +28,7 @@ export class StoriesController {
 
   @Get("ad-pricing")
   getAdPricing() {
-    return { priceTmt: STORY_AD_PRICE_TMT, durationDays: STORY_AD_DURATION_DAYS };
+    return this.marketplaceSettings.getAdPricing("story");
   }
 
   // ---- Seller: paid ad stories ----

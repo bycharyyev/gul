@@ -8,11 +8,11 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 24049 | 347 |
+| API (NestJS) | 24126 | 347 |
 | Web (Next.js) | 10653 | 86 |
-| Admin (Vite) | 13740 | 72 |
+| Admin (Vite) | 13873 | 72 |
 | Mobile (Flutter) | 25746 | 130 |
-| packages/types | 2295 | 13 |
+| packages/types | 2305 | 13 |
 | packages/api-client | 2219 | 5 |
 | packages/i18n | 5121 | 11 |
 
@@ -20,7 +20,7 @@
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 77 | 11347 |
+| API (jest) | 77 | 11378 |
 | Mobile (flutter test) | 53 | 7391 |
 | Web + Admin | 0 | 0 |
 | packages/* | 1 | 0 |
@@ -42,7 +42,7 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 | --- | --- |
 | Models | 71 |
 | Enums | 42 |
-| Migrations | 57 |
+| Migrations | 58 |
 | Migrations carrying allow-destructive | 2 |
 
 ## Clients

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { HomeSlidesService, SLIDE_AD_PRICE_TMT, SLIDE_AD_DURATION_DAYS } from "./home-slides.service";
+import { MarketplaceSettingsService } from "../marketplace-settings/marketplace-settings.service";
+import { HomeSlidesService } from "./home-slides.service";
 import { UpsertHomeSlideDto } from "./dto/upsert-home-slide.dto";
 import { CreateSlideAdDto } from "./dto/create-slide-ad.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -13,7 +14,10 @@ type AuthedUser = { userId: string; role: string };
 @ApiTags("home-slides")
 @Controller("home-slides")
 export class HomeSlidesController {
-  constructor(private slides: HomeSlidesService) {}
+  constructor(
+    private slides: HomeSlidesService,
+    private marketplaceSettings: MarketplaceSettingsService,
+  ) {}
 
   // ---- Public ----
 
@@ -24,7 +28,7 @@ export class HomeSlidesController {
 
   @Get("ad-pricing")
   getAdPricing() {
-    return { priceTmt: SLIDE_AD_PRICE_TMT, durationDays: SLIDE_AD_DURATION_DAYS };
+    return this.marketplaceSettings.getAdPricing("slide");
   }
 
   // ---- Seller: paid ad slides ----

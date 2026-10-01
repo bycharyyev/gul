@@ -39,7 +39,7 @@ The graph ranks nodes by connections. The top ones are the places every change p
 | A-02 | P1 | `ApiClient` is a 1,974-line single class | M |
 | A-03 | P1 | Very large files mix responsibilities (chat, email, admin pages) | M |
 | A-04 | P1 | Single-writer PostgreSQL and Redis; failover is manual and unrehearsed | L |
-| A-05 | P1 | Business constants live in code (ad prices) instead of settings | S |
+| A-05 | P1 | **Fixed 2026-10-01** (ad prices/durations → `MarketplaceSettings`, see E-05). Business constants live in code (ad prices) instead of settings | S |
 | A-06 | P2 | Translations exist in three places | M |
 | A-07 | P2 | The ops workflows are not indexed for an operator | S |
 | A-08 | P2 | Framework debt: NestJS 10 (a security fix needs 11) | M |
@@ -115,6 +115,9 @@ newest backup into a throwaway database every night and compares row counts); (2
 (3) only then consider a managed database or automatic failover.
 
 ### A-05 · Constants that should be settings
+
+> **Fixed 2026-10-01:** story/slide ad prices and run lengths are `MarketplaceSettings` columns
+> (defaults = the old constants), edited by ADMIN in the Economics tab and audited.
 
 Story advertising costs 50 TMT and a home-slide 200 TMT, each for 3 days
 (`STORY_AD_PRICE_TMT`, `SLIDE_AD_PRICE_TMT` in code). Changing a price is a deploy. Move them to
