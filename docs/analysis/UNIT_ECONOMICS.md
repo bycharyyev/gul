@@ -27,7 +27,7 @@ is an example, it says so.
 |---|---|---|---|
 | Top-up order | `amountTmt × Rate(currency)` plus `PaymentMethod.feePercent` (default 0) | fee + the gap between the rate charged and the real cost of the currency and of the top-up | **No.** No supplier cost, no margin field |
 | Marketplace (gallery) sale | product price (`GalleryProduct.priceTmt`) | `takeRatePercent`% of the sale, `MARKETPLACE_PLATFORM_FEE` ledger entry, snapshotted onto the order at creation (`GalleryOrder.takeRatePercentSnapshot`) so a later rate change never rewrites an order already placed. Rate defaults to, and has never been set above, 0% — so the seller is still credited the full amount today | n/a |
-| Seller advertising | Story 50 TMT / 3 days, home slide 200 TMT / 3 days, debited from the seller's balance | 100% of the price | n/a (no cost) |
+| Seller advertising | Story 50 TMT / 3 days, home slide 200 TMT / 3 days by default — editable in the admin Economics tab (`MarketplaceSettings`) since 2026-10-01; the price is snapshotted onto each ad; debited from the seller's balance | 100% of the price | n/a (no cost) |
 | Marketplace purchase (buy on a foreign site for the customer) | `subtotal + max(minimumFee, subtotal × serviceFeePercent) + weightKg × shippingPerKgTmt`; default fee 10% | the service fee, plus any shipping margin | Shipping cost: **No** |
 | Cargo shipment | weight bracket `pricePerKgRub` (+ pickup fee) converted through USD cross-rates, snapshotted on the shipment | tariff minus the carrier's real charge | **No** |
 | Referral | nothing | pays out a fixed TMT reward per qualifying referral (off by default) | Yes: `Referral.rewardAmountTmt` |
@@ -43,7 +43,7 @@ manual withdrawals (`WithdrawalRequest`, no payment gateway).
 | E-02 | P0 | Top-up fulfilment is mocked; the real cost of goods is unknown, and orders "complete" without delivery |
 | E-03 | P1 | **Fixed 2026-09-29** (still defaults to, and has never been set above, 0%). Marketplace take rate is now a setting, not the absence of code; the admin Economics tab reports the rate and the resulting platform fee per period |
 | E-04 | P1 | Seller float is unmanaged: balances owed vs cash held is not reported |
-| E-05 | P1 | Ad prices are constants in code (`STORY_AD_PRICE_TMT`, `SLIDE_AD_PRICE_TMT`) |
+| E-05 | P1 | **Fixed 2026-10-01** (prices and durations are `MarketplaceSettings` columns, edited in the admin Economics tab). Ad prices are constants in code (`STORY_AD_PRICE_TMT`, `SLIDE_AD_PRICE_TMT`) |
 | E-06 | P1 | Foreign-exchange exposure: rates and cargo cross-rates are edited by hand, with no staleness alert |
 | E-07 | P2 | Referral reward is a fixed amount, not tied to the margin of the qualifying order |
 | E-08 | P2 | No cost model for refunds, failed top-ups and manual payment handling |

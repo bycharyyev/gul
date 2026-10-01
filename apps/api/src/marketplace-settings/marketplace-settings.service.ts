@@ -18,10 +18,22 @@ export class MarketplaceSettingsService {
     private auditLog: AuditLogService,
   ) {}
 
-  private toDto(settings: { id: string; takeRatePercent: Prisma.Decimal; updatedAt: Date }) {
+  private toDto(settings: {
+    id: string;
+    takeRatePercent: Prisma.Decimal;
+    storyAdPriceTmt: Prisma.Decimal;
+    storyAdDurationDays: number;
+    slideAdPriceTmt: Prisma.Decimal;
+    slideAdDurationDays: number;
+    updatedAt: Date;
+  }) {
     return {
       id: settings.id,
       takeRatePercent: Number(settings.takeRatePercent),
+      storyAdPriceTmt: Number(settings.storyAdPriceTmt),
+      storyAdDurationDays: settings.storyAdDurationDays,
+      slideAdPriceTmt: Number(settings.slideAdPriceTmt),
+      slideAdDurationDays: settings.slideAdDurationDays,
       updatedAt: settings.updatedAt.toISOString(),
     };
   }
@@ -35,7 +47,16 @@ export class MarketplaceSettingsService {
     return this.toDto(settings);
   }
 
-  async updateSettings(input: { takeRatePercent: number }, adminId: string) {
+  async updateSettings(
+    input: {
+      takeRatePercent?: number;
+      storyAdPriceTmt?: number;
+      storyAdDurationDays?: number;
+      slideAdPriceTmt?: number;
+      slideAdDurationDays?: number;
+    },
+    adminId: string,
+  ) {
     const settings = await this.prisma.marketplaceSettings.upsert({
       where: { id: SETTINGS_ID },
       create: { id: SETTINGS_ID, ...input },
@@ -53,5 +74,14 @@ export class MarketplaceSettingsService {
   async getCurrentTakeRatePercent(): Promise<number> {
     const settings = await this.getSettings();
     return settings.takeRatePercent;
+  }
+
+  /** Current price and run length of a seller ad placement; read at purchase time and at the
+   *  public ad-pricing endpoints. The purchase snapshots the price onto the ad itself. */
+  async getAdPricing(placement: "story" | "slide"): Promise<{ priceTmt: number; durationDays: number }> {
+    const settings = await this.getSettings();
+    return placement === "story"
+      ? { priceTmt: settings.storyAdPriceTmt, durationDays: settings.storyAdDurationDays }
+      : { priceTmt: settings.slideAdPriceTmt, durationDays: settings.slideAdDurationDays };
   }
 }
