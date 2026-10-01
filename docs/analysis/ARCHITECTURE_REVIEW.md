@@ -35,7 +35,7 @@ The graph ranks nodes by connections. The top ones are the places every change p
 | ID | Pri | Finding | Effort |
 |---|---|---|---|
 | A-09 | P0 | *Fixed 2026-09-28.* Database backups were not being made: the primary reported its dedicated backup storage as not configured | S |
-| A-01 | P0 | Web and admin (23k lines) have no automated tests | M |
+| A-01 | P0 | **Partly fixed 2026-10-01** (Vitest in web, admin, i18n, api-client; runs in the deploy gate). Web and admin (23k lines) have no automated tests | M |
 | A-02 | P1 | `ApiClient` is a 1,974-line single class | M |
 | A-03 | P1 | Very large files mix responsibilities (chat, email, admin pages) | M |
 | A-04 | P1 | Single-writer PostgreSQL and Redis; failover is manual and unrehearsed | L |
@@ -81,6 +81,12 @@ warning each hour. Three readable dumps that earlier failed uploads had left in
 (they cannot read them); a provider with Object Lock, or a second copy elsewhere, would close it.
 
 ### A-01 · No tests for web and admin
+
+> **Partly fixed 2026-10-01:** Vitest is set up in `apps/web`, `apps/admin`, `packages/i18n` and
+> `packages/api-client` (`pnpm test` runs them, so `deploy.yml`'s build-and-test gates on them).
+> First suites cover the token-refresh pipeline, the i18n provider, analytics consent, the image
+> optimizer component and CSV export (formula injection). Still open: end-to-end smoke tests of the
+> top-up wizard and the admin money flows.
 
 The API has 71 spec files and mobile has 53 test files; `apps/web` (81 files) and `apps/admin` (67
 files) have none. These are the surfaces staff use to move money (payment reconciliation, payouts,

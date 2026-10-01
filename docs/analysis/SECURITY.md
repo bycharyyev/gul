@@ -20,7 +20,7 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
 | S-08 | P1 | No second factor for staff accounts | M |
 | S-09 | P1 | **Fixed 2026-10-01.** Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
-| S-10 | P2 | **Fixed in code 2026-10-01** (set `UNSUBSCRIBE_SECRET` on both hosts to complete). Unsubscribe links are signed with the JWT access secret | S |
+| S-10 | P2 | **Fixed 2026-10-01** (`UNSUBSCRIBE_SECRET` set on both hosts via `rotate-unsubscribe-secret.yml`). Unsubscribe links are signed with the JWT access secret | S |
 | S-11 | P2 | **Partly fixed 2026-10-01** (content signatures checked on every upload path; images not yet re-encoded). Upload type checks trust the client-declared MIME type | M |
 | S-12 | P2 | **Fixed 2026-10-01.** Third-party GitHub Actions are pinned by tag, not by commit | S |
 | S-13 | P2 | **Fixed 2026-10-01** (nginx 2026-09-28; Next `poweredByHeader: false`). Framework and server versions are advertised in response headers | S |
@@ -161,7 +161,7 @@ payment fields; state the recipients in the privacy page.
 
 ### S-10 to S-13 (hardening)
 
-- **S-10** *Fixed in code 2026-10-01:* signed with `UNSUBSCRIBE_SECRET` when set, falling back to `JWT_ACCESS_SECRET`; verification accepts both so links in mail already sent keep working. Remaining step: set `UNSUBSCRIBE_SECRET` (same value) on both hosts. The unsubscribe HMAC uses `JWT_ACCESS_SECRET`. Use a dedicated `UNSUBSCRIBE_SECRET`, so
+- **S-10** *Fixed in code 2026-10-01:* signed with `UNSUBSCRIBE_SECRET` when set, falling back to `JWT_ACCESS_SECRET`; verification accepts both so links in mail already sent keep working. Set on both hosts (same value, verified by fingerprint) on 2026-10-01 with `rotate-unsubscribe-secret.yml`. The unsubscribe HMAC uses `JWT_ACCESS_SECRET`. Use a dedicated `UNSUBSCRIBE_SECRET`, so
   rotating one secret does not silently break the other.
 - **S-11** *Partly fixed 2026-10-01:* `common/file-signature.ts` checks the leading bytes against the declared type on public uploads, avatars and documents (a page sent as image/png is refused); re-encoding images with `sharp` is still open. Uploads are filtered on `file.mimetype`, which the client chooses. Objects are stored with
   that Content-Type in a separate origin (S3), which limits harm, but add magic-byte sniffing and
