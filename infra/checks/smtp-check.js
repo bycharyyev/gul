@@ -23,10 +23,18 @@ function build(suffix) {
   if (!env.MAIL_HOST) throw new Error("MAIL_HOST is not set in this container: mail is disabled here");
   const checks = [["transactional", ""]];
   if (env.MAIL_USER_MARKETING) checks.push(["marketing", "_MARKETING"]);
+  let failed = false;
   for (const [name, suffix] of checks) {
-    await build(suffix).verify();
-    console.log(`${name}: handshake + login OK (${env["MAIL_HOST" + suffix] || env.MAIL_HOST})`);
+    const where = `${env["MAIL_HOST" + suffix] || env.MAIL_HOST}:${env["MAIL_PORT" + suffix] || env.MAIL_PORT || 587}`;
+    try {
+      await build(suffix).verify();
+      console.log(`${name}: handshake + login OK (${where})`);
+    } catch (err) {
+      failed = true;
+      console.error(`${name}: FAILED (${where}): ${err.code || ""} ${err.responseCode || ""} ${err.message}`);
+    }
   }
+  if (failed) process.exit(1);
   const to = env.SMTP_TEST_RECIPIENT;
   if (to) {
     const info = await build("").sendMail({
