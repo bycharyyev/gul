@@ -9,11 +9,11 @@
 | Area | Source lines | Files |
 | --- | --- | --- |
 | API (NestJS) | 24169 | 347 |
-| Web (Next.js) | 10653 | 86 |
-| Admin (Vite) | 13892 | 72 |
+| Web (Next.js) | 10653 | 89 |
+| Admin (Vite) | 13892 | 73 |
 | Mobile (Flutter) | 25746 | 130 |
 | packages/types | 2307 | 13 |
-| packages/api-client | 2219 | 5 |
+| packages/api-client | 2219 | 6 |
 | packages/i18n | 5127 | 11 |
 
 ## Automated tests
@@ -22,8 +22,8 @@
 | --- | --- | --- |
 | API (jest) | 77 | 11419 |
 | Mobile (flutter test) | 53 | 7391 |
-| Web + Admin | 0 | 0 |
-| packages/* | 1 | 0 |
+| Web + Admin | 4 | 0 |
+| packages/* | 3 | 0 |
 
 ## API
 
@@ -86,13 +86,13 @@ Scheduled: audit-servers.yml, check-exposed-ports.yml, email-dns-monitor.yml, pr
 
 | Package | dependencies | devDependencies |
 | --- | --- | --- |
-| @topup-hub/admin | 12 | 11 |
+| @topup-hub/admin | 12 | 12 |
 | @topup-hub/api | 30 | 15 |
-| @topup-hub/web | 12 | 8 |
+| @topup-hub/web | 12 | 12 |
 | @topup-hub/agent-orchestrator | 0 | 4 |
-| @topup-hub/api-client | 1 | 3 |
+| @topup-hub/api-client | 1 | 4 |
 | @topup-hub/config | 0 | 0 |
-| @topup-hub/i18n | 0 | 3 |
+| @topup-hub/i18n | 0 | 9 |
 | @topup-hub/types | 1 | 2 |
 
 Mobile (pubspec) direct dependencies: 29. App version: 1.0.6+7.
