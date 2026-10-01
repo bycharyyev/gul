@@ -26,9 +26,18 @@ if [ "${code:0:1}" != "2" ]; then
 fi
 echo "TXT record created at $FQDN (HTTP $code)"
 
+# Remember the id for timeweb-cleanup.sh, which deletes by id rather than re-finding the record
+# through a listing whose shape it would have to guess.
+id=$(jq -r '.dns_record.id // .id // empty' /tmp/timeweb-txt-create.json 2>/dev/null || true)
+if [ -n "$id" ]; then
+  echo "$FQDN $id" >> "${RUNNER_TEMP:-/tmp}/acme-txt-ids"
+fi
+
 # Let's Encrypt asks the authoritative servers, so wait for those -- not a public resolver,
 # whose cache could still hold the previous answer.
-for i in $(seq 1 40); do
+# Timeweb has taken from ~4 to ~8 minutes to publish a new record (measured 2026-10-01), so
+# allow 20 before giving up.
+for i in $(seq 1 80); do
   for ns in ns1.timeweb.ru ns2.timeweb.ru; do
     if dig +short TXT "$FQDN" "@$ns" | tr -d '"' | grep -qx -- "$CERTBOT_VALIDATION"; then
       echo "visible on $ns after $((i * 15))s"
