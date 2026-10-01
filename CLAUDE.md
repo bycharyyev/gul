@@ -235,6 +235,12 @@ untrusted for writes until that happens.
 
 ### Mail relay: outgoing SMTP on the secondary
 
+> **App mail does not use this relay (since 2026-10-02).** Every email the API sends goes through
+> the paid REG.RU mailbox `noreply@gulyaly.com` (`mail.hosting.reg.ru:465`) on both hosts, set by
+> `switch-mail-to-regru.yml`; mail through this relay landed in spam. Never point `MAIL_*` back at
+> it and never re-run `setup-mail-relay.yml`. The relay is kept only for the hosts' alert scripts
+> (`infra/alerts`). What follows is history.
+
 `setup-mail-relay.yml` installs Postfix on the secondary as an authenticated submission relay
 (port 587, SASL, STARTTLS) and points the primary's `MAIL_HOST` at it. Port 587 is firewalled to
 the primary's IP only; port 25 is explicitly denied (this relay only sends the app's own outgoing
