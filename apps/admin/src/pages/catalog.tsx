@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AdminServiceInput, CurrencyCode, OrderDetailDto, RateDto, ServiceDto } from "@topup-hub/types";
 import { CURRENCY_CODES } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
-import { useTranslation, translateError } from "@topup-hub/i18n";
+import { useTranslation, translateError, LOCALE_BCP47 } from "@topup-hub/i18n";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,9 @@ import { Select } from "@/components/ui/select";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { useNavigate } from "react-router-dom";
 import { confirmAction } from "@/lib/confirm";
+
+/** A hand-edited rate older than this is flagged; matches the server's stale-rate alert (E-06). */
+const RATE_STALE_MS = 3 * 24 * 60 * 60_000;
 
 const NEW_SERVICE_ID = "__new__";
 
@@ -186,6 +189,7 @@ export default function CatalogPage() {
                     <th className="px-4 py-3">{t("admin.catalog.colCurrency")}</th>
                     <th className="px-4 py-3">{t("admin.catalog.colRate")}</th>
                     <th className="px-4 py-3">{t("admin.catalog.colEnabled")}</th>
+                    <th className="px-4 py-3">{t("admin.catalog.colUpdated")}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -351,8 +355,11 @@ function RateRow({
   saving: boolean;
   onSave: (currency: CurrencyCode, value: number, enabled: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [value, setValue] = useState(rate?.rate ?? 0);
+  const updatedAt = rate?.updatedAt ? new Date(rate.updatedAt) : null;
+  // Same threshold as the "fx-rates-stale" alert (EmailAlertService).
+  const stale = updatedAt !== null && Date.now() - updatedAt.getTime() > RATE_STALE_MS;
   const [enabled, setEnabled] = useState(rate?.enabled ?? true);
 
   useEffect(() => {
@@ -374,6 +381,18 @@ function RateRow({
       </td>
       <td className="px-4 py-3">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+      </td>
+      <td className="px-4 py-3 text-xs">
+        {updatedAt ? (
+          <span
+            className={stale ? "font-medium text-amber-700" : "text-slate-500"}
+            title={stale ? t("admin.catalog.rateStaleHint") : undefined}
+          >
+            {updatedAt.toLocaleDateString(LOCALE_BCP47[locale])}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )}
       </td>
       <td className="px-4 py-3 text-right">
         <button

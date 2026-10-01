@@ -39,6 +39,8 @@ export const rateSchema = z.object({
   currency: z.enum(CURRENCY_CODES),
   rate: z.number(),
   enabled: z.boolean(),
+  /** ISO time of the last edit -- rates are typed in by hand, so their age matters (E-06). */
+  updatedAt: z.string().optional(),
 });
 export type RateDto = z.infer<typeof rateSchema>;
 
