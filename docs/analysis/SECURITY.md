@@ -47,6 +47,10 @@ with no `remotePatterns` it only touches the site's own images, which lowers exp
 ### S-02 · Vulnerable dependencies
 
 > **Fixed 2026-09-26:** multer 2.4.0, nodemailer 9.1.1, sharp 0.35.4. Still open: `@nestjs/core` 10 to 11 and the remaining audit findings (11 after the bump, 5 high, mostly build-time `webpack` under Sentry).
+>
+> **2026-10-01:** nodemailer 10.0.13 (two new high advisories in address parsing), and caret-pinned
+> overrides for fast-uri 3.1.8, js-yaml 4.3.2, brace-expansion 2.1.7 / 5.0.12. `pnpm audit --prod`:
+> 0 critical, 0 high, 4 moderate, 2 low. Still open: the `@nestjs/core` 10 to 11 major upgrade.
 
 `pnpm audit --prod` reported 22 advisories at review time: 2 critical, 10 high, 7 moderate, 3 low.
 Beyond Next.js, the ones that matter here:
