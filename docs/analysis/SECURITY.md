@@ -17,7 +17,7 @@ Effort: S (under a day) · M (a few days) · L (a week or more).
 | S-04 | P0 | *Fixed 2026-09-28.* The full API documentation was public in production (*verified live*) | S |
 | S-05 | P1 | Web and admin keep access and refresh tokens in `localStorage` | M |
 | S-06 | P1 | *Partly fixed 2026-09-28* (IPs out of the docs, secret scanning on, full leak sweep clean). The repository is public and documents the production servers | S |
-| S-07 | P1 | SSH password authentication is enabled on the secondary VPS | S |
+| S-07 | P1 | **Fixed 2026-10-01** (`harden-ssh.yml`: key-only, verified from outside). SSH password authentication is enabled on the secondary VPS | S |
 | S-08 | P1 | No second factor for staff accounts | M |
 | S-09 | P1 | **Fixed 2026-10-01.** Analytics with session replay loads before, and regardless of, consent (*verified in code*) | S |
 | S-10 | P2 | **Fixed 2026-10-01** (`UNSUBSCRIBE_SECRET` set on both hosts via `rotate-unsubscribe-secret.yml`). Unsubscribe links are signed with the JWT access secret | S |
