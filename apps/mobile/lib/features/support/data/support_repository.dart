@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/message_merge.dart';
 import '../domain/support_message.dart';
 
 class SupportRepository {
@@ -6,18 +7,24 @@ class SupportRepository {
 
   final ApiClient _api;
 
-  /// The whole conversation, every time.
-  ///
-  /// There is no `?sinceMessageId=` and no websocket or SSE (GAP 7), so each poll re-downloads
-  /// the full thread. Fine while a thread is a handful of messages; it is the reason polling is
-  /// paced at 15 seconds and stops the moment the screen is not in front of the user.
+  /// The conversation: the whole thread without [after], or with it (the id of the last message
+  /// the server sent) only the newer messages, flagged `incremental`. The caller adds those to
+  /// what it already shows -- see SupportController.
   ///
   /// Fetching also has a **side effect**: the server marks staff and seller messages as read by
-  /// the customer. Polling in the background would therefore mark messages read that nobody has
-  /// seen — another reason the poll is tied to the visible screen.
-  Future<SupportThread> loadThread() async {
-    final json = await _api.get<Map<String, dynamic>>('/support/thread');
-    return SupportThread.fromJson(json);
+  /// the customer (only when something new from them arrived). Polling in the background would
+  /// therefore mark messages read that nobody has seen, which is why the poll is tied to the
+  /// visible screen.
+  Future<({SupportThread thread, bool incremental})> loadThread({
+    String? after,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/support/thread${afterQuery(after)}',
+    );
+    return (
+      thread: SupportThread.fromJson(json),
+      incremental: json['incremental'] == true,
+    );
   }
 
   /// Sends one message. `@Length(1, 2000)` server-side.

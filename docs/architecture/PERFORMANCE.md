@@ -94,7 +94,7 @@ Background tabs kept polling.
   would otherwise be skipped. `mergeMessages` (api-client) de-duplicates and orders by time.
 - Background tabs no longer poll.
 
-Mobile keeps full reads for now; it moves to `after` with the next APK.
+Mobile (chat rooms every 10 s, support every 15 s) uses `after` from the APK built after 2026-10-02: the first open is the full read, polls append only newer messages and never drop what is on screen (`core/network/message_merge.dart`).
 
 **SSE vs WebSocket.** Not built yet, by design: incremental polling removes most of the cost
 (an empty poll is now a small indexed query with no write), and realtime adds a long-lived

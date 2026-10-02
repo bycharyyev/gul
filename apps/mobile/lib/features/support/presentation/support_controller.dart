@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/app_exception.dart';
+import '../../../core/network/message_merge.dart';
 import '../data/support_repository.dart';
 import '../domain/support_message.dart';
 
@@ -78,11 +79,21 @@ class SupportController extends StateNotifier<SupportState> {
   Timer? _timer;
   bool _inFlight = false;
 
-  Future<void> load() => _fetch(isPoll: false);
+  /// Id of the last message the server sent; polls ask only for what came after it.
+  String? _cursor;
+
+  /// A full read (the screen opening): the whole thread, every earlier message included.
+  Future<void> load() {
+    _cursor = null;
+    return _fetch(isPoll: false);
+  }
+
+  /// One poll: only messages newer than the last one received are fetched and added.
+  Future<void> poll() => _fetch(isPoll: true);
 
   void startPolling() {
     _timer?.cancel();
-    _timer = Timer.periodic(pollInterval, (_) => _fetch(isPoll: true));
+    _timer = Timer.periodic(pollInterval, (_) => poll());
   }
 
   void stopPolling() {
@@ -102,8 +113,26 @@ class SupportController extends StateNotifier<SupportState> {
     _inFlight = true;
 
     try {
-      final thread = await _repository.loadThread();
+      final result = await _repository.loadThread(after: _cursor);
       if (!mounted) return;
+      final held = state.thread;
+      // An incremental answer is added to what is on screen; nothing loaded before is dropped.
+      final thread = result.incremental && held != null
+          ? SupportThread(
+              status: result.thread.status,
+              messages: mergeMessages(
+                held.messages,
+                result.thread.messages,
+                id: (m) => m.id,
+                at: (m) => m.createdAt,
+              ),
+            )
+          : result.thread;
+      if (result.thread.messages.isNotEmpty) {
+        _cursor = result.thread.messages.last.id;
+      } else if (!result.incremental) {
+        _cursor = null;
+      }
       state = state.copyWith(thread: thread, loading: false, clearError: true);
     } on AppException catch (e) {
       if (!mounted) return;

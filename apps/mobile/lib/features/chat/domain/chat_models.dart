@@ -187,6 +187,16 @@ class ChatRoomView {
   final bool canPost;
   final ChatOfficialCategory? officialCategory;
 
+  /// The same room with a different message list (an incremental poll merged in).
+  ChatRoomView withMessages(List<ChatMessage> next) => ChatRoomView(
+    title: title,
+    kind: kind,
+    messages: next,
+    canPost: canPost,
+    officialCategory: officialCategory,
+    imageUrl: imageUrl,
+  );
+
   factory ChatRoomView.fromJson(Map<String, dynamic> json) {
     final room = json['room'] as Map<String, dynamic>?;
     return ChatRoomView(

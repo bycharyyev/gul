@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/message_merge.dart';
 import '../domain/chat_models.dart';
 
 /// HTTP boundary for conversations.
@@ -11,7 +12,7 @@ import '../domain/chat_models.dart';
 /// room and an existing support or seller thread the same way on purpose, so nothing above this
 /// class has to know there are two stores behind them.
 class ChatRepository {
-  const ChatRepository(this._api);
+  ChatRepository(this._api);
 
   final ApiClient _api;
 
@@ -105,11 +106,40 @@ class ChatRepository {
         body: const {},
       );
 
+  /// What has been loaded per conversation, and the id of the last message the server sent.
+  /// The repository is per signed-in session (see chatRepositoryProvider), so nothing here
+  /// outlives a sign-out.
+  final Map<String, ({ChatRoomView view, String? cursor})> _held = {};
+
+  /// The conversation as the screen should show it.
+  ///
+  /// The first read is the full one (the latest 200 messages -- everything visible before). After
+  /// that each poll passes the cursor and gets only newer messages, which are **added** to what is
+  /// held: earlier messages stay on screen, and an empty poll downloads almost nothing. The cursor
+  /// is the last id the *server* sent, never one this device just sent, so a message from the
+  /// other side stored in between is not skipped.
   Future<ChatRoomView> messages(String conversationId) async {
+    final held = _held[conversationId];
     final raw = await _api.get<Map<String, dynamic>>(
-      '${_base(conversationId)}/${_raw(conversationId)}/messages',
+      '${_base(conversationId)}/${_raw(conversationId)}/messages${afterQuery(held?.cursor)}',
     );
-    return ChatRoomView.fromJson(raw);
+    final fresh = ChatRoomView.fromJson(raw);
+    final incremental = raw['incremental'] == true && held != null;
+    final view = incremental
+        ? fresh.withMessages(
+            mergeMessages(
+              held.view.messages,
+              fresh.messages,
+              id: (m) => m.id,
+              at: (m) => m.createdAt,
+            ),
+          )
+        : fresh;
+    final cursor = fresh.messages.isNotEmpty
+        ? fresh.messages.last.id
+        : (incremental ? held.cursor : null);
+    _held[conversationId] = (view: view, cursor: cursor);
+    return view;
   }
 
   Future<void> send(
