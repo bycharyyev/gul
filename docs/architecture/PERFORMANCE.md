@@ -135,3 +135,26 @@ immutable`. That is safe because every public key is a fresh uuid, so the bytes 
 change. Private documents are untouched. Objects uploaded before this change keep having no header
 until they are re-uploaded; a one-off copy-in-place could backfill them if it is ever worth it. No
 CDN is involved, and `S3_PUBLIC_BASE_URL` remains the hook for one later.
+
+## Stage 5 — admin Performance page
+
+`/performance` in the admin console (ADMIN, MANAGER), backed by `GET /api/admin/performance?period=5m|1h|24h|7d`:
+
+- **Users.** Online in the last 5 min, active in the last 1 h and 24 h. These are distinct signed-in
+  users, estimated with Redis HyperLogLog. No id can be read back from it.
+- **Requests.** RPS, average, p95 and p99 (interpolated from a 10-bucket latency histogram and
+  labelled as an estimate), 2xx/3xx/4xx/5xx, and 429 separately. Each period has a time series.
+  Counted by `PerfMetricsMiddleware` on response `finish`, so the rate limiter's 429 and auth
+  refusals, which never reach interceptors, are included. Health checks are excluded.
+- **Cache.** Hit ratio from `PublicCacheService` (today, or 7 days).
+- **Servers.** Every API process reports CPU (host-wide, from `/proc/stat` deltas), host RAM,
+  load, its own RSS, role and uptime every 15 s (TTL 60 s). The label comes from `NODE_LABEL` in
+  the compose files (`primary` / `secondary`) plus the port.
+- **PostgreSQL.** Connections used/max, active queries, and replication state and replay lag. No
+  `client_addr` is sent.
+- **BullMQ.** Waiting, active and failed jobs per queue.
+- **Stuck orders.** PAID for more than 10 min, PROCESSING for more than 30 min.
+
+Storage: Redis hashes `perf:m:<minute>` (kept 2 h) and `perf:h:<hour>` (kept 8 d), with HLL
+`perf:um:*` / `perf:uh:*`, on a dedicated fail-fast connection. Writes never delay a request, and
+with Redis down the samples are simply lost.

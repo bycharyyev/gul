@@ -136,6 +136,7 @@ export function useNavGroups(): NavGroup[] {
       items: [
         { to: "/team", label: t("admin.nav.team"), icon: Users },
         { to: "/database", label: t("admin.nav.database"), icon: Database },
+        { to: "/performance", label: t("admin.nav.performance"), icon: Activity },
         { to: "/monitoring", label: t("admin.nav.monitoring"), icon: Gauge },
         { to: "/subdomains", label: t("admin.nav.subdomains"), icon: Network },
       ],
