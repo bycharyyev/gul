@@ -18,6 +18,8 @@ import type {
   AdminStatsDto,
   AdminPeriodComparisonDto,
   AdminEconomicsDto,
+  PerformanceOverviewDto,
+  PerfPeriod,
   MarketplaceSettingsDto,
   UpdateMarketplaceSettingsInput,
   AdminStoryInput,
@@ -778,6 +780,11 @@ export class ApiClient {
   /** Gross revenue/cost per stream -- see AdminEconomicsDto: deliberately never a margin figure. */
   getAdminEconomics(days = 30) {
     return this.request<AdminEconomicsDto>(`/admin/stats/economics?days=${days}`);
+  }
+
+  /** Aggregated request, user, cache, node, database and queue health for the admin Performance page. */
+  getPerformance(period: PerfPeriod = "1h") {
+    return this.request<PerformanceOverviewDto>(`/admin/performance?period=${period}`);
   }
 
   getDatabaseOverview() {

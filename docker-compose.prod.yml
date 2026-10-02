@@ -81,6 +81,8 @@ services:
       # demands a password the API is not sending, or the reverse -- and in that window nothing
       # can be queued on either node.
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+      # Which server this is on the admin Performance page.
+      NODE_LABEL: "primary"
     depends_on:
       postgres:
         condition: service_healthy
