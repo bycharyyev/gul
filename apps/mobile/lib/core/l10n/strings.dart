@@ -597,6 +597,7 @@ class Strings {
       'edit.phone': 'Телефон',
       'edit.phoneBonusOffer': 'Добавьте номер — получите {amount} TMT скидки после первой оплаченной покупки.',
       'edit.phoneBonusEarned': 'Бонус {amount} TMT за номер начислен.',
+      'edit.phoneContactHint': 'Добавьте номер, чтобы мы могли связаться с вами по заказу или доставке.',
       'edit.country': 'Страна',
       'update.title': 'Требуется обновление',
       'update.soon':
@@ -1172,6 +1173,7 @@ class Strings {
       'edit.phone': 'Phone',
       'edit.phoneBonusOffer': 'Add your number and get a {amount} TMT discount after your first paid purchase.',
       'edit.phoneBonusEarned': '{amount} TMT bonus for your number has been credited.',
+      'edit.phoneContactHint': 'Add your number so we can reach you about an order or a delivery.',
       'edit.country': 'Country',
       'update.title': 'Update required',
       'update.soon':
@@ -1742,6 +1744,7 @@ class Strings {
       'edit.phone': 'Telefon',
       'edit.phoneBonusOffer': 'Belgiňizi goşuň — ilkinji tölenen satyn alyşdan soň {amount} TMT arzanladyş alyň.',
       'edit.phoneBonusEarned': 'Belgi üçin {amount} TMT bonus goşuldy.',
+      'edit.phoneContactHint': 'Sargyt ýa-da eltip bermek boýunça siz bilen habarlaşyp bilmegimiz üçin belgiňizi goşuň.',
       'edit.country': 'Ýurt',
       'update.title': 'Täzelenme gerek',
       'update.soon':

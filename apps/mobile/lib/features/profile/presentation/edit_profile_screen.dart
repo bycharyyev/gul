@@ -73,13 +73,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
-  /// "Add a phone, get N TMT" until the bonus is earned, then a thank-you; nothing when the
-  /// server did not say how big the bonus is.
-  String? _phoneBonusHint(Strings strings) {
-    // The bonus is a referral-balance credit, so it is part of the reward surface this build
-    // hides (see kReferralRewardsEnabled): the store declaration says no financial features.
-    if (!kReferralRewardsEnabled) return null;
+  /// Under the phone field. Where rewards are allowed: "add a phone, get N TMT" until earned, then
+  /// a thank-you. Where they are not: a plain reason to add the number, with no reward.
+  String? _phoneHint(Strings strings) {
     final user = ref.read(authControllerProvider).user;
+    // The bonus is a referral-balance credit, so it is part of the reward surface this build
+    // hides (see kReferralRewardsEnabled): the store declaration says no financial features
+    // ("rewards, points ... and other incentives"). The number is still worth asking for, so this
+    // build asks for it plainly -- what it is used for, with nothing offered in return.
+    if (!kReferralRewardsEnabled) {
+      final hasPhone = user?.phone?.isNotEmpty ?? false;
+      return hasPhone ? null : strings.get('edit.phoneContactHint');
+    }
     final amount = user?.phoneBonusTmt;
     if (user == null || amount == null || amount <= 0) return null;
     final key = user.phoneBonusAt != null
@@ -128,7 +133,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           onFieldSubmitted: (_) => _submit(),
           decoration: InputDecoration(
             labelText: strings.get('edit.phone'),
-            helperText: _phoneBonusHint(strings),
+            helperText: _phoneHint(strings),
             helperMaxLines: 3,
           ),
           // Optional since sign-in moved to email; checked only when something is typed.
