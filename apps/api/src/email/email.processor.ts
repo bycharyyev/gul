@@ -7,6 +7,7 @@ import {
   redisConnection,
 } from "../queue/queue.module";
 import { EmailService, type EmailJobData } from "./email.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * Per-queue pacing. REG.RU publishes a daily cap (enforced by EmailQuotaService) but no
@@ -32,6 +33,8 @@ export class EmailProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(private email: EmailService) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     // One worker per lane, so a marketing backlog occupies only the marketing worker and can
     // never hold up a password-reset code waiting behind it.
     this.workers = LANES.map((lane) => {
@@ -59,6 +62,6 @@ export class EmailProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await Promise.all(this.workers.map((w) => w.close()));
+    await Promise.all((this.workers ?? []).map((w) => w.close()));
   }
 }

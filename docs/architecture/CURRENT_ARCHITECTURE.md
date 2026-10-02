@@ -145,7 +145,7 @@ support report can be correlated without copying sensitive request data.
   exact raw body, normalize the event, and supply verified amount/currency for every success before
   PostgreSQL accepts it; mismatches are quarantined instead of settled. A background worker replays
   verified events left unfinished by a crash. A concrete signed adapter awaits the gateway choice.
-- HTTP handling, workers and Telegram bot share one API process/image.
+- HTTP handling, workers and Telegram bot share one API process/image in production (`APP_ROLE` unset = `all`). The code can split them (`APP_ROLE=http|worker`, ADR 0008); the topology change is pending.
 - Top-up fulfillment resolves an `OperatorGateway` through DI. With no real adapter configured it
   fails closed, and mock fulfillment is rejected in production. Ambiguous provider outcomes remain
   `SENT`/`PROCESSING` for reconciliation instead of becoming retryable failures.

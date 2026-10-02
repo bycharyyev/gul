@@ -8,7 +8,7 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 24732 | 356 |
+| API (NestJS) | 24800 | 358 |
 | Web (Next.js) | 10693 | 89 |
 | Admin (Vite) | 14035 | 73 |
 | Mobile (Flutter) | 25746 | 130 |
@@ -20,7 +20,7 @@
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 80 | 11868 |
+| API (jest) | 81 | 11906 |
 | Mobile (flutter test) | 53 | 7391 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
@@ -31,7 +31,7 @@
 | --- | --- |
 | Feature modules (directories under apps/api/src) | 44 |
 | Controllers | 44 |
-| HTTP route handlers | 350 |
+| HTTP route handlers | 351 |
 |   of which under /admin/* | 90 |
 
 Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, marketplace-settings, metrics, notifications, orders, partner, payments, platform-settings, prisma, public-cache, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
@@ -99,4 +99,4 @@ Mobile (pubspec) direct dependencies: 29. App version: 1.0.6+7.
 
 ## Documentation
 
-Markdown documents under docs/: 42.
+Markdown documents under docs/: 43.
