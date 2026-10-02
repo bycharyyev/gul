@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Telegraf } from "telegraf";
 import { PrismaService } from "../prisma/prisma.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * A second, dedicated bot (@gulyalybot) for platform-ops notifications -- new orders, Sentry
@@ -35,7 +36,9 @@ export class AdminTelegramBotService implements OnModuleInit, OnModuleDestroy {
     // Same active/active constraint as the seller bot: getUpdates long-polling allows exactly one
     // live consumer per token, so only the node with TELEGRAM_ADMIN_BOT_POLLING="true" (primary,
     // see deploy.yml) may call launch().
-    if (process.env.TELEGRAM_ADMIN_BOT_POLLING !== "true") {
+    // Never from an APP_ROLE=http process (ADR 0008): there may be several on one node, and the
+    // second long-poller on a token is killed by Telegram with 409.
+    if (process.env.TELEGRAM_ADMIN_BOT_POLLING !== "true" || !runsBackgroundWork()) {
       this.logger.log("Admin bot: outbound-only on this node (TELEGRAM_ADMIN_BOT_POLLING unset)");
       return;
     }

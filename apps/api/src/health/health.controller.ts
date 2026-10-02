@@ -3,6 +3,7 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Queue } from "bullmq";
 import { PrismaService } from "../prisma/prisma.service";
 import { TOPUP_QUEUE } from "../queue/queue.module";
+import { appRole, runsBackgroundWork } from "../common/app-role";
 
 @ApiTags("health")
 @Controller("health")
@@ -25,6 +26,13 @@ export class HealthController {
   @Get("live")
   live() {
     return { status: "ok" };
+  }
+
+  /** Which ADR 0008 role this process runs, so a deploy can check an http process is not
+   *  running workers (or a worker is) before trusting it. No secrets, no counts. */
+  @Get("role")
+  role() {
+    return { role: appRole(), background: runsBackgroundWork() };
   }
 
   /** Able to actually serve production traffic -- checks the dependencies a request would

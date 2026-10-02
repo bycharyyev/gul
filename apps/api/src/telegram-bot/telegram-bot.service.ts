@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Telegraf, Markup } from "telegraf";
 import { PrismaService } from "../prisma/prisma.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: "🟡 Ожидает оплаты",
@@ -53,7 +54,9 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
     // this /chatid) worked only by accident, on whichever node happened to win that race -- with
     // no retry: the .catch() below only logs, it never relaunches. TELEGRAM_BOT_POLLING="true" is
     // written to primary's .env only (see deploy.yml), so exactly one node ever calls launch().
-    if (process.env.TELEGRAM_BOT_POLLING !== "true") {
+    // Never from an APP_ROLE=http process (ADR 0008): there may be several on one node, and the
+    // second long-poller on a token is killed by Telegram with 409.
+    if (process.env.TELEGRAM_BOT_POLLING !== "true" || !runsBackgroundWork()) {
       this.logger.log("Telegram bot: outbound-only on this node (TELEGRAM_BOT_POLLING unset)");
       return;
     }

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { EmailOutboxService } from "./email-outbox.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * Polling interval. Order mail is not latency-critical to the second, and a short interval on
@@ -16,6 +17,8 @@ export class EmailOutboxProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(private outbox: EmailOutboxService) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     // unref() so a pending timer never holds the process open during shutdown -- the API calls
     // enableShutdownHooks(), and a live interval would delay SIGTERM on every deploy.
     this.timer = setInterval(() => void this.tick(), POLL_INTERVAL_MS);

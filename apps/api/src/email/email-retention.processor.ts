@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * How long each kind of row is kept.
@@ -31,6 +32,8 @@ export class EmailRetentionProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(private prisma: PrismaService) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     this.startupTimer = setTimeout(() => {
       this.timer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
       this.timer.unref();
