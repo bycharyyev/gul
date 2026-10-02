@@ -58,6 +58,28 @@ class AuthRepository {
     return _persist(data);
   }
 
+  /// Mails a password-reset code. The server answers the same whether or not the address has an
+  /// account, so this cannot be used to probe for one. Returns the code's lifetime in minutes.
+  Future<int> requestPasswordReset(String email) async {
+    final data = await _api.post<Map<String, dynamic>>(
+      '/auth/password-reset/request',
+      body: {'email': email},
+    );
+    return (data['expiresInMinutes'] as num?)?.toInt() ?? 15;
+  }
+
+  /// Sets a new password with the mailed code. Does not sign in; the caller logs in afterwards.
+  Future<void> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/auth/password-reset/confirm',
+      body: {'email': email, 'code': code, 'newPassword': newPassword},
+    );
+  }
+
   /// The stored session, or null. Called once at startup.
   ///
   /// Hitting `/auth/me` rather than trusting the stored token: it is the only way to learn that

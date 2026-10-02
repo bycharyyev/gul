@@ -13,7 +13,8 @@ import 'widgets/auth_form_layout.dart';
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
-  static const path = '/register';
+  /// The classic form; `/register` itself is the chat (ChatAuthScreen).
+  static const path = '/register/form';
 
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();

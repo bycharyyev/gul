@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/config/feature_flags.dart';
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/auth/presentation/chat_auth_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/auth/presentation/splash_screen.dart';
@@ -48,6 +49,8 @@ import 'shell.dart';
 /// Routes that a signed-out user is allowed to reach.
 const _publicRoutes = {
   WelcomeScreen.path,
+  ChatAuthScreen.loginPath,
+  ChatAuthScreen.registerPath,
   LoginScreen.path,
   RegisterScreen.path,
 };
@@ -67,6 +70,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: WelcomeScreen.path,
         builder: (_, __) => const WelcomeScreen(),
+      ),
+      GoRoute(
+        path: ChatAuthScreen.loginPath,
+        builder: (_, __) => const ChatAuthScreen(start: ChatAuthStart.login),
+      ),
+      GoRoute(
+        path: ChatAuthScreen.registerPath,
+        builder: (_, __) => const ChatAuthScreen(start: ChatAuthStart.register),
       ),
       GoRoute(path: LoginScreen.path, builder: (_, __) => const LoginScreen()),
       // Outside the tab shell on purpose: a shop is reached from a post, it is not one of the
