@@ -1,0 +1,60 @@
+name: API logs and .env restore
+
+# Diagnostics for the API processes (ADR 0008: api, api-2, api-worker) on one host:
+# container states and the last lines of each one's log. With restore_env=true it also puts
+# back the newest .env backup taken by set-freekassa-credentials.yml (.env.bak-freekassa-*) and
+# recreates the three processes -- the rollback for a bad credentials write.
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        type: choice
+        options: [primary, secondary]
+        default: primary
+      restore_env:
+        description: Restore the newest .env.bak-freekassa-* and recreate api, api-2, api-worker
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: States and logs
+        env:
+          TARGET: ${{ inputs.host == 'primary' && format('{0}@{1}', secrets.DEPLOY_USER, secrets.DEPLOY_HOST) || format('{0}@{1}', secrets.SECONDARY_USER, secrets.SECONDARY_HOST) }}
+          DIR: ${{ inputs.host == 'primary' && '/opt/gul' || '/opt/gul-secondary' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$TARGET" "
+            cd $DIR
+            docker compose ps api api-2 api-worker
+            for s in api api-2 api-worker; do
+              echo \"===== \$s =====\"
+              docker compose logs --no-color --tail=40 \$s 2>&1 | grep -viE 'password|secret|token|key=' | tail -40
+            done
+          " < /dev/null
+      - name: Restore .env from the FreeKassa backup
+        if: inputs.restore_env
+        env:
+          TARGET: ${{ inputs.host == 'primary' && format('{0}@{1}', secrets.DEPLOY_USER, secrets.DEPLOY_HOST) || format('{0}@{1}', secrets.SECONDARY_USER, secrets.SECONDARY_HOST) }}
+          DIR: ${{ inputs.host == 'primary' && '/opt/gul' || '/opt/gul-secondary' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$TARGET" "
+            set -e
+            cd $DIR
+            b=\$(ls -t .env.bak-freekassa-* | head -1)
+            echo \"restoring \$b\"
+            cat \"\$b\" > .env
+            docker compose up -d --force-recreate --no-deps api api-2 api-worker
+            for p in 4000 4002 4001; do
+              for i in \$(seq 1 30); do curl -fsS http://127.0.0.1:\$p/api/health/ready >/dev/null && { echo \"\$p healthy\"; break; }; sleep 2; done
+            done
+          " < /dev/null
