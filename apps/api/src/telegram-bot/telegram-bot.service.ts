@@ -187,7 +187,7 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
         orderBy: { lastMessageAt: "desc" },
         take: 5,
         include: {
-          user: { select: { fullName: true, phone: true } },
+          user: { select: { fullName: true, phone: true, email: true } },
           messages: { orderBy: { createdAt: "desc" }, take: 1 },
         },
       });
@@ -201,7 +201,7 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
       const unreadMap = new Map(unreadCounts.map((u) => [u.threadId, u._count._all]));
 
       const lines = threads.map((t) => {
-        const who = t.user.fullName || t.user.phone;
+        const who = t.user.fullName || t.user.phone || t.user.email || "—";
         const last = t.messages[0];
         const unread = unreadMap.get(t.id) ?? 0;
         const preview = last ? last.body.slice(0, 80) : "";

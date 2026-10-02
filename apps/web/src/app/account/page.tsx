@@ -44,7 +44,10 @@ function DocIcon({ mimeType }: { mimeType: string }) {
 
 type Profile = {
   id: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
+  phoneBonusAt?: string | null;
+  phoneBonusTmt?: number;
   fullName: string | null;
   username: string;
   role: string;
@@ -60,7 +63,7 @@ function ProfileSection({
 }) {
   const { t } = useTranslation();
   const [fullName, setFullName] = useState(profile.fullName ?? "");
-  const [phone, setPhone] = useState(profile.phone);
+  const [phone, setPhone] = useState(profile.phone ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -76,8 +79,13 @@ function ProfileSection({
     setError(null);
     setSuccess(false);
     try {
-      const updated = await api.updateMe({ fullName, phone });
-      onUpdated({ ...profile, fullName: updated.fullName, phone: updated.phone });
+      const updated = await api.updateMe({ fullName, phone: phone.trim() || undefined });
+      onUpdated({
+        ...profile,
+        fullName: updated.fullName,
+        phone: updated.phone,
+        phoneBonusAt: updated.phoneBonusAt ?? null,
+      });
       setSuccess(true);
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("web.account.saveError"));
@@ -169,7 +177,24 @@ function ProfileSection({
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium">{t("web.account.phone")}</label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input
+            type="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+99361234567"
+          />
+          {profile.phoneBonusTmt ? (
+            profile.phoneBonusAt ? (
+              <p className="mt-1 text-xs text-emerald-600">
+                {t("web.account.phoneBonusEarned", { amount: String(profile.phoneBonusTmt) })}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t("web.account.phoneBonusOffer", { amount: String(profile.phoneBonusTmt) })}
+              </p>
+            )
+          ) : null}
         </div>
         {error && <p className="text-sm text-rose-600">{error}</p>}
         {success && <p className="text-sm text-emerald-600">{t("web.account.saved")}</p>}

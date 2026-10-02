@@ -135,7 +135,7 @@ export interface GalleryOrderDto {
 }
 
 export interface GalleryOrderAdminDto extends GalleryOrderDto {
-  user: { id: string; phone: string; fullName: string | null };
+  user: { id: string; phone: string | null; email?: string | null; fullName: string | null };
 }
 
 export const updateGalleryOrderStatusSchema = z.object({
@@ -180,7 +180,7 @@ export interface SellerDto {
 export interface SellerAdminDto extends Omit<SellerDto, "storefronts"> {
   balanceTmt: number;
   createdAt: string;
-  user: { id: string; phone: string; fullName: string | null; isBlocked: boolean };
+  user: { id: string; phone: string | null; email?: string | null; fullName: string | null; isBlocked: boolean };
   /** Every section, running or not — staff see what a shop has built, not only what it shows. */
   storefronts?: {
     id: string;
@@ -230,7 +230,9 @@ const handleSchema = z
   });
 
 export const createSellerSchema = z.object({
-  phone: z.string().min(6).max(20),
+  /** The seller signs in with this address. */
+  email: z.string().email().max(254),
+  phone: z.string().min(6).max(20).optional(),
   password: z.string().min(8).max(72),
   fullName: z.string().min(1).max(120).optional(),
   handle: handleSchema,
@@ -263,8 +265,10 @@ export interface SellerTelegramLinkCodeDto {
 // ---- Seller applications (public self-signup, admin-moderated) ----
 
 export const createSellerApplicationSchema = z.object({
-  phone: z.string().min(6).max(20),
-  // Required: before approval this is the only channel that reaches the applicant.
+  /** Optional contact number. */
+  phone: z.string().min(6).max(20).optional(),
+  // Required: the seller signs in with it, and before approval it is the only channel that
+  // reaches the applicant.
   email: z.string().email().max(254),
   password: z.string().min(8).max(72),
   fullName: z.string().min(1).max(120).optional(),
@@ -281,7 +285,7 @@ export type ReviewApplicationInput = z.infer<typeof reviewApplicationSchema>;
 
 export interface SellerApplicationDto {
   id: string;
-  phone: string;
+  phone: string | null;
   email: string;
   fullName: string | null;
   handle: string;

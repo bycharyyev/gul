@@ -69,12 +69,9 @@ void main() {
         kind: AppErrorKind.unauthorized,
         serverMessage: 'INVALID_CREDENTIALS',
       );
-      expect(const Strings('ru').error(e), 'Неверный номер или пароль.');
-      expect(const Strings('en').error(e), 'Wrong phone number or password.');
-      expect(
-        const Strings('tkm').error(e),
-        'Telefon belgisi ýa-da parol nädogry.',
-      );
+      expect(const Strings('ru').error(e), 'Неверный email или пароль.');
+      expect(const Strings('en').error(e), 'Wrong email or password.');
+      expect(const Strings('tkm').error(e), 'E-poçta ýa-da parol nädogry.');
     });
 
     test('an untranslated code is never shown raw', () {

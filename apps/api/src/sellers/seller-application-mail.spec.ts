@@ -87,16 +87,33 @@ describe("seller application email", () => {
     expect(created.emailVerified).toBeUndefined();
   });
 
-  it("still approves when the address already belongs to another account", async () => {
-    const prisma = makePrisma();
-    // `email` is unique on User -- approval must not fail because of it.
+  it("promotes the account that already owns the application's email instead of creating another", async () => {
+    // Sign-in is by email (since 2026-10-02): the address IS the account, so an application naming
+    // an address that already has one belongs to that account.
+    const prisma = {
+      ...makePrisma(),
+      $transaction: jest.fn().mockResolvedValue([{}, { id: "s1", shopName: APPLICATION.shopName }, {}]),
+    };
+    Object.assign(prisma.user, { update: jest.fn() });
     prisma.user.findUnique.mockImplementation(({ where }: { where: { email?: string; phone?: string } }) =>
-      Promise.resolve(where.email ? { id: "someone-else" } : null),
+      Promise.resolve(where.email ? { id: "existing", role: "CUSTOMER" } : null),
     );
-    const { service } = build(prisma);
+    const { service } = build(prisma as never);
 
     await expect(service.approveApplication("app1", { note: undefined } as never, "admin1")).resolves.toBeDefined();
-    expect(prisma.user.create.mock.calls[0][0].data.email).toBeNull();
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it("refuses to approve an old application that carries no email, since nobody could sign in", async () => {
+    const prisma = makePrisma();
+    prisma.sellerApplication.findUnique.mockResolvedValue({ ...APPLICATION, email: null });
+    const { service } = build(prisma);
+
+    await expect(service.approveApplication("app1", { note: undefined } as never, "admin1")).rejects.toThrow(
+      "APPLICATION_HAS_NO_EMAIL",
+    );
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it("mails the rejection reason, which is what makes it actionable", async () => {

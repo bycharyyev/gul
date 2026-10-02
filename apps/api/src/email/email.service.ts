@@ -230,7 +230,7 @@ export class EmailService {
     return this.prisma.emailLog.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { user: { select: { id: true, phone: true, fullName: true } } },
+      include: { user: { select: { id: true, phone: true, email: true, fullName: true } } },
     });
   }
 

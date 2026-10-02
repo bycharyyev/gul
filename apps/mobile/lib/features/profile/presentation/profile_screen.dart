@@ -80,7 +80,7 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          user.phone,
+                          user.contactLabel,
                           style: TextStyle(
                             color: Theme.of(
                               context,

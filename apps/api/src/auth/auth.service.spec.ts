@@ -11,6 +11,7 @@ function makePrismaMock() {
   return {
     user: {
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -30,6 +31,7 @@ function makeReferralsMock() {
   return {
     generateUsername: jest.fn().mockResolvedValue("autogenusr"),
     recordReferral: jest.fn().mockResolvedValue(undefined),
+    maybeGrantPhoneBonus: jest.fn().mockResolvedValue(false),
   };
 }
 
@@ -150,115 +152,6 @@ describe("AuthService", () => {
     });
   });
 
-  describe("register", () => {
-    it("generates a username via ReferralsService and stores it on the new user", async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({
-        id: "user-1",
-        phone: "+70000000001",
-        fullName: "New User",
-        username: "autogenusr",
-        role: "CUSTOMER",
-      });
-
-      const result = await service.register({ phone: "+70000000001", password: "password123", fullName: "New User" });
-
-      expect(referrals.generateUsername).toHaveBeenCalled();
-      expect(prisma.user.create).toHaveBeenCalledWith({
-        data: {
-          phone: "+70000000001",
-          passwordHash: "hashed",
-          fullName: "New User",
-          username: "autogenusr",
-          locale: "ru",
-          country: "RU",
-        },
-      });
-      expect(result.user.username).toBe("autogenusr");
-      expect(result.user.avatarUrl).toBeNull();
-    });
-
-    it.each([
-      ["+99361234567", "TM"],
-      ["+8613800138000", "CN"],
-      ["+905321234567", "TR"],
-      ["+2547123456789", null],
-    ])("derives the country from the phone number %s -> %s", async (phone, country) => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({ id: "u", phone, fullName: "N", username: "x", role: "CUSTOMER", locale: "ru", country });
-
-      await service.register({ phone, password: "password123", fullName: "N" });
-
-      expect(prisma.user.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ phone, country }),
-      });
-    });
-
-    it("records the referral when a referredByUsername is supplied, without blocking on failure", async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({
-        id: "user-2",
-        phone: "+70000000002",
-        fullName: null,
-        username: "autogenusr",
-        role: "CUSTOMER",
-      });
-      referrals.recordReferral.mockRejectedValue(new Error("garbage code"));
-
-      const result = await service.register({
-        phone: "+70000000002",
-        password: "password123",
-        referredByUsername: "someone",
-      });
-
-      expect(referrals.recordReferral).toHaveBeenCalledWith("user-2", "someone", {
-        utmSource: undefined,
-        utmMedium: undefined,
-        utmCampaign: undefined,
-        referrerUrl: undefined,
-      });
-      expect(result.user.id).toBe("user-2"); // did not throw despite recordReferral rejecting
-    });
-
-    it("forwards attribution captured on the /r/<code> link through to recordReferral", async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({
-        id: "user-3",
-        phone: "+70000000003",
-        fullName: null,
-        username: "autogenusr2",
-        role: "CUSTOMER",
-      });
-      referrals.recordReferral.mockResolvedValue(undefined);
-
-      await service.register({
-        phone: "+70000000003",
-        password: "password123",
-        referredByUsername: "someone",
-        utmSource: "instagram",
-        utmMedium: "social",
-        utmCampaign: "launch2026",
-        referrerUrl: "https://instagram.com/gulyaly",
-      });
-
-      expect(referrals.recordReferral).toHaveBeenCalledWith("user-3", "someone", {
-        utmSource: "instagram",
-        utmMedium: "social",
-        utmCampaign: "launch2026",
-        referrerUrl: "https://instagram.com/gulyaly",
-      });
-    });
-
-    it("rejects registration with an already-used phone before touching ReferralsService", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "existing" });
-
-      await expect(
-        service.register({ phone: "+70000000001", password: "password123" }),
-      ).rejects.toThrow("PHONE_ALREADY_REGISTERED");
-      expect(referrals.generateUsername).not.toHaveBeenCalled();
-    });
-  });
-
   describe("updateMe", () => {
     it("rejects a phone change that collides with a different user", async () => {
       prisma.user.findUnique.mockResolvedValue({ id: "other-user" });
@@ -270,8 +163,8 @@ describe("AuthService", () => {
     });
 
     it("allows keeping your own current phone number (self-collision is not a conflict)", async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: "user-1" });
-      prisma.user.update.mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({ id: "user-1", country: "TM" });
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
         id: "user-1",
         phone: "+70000000099",
         fullName: "Me",
@@ -285,7 +178,7 @@ describe("AuthService", () => {
     });
 
     it("does not check phone uniqueness when phone is omitted from the update", async () => {
-      prisma.user.update.mockResolvedValue({
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
         id: "user-1",
         phone: "+70000000001",
         fullName: "New Name",
@@ -296,17 +189,35 @@ describe("AuthService", () => {
 
       const result = await service.updateMe("user-1", { fullName: "New Name" });
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(referrals.maybeGrantPhoneBonus).not.toHaveBeenCalled();
       expect(result.avatarUrl).toBe("/api/avatar/abc.jpg");
+      expect(result.phoneBonusTmt).toBe(1);
+    });
+
+    it("adding a phone checks the phone bonus and fills in a missing country from the number", async () => {
+      prisma.user.findUnique
+        .mockResolvedValueOnce(null) // nobody else holds the number
+        .mockResolvedValueOnce({ country: null }); // the account has no country yet
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: "user-1", avatarPath: null });
+
+      await service.updateMe("user-1", { fullName: "Me", phone: "+99361234567" });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: { fullName: "Me", phone: "+99361234567", locale: undefined, country: "TM" },
+      });
+      expect(referrals.maybeGrantPhoneBonus).toHaveBeenCalledWith("user-1");
     });
   });
 
   describe("login", () => {
-    const PHONE = "+99361234567";
+    const EMAIL = "aygul@example.com";
 
     function existingUser(passwordVerifies: boolean) {
       prisma.user.findUnique.mockResolvedValue({
         id: "user-1",
-        phone: PHONE,
+        email: EMAIL,
+        phone: null,
         passwordHash: "hash",
         fullName: "Aygul",
         username: "1001",
@@ -323,7 +234,7 @@ describe("AuthService", () => {
     it("turns a guess away while the wait is running, without touching the database", async () => {
       loginAttempts.check.mockResolvedValue({ allowed: false, retryAfterSeconds: 8 });
 
-      await expect(service.login({ phone: PHONE, password: "x" } as never)).rejects.toMatchObject({
+      await expect(service.login({ email: EMAIL, password: "x" } as never)).rejects.toMatchObject({
         status: 429,
       });
       // Checked before the lookup and before argon2: a throttled attempt should cost nothing,
@@ -334,25 +245,25 @@ describe("AuthService", () => {
     it("records a failure when the password is wrong", async () => {
       existingUser(false);
 
-      await expect(service.login({ phone: PHONE, password: "wrong" } as never)).rejects.toThrow();
-      expect(loginAttempts.recordFailure).toHaveBeenCalledWith(PHONE);
+      await expect(service.login({ email: EMAIL, password: "wrong" } as never)).rejects.toThrow();
+      expect(loginAttempts.recordFailure).toHaveBeenCalledWith(EMAIL);
       expect(loginAttempts.clear).not.toHaveBeenCalled();
     });
 
-    it("records a failure for a number nobody holds, too", async () => {
-      // Otherwise an unknown number answers faster than a known one with a wrong password, and
+    it("records a failure for an address nobody holds, too", async () => {
+      // Otherwise an unknown address answers faster than a known one with a wrong password, and
       // that difference is a way to find out who has an account here.
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login({ phone: PHONE, password: "x" } as never)).rejects.toThrow();
-      expect(loginAttempts.recordFailure).toHaveBeenCalledWith(PHONE);
+      await expect(service.login({ email: EMAIL, password: "x" } as never)).rejects.toThrow();
+      expect(loginAttempts.recordFailure).toHaveBeenCalledWith(EMAIL);
     });
 
     it("erases the history when the password is right", async () => {
       existingUser(true);
 
-      await service.login({ phone: PHONE, password: "correct" } as never);
-      expect(loginAttempts.clear).toHaveBeenCalledWith(PHONE);
+      await service.login({ email: EMAIL, password: "correct" } as never);
+      expect(loginAttempts.clear).toHaveBeenCalledWith(EMAIL);
       expect(loginAttempts.recordFailure).not.toHaveBeenCalled();
     });
   });

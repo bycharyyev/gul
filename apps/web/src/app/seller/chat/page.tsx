@@ -90,7 +90,7 @@ export default function SellerChatPage() {
                 selectedId === thread.id ? "bg-gradient-brand-soft" : "hover:bg-white/50 dark:hover:bg-white/5"
               }`}
             >
-              <span className="truncate">{thread.user.fullName || thread.user.phone}</span>
+              <span className="truncate">{thread.user.fullName || thread.user.phone || thread.user.email}</span>
               {thread.unreadCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-xs font-semibold text-white">
                   {thread.unreadCount}
@@ -113,7 +113,7 @@ export default function SellerChatPage() {
         {detail && (
           <>
             <div className="border-b border-white/30 px-5 py-3 text-sm font-semibold dark:border-white/10">
-              {detail.thread.user.fullName || detail.thread.user.phone}
+              {detail.thread.user.fullName || detail.thread.user.phone || detail.thread.user.email}
             </div>
             <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
               {detail.messages.map((m) => (

@@ -1,10 +1,12 @@
 import type {
   AuthResponse,
   ChangePasswordInput,
+  ConfirmRegistrationInput,
   EmailStatusDto,
   LocaleInput,
   LoginInput,
   RegisterInput,
+  RegistrationStartedDto,
   SessionDto,
   UpdateMeInput,
 } from "@topup-hub/types";
@@ -18,8 +20,14 @@ export interface AuthTokenStore {
 export class AuthResource {
   constructor(private readonly request: ApiRequest, private readonly tokens: AuthTokenStore) {}
 
-  async register(input: RegisterInput) {
-    const result = await this.request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(input), auth: false });
+  /** Step 1 of sign-up: mails a code to the address. No session yet. */
+  register(input: RegisterInput) {
+    return this.request<RegistrationStartedDto>("/auth/register", { method: "POST", body: JSON.stringify(input), auth: false });
+  }
+
+  /** Step 2 of sign-up: the mailed code creates the account and signs it in. */
+  async confirmRegistration(input: ConfirmRegistrationInput) {
+    const result = await this.request<AuthResponse>("/auth/register/confirm", { method: "POST", body: JSON.stringify(input), auth: false });
     this.tokens.setTokens(result.accessToken, result.refreshToken);
     return result;
   }

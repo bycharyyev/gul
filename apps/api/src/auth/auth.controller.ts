@@ -2,7 +2,8 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards 
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
-import { RegisterDto } from "./dto/register.dto";
+import { ConfirmRegistrationDto, RegisterDto } from "./dto/register.dto";
+import { RegistrationService } from "./registration.service";
 import { LoginDto } from "./dto/login.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { UpdateMeDto } from "./dto/update-me.dto";
@@ -18,6 +19,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private passwordReset: PasswordResetService,
+    private registration: RegistrationService,
   ) {}
 
   // Every limit on this controller is keyed by IP, and an IP here is not a person: Turkmenistan
@@ -28,10 +30,21 @@ export class AuthController {
   // So these are sized to catch a single machine working through many accounts, and the tight
   // limit that actually stops password guessing lives in LoginAttemptsService, keyed on the
   // account being attacked rather than the address doing the attacking.
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  //
+  // Sign-up is two calls: `register` mails a 6-digit code to the address (and sends real mail, so
+  // it is throttled like password reset), `register/confirm` checks it and creates the account.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @HttpCode(200)
   @Post("register")
   register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+    return this.registration.request(dto);
+  }
+
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post("register/confirm")
+  confirmRegistration(@Body() dto: ConfirmRegistrationDto) {
+    return this.registration.confirm(dto);
   }
 
   /**

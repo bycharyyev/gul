@@ -8,20 +8,20 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 25355 | 364 |
-| Web (Next.js) | 10693 | 89 |
-| Admin (Vite) | 14298 | 74 |
-| Mobile (Flutter) | 25746 | 130 |
-| packages/types | 2393 | 14 |
-| packages/api-client | 2265 | 6 |
-| packages/i18n | 5130 | 11 |
+| API (NestJS) | 25630 | 366 |
+| Web (Next.js) | 10799 | 89 |
+| Admin (Vite) | 14337 | 74 |
+| Mobile (Flutter) | 26024 | 130 |
+| packages/types | 2424 | 14 |
+| packages/api-client | 2277 | 6 |
+| packages/i18n | 5193 | 11 |
 
 ## Automated tests
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 83 | 12103 |
-| Mobile (flutter test) | 53 | 7391 |
+| API (jest) | 84 | 12234 |
+| Mobile (flutter test) | 53 | 7506 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
 
@@ -31,7 +31,7 @@
 | --- | --- |
 | Feature modules (directories under apps/api/src) | 44 |
 | Controllers | 45 |
-| HTTP route handlers | 352 |
+| HTTP route handlers | 353 |
 |   of which under /admin/* | 91 |
 
 Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, marketplace-settings, metrics, notifications, orders, partner, payments, platform-settings, prisma, public-cache, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
@@ -40,9 +40,9 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Metric | Value |
 | --- | --- |
-| Models | 73 |
+| Models | 74 |
 | Enums | 42 |
-| Migrations | 59 |
+| Migrations | 60 |
 | Migrations carrying allow-destructive | 2 |
 
 ## Clients

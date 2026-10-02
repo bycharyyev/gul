@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,13 +19,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phone = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
 
   @override
   void dispose() {
-    _phone.dispose();
+    _email.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -37,7 +36,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     FocusScope.of(context).unfocus();
     await ref
         .read(authControllerProvider.notifier)
-        .login(phone: _phone.text.trim(), password: _password.text);
+        .login(
+          email: _email.text.trim().toLowerCase(),
+          password: _password.text,
+        );
     // No navigation here: the router's guard moves to /home when the status flips. Pushing a
     // route from the callback as well would race it.
   }
@@ -56,20 +58,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
-                controller: _phone,
+                controller: _email,
                 enabled: !state.busy,
-                keyboardType: TextInputType.phone,
+                keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                // A keyboard type is only a hint — a hardware keyboard, a paste, or a swipe
-                // keyboard can all put letters in a "numeric" field. Filtering is the guarantee.
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-                ],
+                autocorrect: false,
+                autofillHints: const [AutofillHints.email],
                 decoration: InputDecoration(
-                  labelText: strings.get('auth.login.phone'),
+                  labelText: strings.get('auth.login.email'),
                 ),
-                validator: (v) => validatePhone(v, strings),
+                validator: (v) => validateEmail(v, strings),
               ),
               const SizedBox(height: 14),
               TextFormField(
@@ -142,8 +140,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-/// Shared by both auth screens. The bound is the backend's own: `@Length(6, 20)` on the phone
-/// field — rejecting it here saves a round-trip and an English class-validator message.
+/// Shared by both auth screens. Only the shape is checked here; the server's `@IsEmail` decides.
+String? validateEmail(String? value, Strings strings) {
+  final email = value?.trim() ?? '';
+  return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
+      ? null
+      : strings.get('auth.validation.email');
+}
+
+/// The bound is the backend's own: `@Length(6, 20)` on the phone field — rejecting it here saves
+/// a round-trip and an English class-validator message.
 String? validatePhone(String? value, Strings strings) {
   final phone = value?.trim() ?? '';
   return (phone.length < 6 || phone.length > 20)

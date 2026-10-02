@@ -94,6 +94,14 @@ class Strings {
     'INVALID_CREDENTIALS': 'err.invalidCredentials',
     'ACCOUNT_BLOCKED': 'err.accountBlocked',
     'PHONE_ALREADY_REGISTERED': 'err.phoneTaken',
+    'EMAIL_ALREADY_REGISTERED': 'err.emailTaken',
+    'INVALID_EMAIL': 'err.invalidEmail',
+    'INVALID_CODE': 'err.invalidCode',
+    'CODE_EXPIRED': 'err.codeExpired',
+    'TOO_MANY_CODE_ATTEMPTS': 'err.tooManyCodeAttempts',
+    'CODE_RECENTLY_SENT': 'err.codeRecentlySent',
+    'TOO_MANY_CODE_REQUESTS': 'err.tooManyCodeRequests',
+    'NO_PENDING_REGISTRATION': 'err.noPendingRegistration',
     'CURRENT_PASSWORD_INCORRECT': 'err.currentPasswordWrong',
     'SHORT_LINK_NOT_RESOLVED': 'err.shortLink',
   };
@@ -502,6 +510,17 @@ class Strings {
       'auth.register.haveAccount': 'Уже есть аккаунт?',
       'auth.register.login': 'Войти',
       'auth.validation.phone': 'Введите номер телефона',
+      'auth.login.email': 'Email',
+      'auth.validation.email': 'Введите корректный email',
+      'auth.register.emailTaken':
+          'Этот email уже зарегистрирован. Войдите в аккаунт.',
+      'auth.register.codeTitle': 'Подтвердите email',
+      'auth.register.codeHint':
+          'Мы отправили 6-значный код на {email}. Он действует {minutes} мин. Проверьте и папку «Спам».',
+      'auth.register.codeLabel': 'Код из письма',
+      'auth.register.confirm': 'Подтвердить и войти',
+      'auth.register.changeEmail': 'Изменить email',
+      'auth.register.resend': 'Отправить код ещё раз',
       'auth.validation.password': 'Пароль должен быть не короче 8 символов',
       'auth.validation.passwordRequired': 'Введите пароль',
 
@@ -578,6 +597,11 @@ class Strings {
       'edit.title': 'Данные профиля',
       'edit.fullName': 'Имя',
       'edit.phone': 'Телефон',
+      'edit.phoneBonusOffer':
+          'Добавьте номер — получите {amount} TMT скидки после первой оплаченной покупки.',
+      'edit.phoneBonusEarned': 'Бонус {amount} TMT за номер начислен.',
+      'edit.phoneContactHint':
+          'Добавьте номер, чтобы мы могли связаться с вами по заказу или доставке.',
       'edit.country': 'Страна',
       'update.title': 'Требуется обновление',
       'update.soon':
@@ -655,10 +679,20 @@ class Strings {
       'err.validation': 'Проверьте заполненные поля',
       'err.shortLink':
           'Короткая ссылка не раскрылась. Откройте товар в магазине и пришлите ссылку из адресной строки.',
-      'err.invalidCredentials': 'Неверный номер или пароль.',
+      'err.invalidCredentials': 'Неверный email или пароль.',
       'err.accountBlocked':
           'Доступ к этому аккаунту закрыт. Напишите в поддержку.',
       'err.phoneTaken': 'На этот номер уже зарегистрирован аккаунт.',
+      'err.emailTaken': 'Этот email уже зарегистрирован.',
+      'err.invalidEmail': 'Некорректный email.',
+      'err.invalidCode': 'Неверный код.',
+      'err.codeExpired': 'Срок действия кода истёк. Запросите новый.',
+      'err.tooManyCodeAttempts':
+          'Превышено число попыток. Запросите новый код.',
+      'err.codeRecentlySent': 'Код уже отправлен. Повторно — через минуту.',
+      'err.tooManyCodeRequests':
+          'Слишком много запросов кода. Попробуйте позже.',
+      'err.noPendingRegistration': 'Нет активной регистрации. Начните заново.',
       'err.currentPasswordWrong': 'Текущий пароль указан неверно.',
     },
     'en': {
@@ -1059,6 +1093,17 @@ class Strings {
       'auth.register.haveAccount': 'Already have an account?',
       'auth.register.login': 'Sign in',
       'auth.validation.phone': 'Enter your phone number',
+      'auth.login.email': 'Email',
+      'auth.validation.email': 'Enter a valid email',
+      'auth.register.emailTaken':
+          'This email is already registered. Sign in instead.',
+      'auth.register.codeTitle': 'Confirm your email',
+      'auth.register.codeHint':
+          'We sent a 6-digit code to {email}. It is valid for {minutes} min. Check your spam folder too.',
+      'auth.register.codeLabel': 'Code from the email',
+      'auth.register.confirm': 'Confirm and sign in',
+      'auth.register.changeEmail': 'Change email',
+      'auth.register.resend': 'Send the code again',
       'auth.validation.password': 'Password must be at least 8 characters',
       'auth.validation.passwordRequired': 'Enter your password',
 
@@ -1134,6 +1179,12 @@ class Strings {
       'edit.title': 'Profile details',
       'edit.fullName': 'Name',
       'edit.phone': 'Phone',
+      'edit.phoneBonusOffer':
+          'Add your number and get a {amount} TMT discount after your first paid purchase.',
+      'edit.phoneBonusEarned':
+          '{amount} TMT bonus for your number has been credited.',
+      'edit.phoneContactHint':
+          'Add your number so we can reach you about an order or a delivery.',
       'edit.country': 'Country',
       'update.title': 'Update required',
       'update.soon':
@@ -1209,9 +1260,18 @@ class Strings {
       'err.validation': 'Check the fields you filled in',
       'err.shortLink':
           'That short link could not be expanded. Open the product in the shop and send the address-bar link.',
-      'err.invalidCredentials': 'Wrong phone number or password.',
+      'err.invalidCredentials': 'Wrong email or password.',
       'err.accountBlocked': 'This account is closed. Please contact support.',
       'err.phoneTaken': 'An account already exists for this number.',
+      'err.emailTaken': 'This email is already registered.',
+      'err.invalidEmail': 'Invalid email.',
+      'err.invalidCode': 'Wrong code.',
+      'err.codeExpired': 'The code has expired. Request a new one.',
+      'err.tooManyCodeAttempts': 'Too many attempts. Request a new code.',
+      'err.codeRecentlySent': 'A code was just sent. Try again in a minute.',
+      'err.tooManyCodeRequests': 'Too many code requests. Try again later.',
+      'err.noPendingRegistration':
+          'No sign-up in progress. Please start again.',
       'err.currentPasswordWrong': 'That is not your current password.',
     },
     'tkm': {
@@ -1609,6 +1669,17 @@ class Strings {
       'auth.register.haveAccount': 'Hasabyňyz barmy?',
       'auth.register.login': 'Gir',
       'auth.validation.phone': 'Telefon belgiňizi giriziň',
+      'auth.login.email': 'E-poçta',
+      'auth.validation.email': 'Dogry e-poçta giriziň',
+      'auth.register.emailTaken':
+          'Bu e-poçta eýýäm hasaba alnan. Hasabyňyza giriň.',
+      'auth.register.codeTitle': 'E-poçtany tassyklaň',
+      'auth.register.codeHint':
+          '{email} salgysyna 6 sanly kod iberdik. Ol {minutes} minut hereket edýär. «Spam» bukjasyny hem barlaň.',
+      'auth.register.codeLabel': 'Hatdaky kod',
+      'auth.register.confirm': 'Tassykla we gir',
+      'auth.register.changeEmail': 'E-poçtany üýtget',
+      'auth.register.resend': 'Kody täzeden iber',
       'auth.validation.password': 'Parol azyndan 8 belgi bolmaly',
       'auth.validation.passwordRequired': 'Parolyňyzy giriziň',
 
@@ -1685,6 +1756,11 @@ class Strings {
       'edit.title': 'Profil maglumatlary',
       'edit.fullName': 'Ady',
       'edit.phone': 'Telefon',
+      'edit.phoneBonusOffer':
+          'Belgiňizi goşuň — ilkinji tölenen satyn alyşdan soň {amount} TMT arzanladyş alyň.',
+      'edit.phoneBonusEarned': 'Belgi üçin {amount} TMT bonus goşuldy.',
+      'edit.phoneContactHint':
+          'Sargyt ýa-da eltip bermek boýunça siz bilen habarlaşyp bilmegimiz üçin belgiňizi goşuň.',
       'edit.country': 'Ýurt',
       'update.title': 'Täzelenme gerek',
       'update.soon':
@@ -1761,9 +1837,17 @@ class Strings {
       'err.validation': 'Doldurylan meýdanlary barlaň',
       'err.shortLink':
           'Gysga salgy açylmady. Harydy dükanda açyp, salgy setiriniň salgysyny iberiň.',
-      'err.invalidCredentials': 'Telefon belgisi ýa-da parol nädogry.',
+      'err.invalidCredentials': 'E-poçta ýa-da parol nädogry.',
       'err.accountBlocked': 'Bu hasaba girmek ýapyk. Goldaw gullugyna ýazyň.',
       'err.phoneTaken': 'Bu belgi bilen hasap eýýäm bar.',
+      'err.emailTaken': 'Bu e-poçta eýýäm hasaba alnan.',
+      'err.invalidEmail': 'E-poçta nädogry.',
+      'err.invalidCode': 'Kod nädogry.',
+      'err.codeExpired': 'Koduň möhleti geçdi. Täzesini soraň.',
+      'err.tooManyCodeAttempts': 'Synanyşyk köp boldy. Täze kod soraň.',
+      'err.codeRecentlySent': 'Kod eýýäm iberildi. Bir minutdan soň synanyşyň.',
+      'err.tooManyCodeRequests': 'Kod soraglary köp boldy. Soňrak synanyşyň.',
+      'err.noPendingRegistration': 'Işjeň hasaba alyş ýok. Täzeden başlaň.',
       'err.currentPasswordWrong': 'Häzirki parol nädogry görkezildi.',
     },
   };

@@ -37,34 +37,42 @@ void main() {
 
   setUp(() => repository = MockAuthRepository());
 
-  testWidgets(
-    'rejects a phone shorter than the backend accepts, without a request',
-    (t) async {
-      await t.pumpWidget(_harness(repository));
-
-      await t.enterText(find.byType(TextFormField).first, '12345');
-      await t.enterText(find.byType(TextFormField).last, 'secret123');
-      await t.tap(find.widgetWithText(FilledButton, 'Войти'));
-      await t.pump();
-
-      expect(find.text('Введите номер телефона'), findsOneWidget);
-      verifyNever(
-        () => repository.login(
-          phone: any(named: 'phone'),
-          password: any(named: 'password'),
-        ),
-      );
-    },
-  );
-
-  testWidgets('the phone field refuses letters', (t) async {
-    // `keyboardType: phone` is only a hint — a hardware keyboard or a paste can still deliver
-    // letters. This is the same class of bug that reached production on the web reset form.
+  testWidgets('rejects something that is not an email, without a request', (
+    t,
+  ) async {
     await t.pumpWidget(_harness(repository));
 
-    await t.enterText(find.byType(TextFormField).first, '+993abc61x234567');
+    await t.enterText(find.byType(TextFormField).first, '+99361234567');
+    await t.enterText(find.byType(TextFormField).last, 'secret123');
+    await t.tap(find.widgetWithText(FilledButton, 'Войти'));
+    await t.pump();
 
-    expect(find.text('+99361234567'), findsOneWidget);
+    expect(find.text('Введите корректный email'), findsOneWidget);
+    verifyNever(
+      () => repository.login(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    );
+  });
+
+  testWidgets('signs in with the address lower-cased and trimmed', (t) async {
+    when(
+      () => repository.login(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    ).thenAnswer((_) async => _user);
+
+    await t.pumpWidget(_harness(repository));
+    await t.enterText(find.byType(TextFormField).first, '  Aygul@Example.com ');
+    await t.enterText(find.byType(TextFormField).last, 'secret123');
+    await t.tap(find.byType(FilledButton));
+    await t.pumpAndSettle();
+
+    verify(
+      () => repository.login(email: 'aygul@example.com', password: 'secret123'),
+    ).called(1);
   });
 
   testWidgets('the submit button is disabled while a login is in flight', (
@@ -73,13 +81,13 @@ void main() {
     final gate = Completer<User>();
     when(
       () => repository.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenAnswer((_) => gate.future);
 
     await t.pumpWidget(_harness(repository));
-    await t.enterText(find.byType(TextFormField).first, '+99361234567');
+    await t.enterText(find.byType(TextFormField).first, 'aygul@example.com');
     await t.enterText(find.byType(TextFormField).last, 'secret123');
     await t.tap(find.byType(FilledButton));
     await t.pump();
@@ -96,24 +104,24 @@ void main() {
   ) async {
     when(
       () => repository.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenThrow(
       const AppException(
         kind: AppErrorKind.unauthorized,
-        serverMessage: 'Неверный телефон или пароль',
+        serverMessage: 'Неверный email или пароль',
         statusCode: 401,
       ),
     );
 
     await t.pumpWidget(_harness(repository));
-    await t.enterText(find.byType(TextFormField).first, '+99361234567');
+    await t.enterText(find.byType(TextFormField).first, 'aygul@example.com');
     await t.enterText(find.byType(TextFormField).last, 'wrongpass');
     await t.tap(find.byType(FilledButton));
     await t.pumpAndSettle();
 
-    expect(find.text('Неверный телефон или пароль'), findsOneWidget);
+    expect(find.text('Неверный email или пароль'), findsOneWidget);
     // Nothing to retry on a wrong password — offering "Повторить" would be misleading.
     expect(find.text('Повторить'), findsNothing);
   });
@@ -121,13 +129,13 @@ void main() {
   testWidgets('offers a retry when the failure was the network', (t) async {
     when(
       () => repository.login(
-        phone: any(named: 'phone'),
+        email: any(named: 'email'),
         password: any(named: 'password'),
       ),
     ).thenThrow(const AppException(kind: AppErrorKind.network));
 
     await t.pumpWidget(_harness(repository));
-    await t.enterText(find.byType(TextFormField).first, '+99361234567');
+    await t.enterText(find.byType(TextFormField).first, 'aygul@example.com');
     await t.enterText(find.byType(TextFormField).last, 'secret123');
     await t.tap(find.byType(FilledButton));
     await t.pumpAndSettle();

@@ -31,7 +31,7 @@ function safeNext(): string | null {
 export default function LoginPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await api.login({ phone, password });
+      await api.login({ email: email.trim().toLowerCase(), password });
       router.push(safeNext() ?? "/account");
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("web.login.genericError"));
@@ -57,8 +57,14 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold">{t("web.login.title")}</h1>
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label className="mb-1 block text-sm font-medium">{t("web.login.phone")}</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+70000000000" />
+              <label className="mb-1 block text-sm font-medium">{t("web.login.email")}</label>
+              <Input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">{t("web.login.password")}</label>

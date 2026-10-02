@@ -165,7 +165,7 @@ export const shipmentTrackingEventSchema = z.object({
   status: shipmentStatusSchema,
   note: z.string().nullable(),
   createdAt: z.string(),
-  createdBy: z.object({ id: z.string(), phone: z.string(), fullName: z.string().nullable() }).optional(),
+  createdBy: z.object({ id: z.string(), phone: z.string().nullable(), email: z.string().nullable().optional(), fullName: z.string().nullable() }).optional(),
 });
 export type ShipmentTrackingEventDto = z.infer<typeof shipmentTrackingEventSchema>;
 
@@ -218,7 +218,7 @@ export const shipmentSchema = z.object({
   paymentMethod: paymentMethodSchema,
   pickup: cargoPickupRequestSchema.nullable(),
   trackingEvents: z.array(shipmentTrackingEventSchema),
-  user: z.object({ id: z.string(), phone: z.string(), fullName: z.string().nullable() }).optional(),
+  user: z.object({ id: z.string(), phone: z.string().nullable(), email: z.string().nullable().optional(), fullName: z.string().nullable() }).optional(),
 });
 export type ShipmentDto = z.infer<typeof shipmentSchema>;
 
@@ -233,7 +233,7 @@ export const shipmentListItemSchema = z.object({
   originCity: cargoCitySchema,
   destinationCity: cargoCitySchema,
   itemType: cargoItemTypeSchema,
-  user: z.object({ id: z.string(), phone: z.string(), fullName: z.string().nullable() }),
+  user: z.object({ id: z.string(), phone: z.string().nullable(), email: z.string().nullable().optional(), fullName: z.string().nullable() }),
 });
 export type ShipmentListItemDto = z.infer<typeof shipmentListItemSchema>;
 

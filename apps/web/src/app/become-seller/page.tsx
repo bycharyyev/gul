@@ -47,7 +47,7 @@ export default function BecomeSellerPage() {
           description: draft.description || undefined,
         });
       } else {
-        await api.applyForSeller(draft);
+        await api.applyForSeller({ ...draft, phone: draft.phone?.trim() || undefined });
       }
       setDone(true);
     } catch (err) {
@@ -96,7 +96,6 @@ export default function BecomeSellerPage() {
                     value={draft.phone}
                     onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
                     placeholder="+993..."
-                    required
                   />
                 </div>
                 <div>

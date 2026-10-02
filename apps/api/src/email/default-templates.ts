@@ -716,34 +716,34 @@ const SELLER_APPLICATION_RECEIVED: DefaultTemplate[] = [
 const SELLER_APPROVED: DefaultTemplate[] = [
   simpleSellerTemplate("SELLER_APPROVED", "ru", {
     subject: "Заявка одобрена — добро пожаловать в Gulyaly",
-    preheader: "Входите под своим номером телефона.",
+    preheader: "Входите по email из заявки.",
     title: "Заявка одобрена",
     lines: [
       "Здравствуйте, {{seller.name}}!",
       "Ваша заявка одобрена. Магазин «{{seller.shopName}}» создан.",
-      "Войдите на https://gulyaly.com/login под номером телефона, который указали в заявке, — с тем же паролем.",
+      "Войдите на https://gulyaly.com/login по email, который указали в заявке, — с тем же паролем.",
       "В кабинете подтвердите этот email, чтобы получать письма о заказах и выплатах, и привяжите Telegram для мгновенных уведомлений.",
     ],
   }),
   simpleSellerTemplate("SELLER_APPROVED", "en", {
     subject: "Application approved — welcome to Gulyaly",
-    preheader: "Sign in with your phone number.",
+    preheader: "Sign in with the email from your application.",
     title: "Application approved",
     lines: [
       "Hello, {{seller.name}}!",
       "Your application is approved. The shop “{{seller.shopName}}” has been created.",
-      "Sign in at https://gulyaly.com/login with the phone number from your application and the same password.",
+      "Sign in at https://gulyaly.com/login with the email from your application and the same password.",
       "In your account, confirm this email to receive order and payout notifications, and link Telegram for instant alerts.",
     ],
   }),
   simpleSellerTemplate("SELLER_APPROVED", "tkm", {
     subject: "Arza tassyklandy — Gulyaly-a hoş geldiňiz",
-    preheader: "Telefon belgiňiz bilen giriň.",
+    preheader: "Arzadaky e-poçtaňyz bilen giriň.",
     title: "Arza tassyklandy",
     lines: [
       "Salam, {{seller.name}}!",
       "Arzaňyz tassyklandy. «{{seller.shopName}}» dükany döredildi.",
-      "https://gulyaly.com/login salgysyndan arzada görkezen telefon belgiňiz we şol parol bilen giriň.",
+      "https://gulyaly.com/login salgysyndan arzada görkezen e-poçtaňyz we şol parol bilen giriň.",
       "Hasabyňyzda şu e-poçtany tassyklaň — sargytlar we tölegler barada hat almak üçin, hem-de Telegram-y baglaň.",
     ],
   }),

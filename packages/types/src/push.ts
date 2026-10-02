@@ -134,7 +134,8 @@ export interface CreatePushCampaignInput {
 
 export interface PushUserHitDto {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   fullName: string | null;
   username: string | null;
   country: string | null;

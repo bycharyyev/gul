@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/l10n/countries.dart';
 import '../../../core/l10n/strings.dart';
@@ -72,6 +73,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  /// Under the phone field. Where rewards are allowed: "add a phone, get N TMT" until earned, then
+  /// a thank-you. Where they are not: a plain reason to add the number, with no reward.
+  String? _phoneHint(Strings strings) {
+    final user = ref.read(authControllerProvider).user;
+    // The bonus is a referral-balance credit, so it is part of the reward surface this build
+    // hides (see kReferralRewardsEnabled): the store declaration says no financial features
+    // ("rewards, points ... and other incentives"). The number is still worth asking for, so this
+    // build asks for it plainly -- what it is used for, with nothing offered in return.
+    if (!kReferralRewardsEnabled) {
+      final hasPhone = user?.phone?.isNotEmpty ?? false;
+      return hasPhone ? null : strings.get('edit.phoneContactHint');
+    }
+    final amount = user?.phoneBonusTmt;
+    if (user == null || amount == null || amount <= 0) return null;
+    final key = user.phoneBonusAt != null
+        ? 'edit.phoneBonusEarned'
+        : 'edit.phoneBonusOffer';
+    return strings.get(key).replaceAll('{amount}', amount.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
@@ -110,8 +131,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
           ],
           onFieldSubmitted: (_) => _submit(),
-          decoration: InputDecoration(labelText: strings.get('edit.phone')),
-          validator: (v) => validatePhone(v, strings),
+          decoration: InputDecoration(
+            labelText: strings.get('edit.phone'),
+            helperText: _phoneHint(strings),
+            helperMaxLines: 3,
+          ),
+          // Optional since sign-in moved to email; checked only when something is typed.
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? null
+              : validatePhone(v, strings),
         ),
         const SizedBox(height: 14),
         DropdownButtonFormField<String>(

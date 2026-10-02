@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 export default function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.login({ phone, password });
+      const res = await api.login({ email: email.trim().toLowerCase(), password });
       if (!["ADMIN", "MANAGER", "SUPPORT"].includes(res.user.role)) {
         api.logout();
         throw new Error(t("admin.login.noAccess"));
@@ -53,7 +53,13 @@ export default function LoginPage() {
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium">{t("admin.login.username")}</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t("admin.login.username")} />
+              <Input
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">{t("admin.login.password")}</label>

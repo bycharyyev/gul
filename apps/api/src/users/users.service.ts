@@ -20,6 +20,7 @@ function uploadsDir(): string {
 
 const SAFE_SELECT = {
   id: true,
+  email: true,
   phone: true,
   fullName: true,
   // The referral code. Public by nature -- it is what this account's own invitation links say --
@@ -68,6 +69,7 @@ export class UsersService {
         ...(search
           ? {
               OR: [
+                { email: { contains: search, mode: "insensitive" as const } },
                 { phone: { contains: search, mode: "insensitive" as const } },
                 {
                   fullName: { contains: search, mode: "insensitive" as const },
@@ -138,16 +140,21 @@ export class UsersService {
   }
 
   async createStaff(dto: CreateStaffUserDto, adminId: string) {
+    // Staff sign in by email like everyone else (since 2026-10-02); the phone is optional.
     const existing = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
+      where: { email: dto.email },
     });
-    if (existing) throw new ConflictException("PHONE_ALREADY_REGISTERED");
+    if (existing) throw new ConflictException("EMAIL_ALREADY_REGISTERED");
+    if (dto.phone && (await this.prisma.user.findUnique({ where: { phone: dto.phone } }))) {
+      throw new ConflictException("PHONE_ALREADY_REGISTERED");
+    }
 
     const passwordHash = await argon2.hash(dto.password);
     const username = await this.referrals.generateUsername();
     const created = await this.prisma.user.create({
       data: {
-        phone: dto.phone,
+        email: dto.email,
+        phone: dto.phone || null,
         passwordHash,
         fullName: dto.fullName,
         role: dto.role,

@@ -12,7 +12,7 @@ import { alertAction, confirmAction } from "@/lib/confirm";
 
 const ROLES: UserRole[] = ["SUPPORT", "MANAGER", "ADMIN"];
 
-const emptyDraft: CreateStaffUserInput = { phone: "", password: "", fullName: "", role: "SUPPORT" };
+const emptyDraft: CreateStaffUserInput = { email: "", phone: "", password: "", fullName: "", role: "SUPPORT" };
 
 export default function TeamPage() {
   const { t } = useTranslation();
@@ -40,7 +40,7 @@ export default function TeamPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createStaffUser(draft);
+      const created = await api.createStaffUser({ ...draft, phone: draft.phone?.trim() || undefined });
       setStaff((prev) => [...prev, created]);
       setDraft(emptyDraft);
       setShowCreate(false);
@@ -62,7 +62,7 @@ export default function TeamPage() {
   }
 
   async function removeUser(user: StaffUserDto) {
-    if (!(await confirmAction(t("admin.team.deleteConfirm", { phone: user.phone })))) return;
+    if (!(await confirmAction(t("admin.team.deleteConfirm", { phone: user.email ?? user.phone ?? user.id })))) return;
     try {
       await api.deleteStaffUser(user.id);
       setStaff((prev) => prev.filter((u) => u.id !== user.id));
@@ -84,12 +84,21 @@ export default function TeamPage() {
         <Card className="p-5">
           <form onSubmit={createStaff} className="grid grid-cols-2 gap-4">
             <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">{t("admin.team.emailLabel")}</label>
+              <Input
+                type="email"
+                value={draft.email}
+                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                placeholder="name@gulyaly.com"
+                required
+              />
+            </div>
+            <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">{t("admin.team.phoneLabel")}</label>
               <Input
-                value={draft.phone}
+                value={draft.phone ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-                placeholder="+70000000001"
-                required
+                placeholder="+99361234567"
               />
             </div>
             <div>
@@ -133,7 +142,7 @@ export default function TeamPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-4 py-3">{t("admin.team.phoneLabel")}</th>
+              <th className="px-4 py-3">{t("admin.team.emailLabel")}</th>
               <th className="px-4 py-3">{t("admin.team.nameLabel")}</th>
               <th className="px-4 py-3">{t("admin.team.roleLabel")}</th>
               <th className="px-4 py-3">{t("admin.team.statusLabel")}</th>
@@ -143,7 +152,10 @@ export default function TeamPage() {
           <tbody className="divide-y divide-slate-100">
             {staff.map((user) => (
               <tr key={user.id}>
-                <td className="px-4 py-3 font-medium">{user.phone}</td>
+                <td className="px-4 py-3 font-medium">
+                  {user.email ?? "—"}
+                  {user.phone && <span className="block text-xs font-normal text-slate-400">{user.phone}</span>}
+                </td>
                 <td className="px-4 py-3">{user.fullName ?? "—"}</td>
                 <td className="px-4 py-3">
                   {user.id === me?.id ? (

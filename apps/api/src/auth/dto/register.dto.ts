@@ -1,9 +1,16 @@
-import { IsIn, IsOptional, IsString, Length } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsEmail, IsIn, IsOptional, IsString, Length, Matches, MaxLength } from "class-validator";
+
+const normalizeEmail = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim().toLowerCase() : value;
 
 export class RegisterDto {
-  @IsString()
-  @Length(6, 20)
-  phone!: string;
+  // Accounts are created and signed into by email (since 2026-10-02); a phone is optional and is
+  // added later in the profile.
+  @Transform(normalizeEmail)
+  @IsEmail({}, { message: "INVALID_EMAIL" })
+  @MaxLength(254)
+  email!: string;
 
   @IsString()
   @Length(8, 72)
@@ -44,4 +51,16 @@ export class RegisterDto {
   @IsOptional()
   @IsIn(["ru", "en", "tkm"])
   locale?: string;
+}
+
+/** Second step of sign-up: the code mailed to the address in RegisterDto. */
+export class ConfirmRegistrationDto {
+  @Transform(normalizeEmail)
+  @IsEmail({}, { message: "INVALID_EMAIL" })
+  @MaxLength(254)
+  email!: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/, { message: "INVALID_CODE" })
+  code!: string;
 }

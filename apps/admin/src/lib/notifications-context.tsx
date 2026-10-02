@@ -94,7 +94,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             pushToast({
               kind: "chat",
               title: "Новое сообщение в поддержке",
-              body: withNewMessage ? withNewMessage.user.fullName || withNewMessage.user.phone : "",
+              body: withNewMessage ? withNewMessage.user.fullName || withNewMessage.user.email || withNewMessage.user.phone || "" : "",
               href: "/support",
             });
           }

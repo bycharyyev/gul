@@ -183,6 +183,11 @@ Better: SSE on the existing thread route.
 
 ## GAP 8 — Password recovery is unreachable for a phone-only customer
 
+**Closed 2026-10-02.** Accounts are now created and signed into by email, verified by a code at
+sign-up (`/auth/register` → `/auth/register/confirm`), so every new account can recover its
+password. Phone-only accounts created before the switch can no longer sign in; the text below is
+the history.
+
 **Current backend.** `POST /auth/password-reset/request` and `/confirm` both key on **email**
 (`@IsEmail()` on `RequestPasswordResetDto.email`). Registration keys on **phone** — `RegisterDto`
 has no email field at all, and neither does `UpdateMeDto`.

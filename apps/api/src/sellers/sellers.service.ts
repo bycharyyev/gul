@@ -26,12 +26,20 @@ export class SellersService {
   // ---- Admin ----
 
   async createSeller(dto: CreateSellerDto) {
-    await this.assertPhoneAndHandleFree(dto.phone, dto.handle);
+    await this.assertEmailAndHandleFree(dto.email, dto.handle, dto.phone);
 
     const passwordHash = await argon2.hash(dto.password);
 
+    // Sign-in is by email (since 2026-10-02); staff typed this address, so it starts unverified.
     const user = await this.prisma.user.create({
-      data: { phone: dto.phone, passwordHash, fullName: dto.fullName, role: "SELLER", username: dto.handle },
+      data: {
+        email: dto.email,
+        phone: dto.phone || null,
+        passwordHash,
+        fullName: dto.fullName,
+        role: "SELLER",
+        username: dto.handle,
+      },
     });
 
     return this.prisma.seller.create({
@@ -46,12 +54,14 @@ export class SellersService {
     });
   }
 
-  private async assertPhoneAndHandleFree(phone: string, handle: string) {
-    const [existingPhone, existingHandle, handleTakenAsUsername] = await Promise.all([
-      this.prisma.user.findUnique({ where: { phone } }),
+  private async assertEmailAndHandleFree(email: string, handle: string, phone?: string | null) {
+    const [existingEmail, existingPhone, existingHandle, handleTakenAsUsername] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email } }),
+      phone ? this.prisma.user.findUnique({ where: { phone } }) : null,
       this.prisma.seller.findUnique({ where: { handle } }),
       this.referrals.isUsernameTaken(handle),
     ]);
+    if (existingEmail) throw new ConflictException("EMAIL_ALREADY_REGISTERED");
     if (existingPhone) throw new ConflictException("PHONE_ALREADY_REGISTERED");
     if (existingHandle || handleTakenAsUsername) throw new ConflictException("Handle already taken");
   }
@@ -352,10 +362,13 @@ export class SellersService {
     }
 
     const pendingConflict = await this.prisma.sellerApplication.findFirst({
-      where: { status: "PENDING", OR: [{ phone: user.phone }, { handle: dto.handle }] },
+      where: {
+        status: "PENDING",
+        OR: [...(user.email ? [{ email: user.email }] : []), { handle: dto.handle }],
+      },
     });
     if (pendingConflict) {
-      throw new ConflictException("Заявка с таким телефоном или username уже на рассмотрении");
+      throw new ConflictException("Заявка с таким email или username уже на рассмотрении");
     }
 
     const application = await this.prisma.sellerApplication.create({
@@ -377,19 +390,19 @@ export class SellersService {
   }
 
   async applyForSeller(dto: CreateSellerApplicationDto) {
-    await this.assertPhoneAndHandleFree(dto.phone, dto.handle);
+    await this.assertEmailAndHandleFree(dto.email, dto.handle, dto.phone);
 
     const pendingConflict = await this.prisma.sellerApplication.findFirst({
-      where: { status: "PENDING", OR: [{ phone: dto.phone }, { handle: dto.handle }] },
+      where: { status: "PENDING", OR: [{ email: dto.email }, { handle: dto.handle }] },
     });
     if (pendingConflict) {
-      throw new ConflictException("Заявка с таким телефоном или username уже на рассмотрении");
+      throw new ConflictException("Заявка с таким email или username уже на рассмотрении");
     }
 
     const passwordHash = await argon2.hash(dto.password);
     const application = await this.prisma.sellerApplication.create({
       data: {
-        phone: dto.phone,
+        phone: dto.phone || null,
         email: dto.email,
         passwordHash,
         fullName: dto.fullName,
@@ -452,12 +465,13 @@ export class SellersService {
     const application = await this.getApplicationOrThrow(id);
 
     // The account this application belongs to, if there already is one. Applications filed from
-    // inside the app name a phone that is already registered on purpose -- approving those must
-    // promote that account rather than refuse, which is what used to happen.
-    const existing = await this.prisma.user.findUnique({
-      where: { phone: application.phone },
-      select: { id: true, role: true },
-    });
+    // inside the app name the applicant's own (already registered) email -- approving those must
+    // promote that account rather than refuse. Older applications may only carry a phone.
+    const existing = application.email
+      ? await this.prisma.user.findUnique({ where: { email: application.email }, select: { id: true, role: true } })
+      : application.phone
+        ? await this.prisma.user.findUnique({ where: { phone: application.phone }, select: { id: true, role: true } })
+        : null;
 
     // The handle is checked either way: it becomes a public @name and must still be free.
     await this.assertHandleFree(application.handle);
@@ -472,21 +486,17 @@ export class SellersService {
       return this.promoteToSeller(existing.id, application, dto, adminId);
     }
 
-    // The application address is carried onto the account, but deliberately as UNVERIFIED: they
-    // typed it into a form, which is not proof they control it. Order and payout mail stays
-    // gated on verification; the approval email below asks them to confirm it.
-    //
-    // `email` is unique on User, so an address already used by another account would make the
-    // whole approval fail. Approval must not hinge on that -- fall back to creating the account
-    // without it and let them set one themselves.
-    const emailTaken = application.email
-      ? !!(await this.prisma.user.findUnique({ where: { email: application.email }, select: { id: true } }))
-      : false;
+    // The application address becomes the sign-in, but deliberately as UNVERIFIED: they typed it
+    // into a form, which is not proof they control it. Order and payout mail stays gated on
+    // verification; the approval email below asks them to confirm it. An address already on an
+    // account was handled above (promoted), so it is free here. Without an address there is no
+    // way to sign in at all, so such a (pre-2026-10-02) application cannot be approved as-is.
+    if (!application.email) throw new BadRequestException("APPLICATION_HAS_NO_EMAIL");
 
     const user = await this.prisma.user.create({
       data: {
         phone: application.phone,
-        email: emailTaken ? null : application.email,
+        email: application.email,
         passwordHash: application.passwordHash,
         fullName: application.fullName,
         role: "SELLER",

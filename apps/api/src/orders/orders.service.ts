@@ -23,7 +23,7 @@ import { isStaffRole } from "../common/staff-role";
 const DETAIL_INCLUDE = {
   service: true,
   paymentMethod: true,
-  user: { select: { id: true, phone: true, fullName: true } },
+  user: { select: { id: true, phone: true, email: true, fullName: true } },
   apiKey: { select: { id: true, name: true, ownerLabel: true } },
   payments: { orderBy: { createdAt: "desc" as const } },
   topupJob: true,
@@ -186,7 +186,7 @@ export class OrdersService {
       include: {
         service: true,
         paymentMethod: true,
-        user: { select: { id: true, phone: true, fullName: true } },
+        user: { select: { id: true, phone: true, email: true, fullName: true } },
         apiKey: { select: { id: true, name: true, ownerLabel: true } },
       },
     });
@@ -365,6 +365,7 @@ export class OrdersService {
       });
       if (order.userId) {
         await this.referrals.maybeRewardReferral(order.userId, orderId);
+        await this.referrals.maybeGrantPhoneBonus(order.userId);
       }
     } else if (result.outcome === "DECLINED") {
       await this.prisma.$transaction(async (tx) => {

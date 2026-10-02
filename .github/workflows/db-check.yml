@@ -24,6 +24,7 @@ on:
           - sellers-list.sql
           - managed-subdomains.sql
           - cargo-state.sql
+          - auth-readiness.sql
 
 jobs:
   check:

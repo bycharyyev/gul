@@ -12,7 +12,7 @@ function assertNotBlank(body: string, attachmentUrl: string | null) {
 }
 
 const THREAD_INCLUDE = {
-  user: { select: { id: true, phone: true, fullName: true } },
+  user: { select: { id: true, phone: true, email: true, fullName: true } },
 } as const;
 
 @Injectable()

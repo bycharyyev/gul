@@ -101,6 +101,7 @@ import type {
   ReferralLeaderboardEntryDto,
   ReferralSettingsDto,
   RegisterInput,
+  ConfirmRegistrationInput,
   SendMarketingEmailInput,
   SendMarketingEmailResult,
   SendSupportMessageInput,
@@ -496,6 +497,9 @@ export class ApiClient {
   // ---- Auth compatibility aliases. Prefer api.auth.* in new code. ----
   register(input: RegisterInput) {
     return this.auth.register(input);
+  }
+  confirmRegistration(input: ConfirmRegistrationInput) {
+    return this.auth.confirmRegistration(input);
   }
   login(input: LoginInput) {
     return this.auth.login(input);

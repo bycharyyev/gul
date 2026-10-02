@@ -74,13 +74,16 @@ void main() {
     test('success authenticates and clears busy', () async {
       when(
         () => repository.login(
-          phone: any(named: 'phone'),
+          email: any(named: 'email'),
           password: any(named: 'password'),
         ),
       ).thenAnswer((_) async => _user);
 
       expect(
-        await controller.login(phone: '+99361234567', password: 'secret123'),
+        await controller.login(
+          email: 'aygul@example.com',
+          password: 'secret123',
+        ),
         isTrue,
       );
       expect(controller.state.status, AuthStatus.authenticated);
@@ -96,7 +99,7 @@ void main() {
 
       when(
         () => repository.login(
-          phone: any(named: 'phone'),
+          email: any(named: 'email'),
           password: any(named: 'password'),
         ),
       ).thenThrow(
@@ -107,7 +110,10 @@ void main() {
         ),
       );
 
-      expect(await controller.login(phone: '+993', password: 'wrong'), isFalse);
+      expect(
+        await controller.login(email: 'aygul@example.com', password: 'wrong'),
+        isFalse,
+      );
       expect(controller.state.status, AuthStatus.unauthenticated);
       expect(controller.state.busy, isFalse);
       expect(
@@ -122,15 +128,18 @@ void main() {
       final gate = Completer<User>();
       when(
         () => repository.login(
-          phone: any(named: 'phone'),
+          email: any(named: 'email'),
           password: any(named: 'password'),
         ),
       ).thenAnswer((_) => gate.future);
 
-      final first = controller.login(phone: '+993', password: 'secret123');
+      final first = controller.login(
+        email: 'aygul@example.com',
+        password: 'secret123',
+      );
       await Future<void>.delayed(Duration.zero);
       final second = await controller.login(
-        phone: '+993',
+        email: 'aygul@example.com',
         password: 'secret123',
       );
 
@@ -139,63 +148,115 @@ void main() {
       expect(await first, isTrue);
 
       verify(
-        () => repository.login(phone: '+993', password: 'secret123'),
+        () =>
+            repository.login(email: 'aygul@example.com', password: 'secret123'),
       ).called(1);
     });
 
     test('clears a previous error when a new attempt starts', () async {
       when(
         () => repository.login(
-          phone: any(named: 'phone'),
+          email: any(named: 'email'),
           password: any(named: 'password'),
         ),
       ).thenThrow(const AppException(kind: AppErrorKind.network));
-      await controller.login(phone: '+993', password: 'secret123');
+      await controller.login(email: 'aygul@example.com', password: 'secret123');
       expect(controller.state.error, isNotNull);
 
       when(
         () => repository.login(
-          phone: any(named: 'phone'),
+          email: any(named: 'email'),
           password: any(named: 'password'),
         ),
       ).thenAnswer((_) async => _user);
-      await controller.login(phone: '+993', password: 'secret123');
+      await controller.login(email: 'aygul@example.com', password: 'secret123');
 
       expect(controller.state.error, isNull);
     });
   });
 
-  group('register', () {
-    test('passes the optional fields through', () async {
-      when(
-        () => repository.register(
-          phone: any(named: 'phone'),
-          password: any(named: 'password'),
-          fullName: any(named: 'fullName'),
-          referredByUsername: any(named: 'referredByUsername'),
-          locale: any(named: 'locale'),
-        ),
-      ).thenAnswer((_) async => _user);
+  group('registration', () {
+    test(
+      'mailing the code passes the optional fields through and signs nobody in',
+      () async {
+        when(
+          () => repository.startRegistration(
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+            fullName: any(named: 'fullName'),
+            referredByUsername: any(named: 'referredByUsername'),
+            locale: any(named: 'locale'),
+          ),
+        ).thenAnswer(
+          (_) async => (email: 'aygul@example.com', expiresInMinutes: 15),
+        );
 
-      await controller.register(
-        phone: '+99361234567',
-        password: 'secret123',
-        fullName: 'Aýgül',
-        referredByUsername: 'merjen',
-        locale: 'tkm',
-      );
-
-      verify(
-        () => repository.register(
-          phone: '+99361234567',
+        final started = await controller.startRegistration(
+          email: 'aygul@example.com',
           password: 'secret123',
           fullName: 'Aýgül',
           referredByUsername: 'merjen',
           locale: 'tkm',
+        );
+
+        expect(started?.email, 'aygul@example.com');
+        verify(
+          () => repository.startRegistration(
+            email: 'aygul@example.com',
+            password: 'secret123',
+            fullName: 'Aýgül',
+            referredByUsername: 'merjen',
+            locale: 'tkm',
+          ),
+        ).called(1);
+        // The account does not exist until the code comes back.
+        expect(controller.state.status, isNot(AuthStatus.authenticated));
+        expect(controller.state.busy, isFalse);
+      },
+    );
+
+    test('the right code signs the new account in', () async {
+      when(
+        () => repository.confirmRegistration(
+          email: any(named: 'email'),
+          code: any(named: 'code'),
         ),
-      ).called(1);
+      ).thenAnswer((_) async => _user);
+
+      expect(
+        await controller.confirmRegistration(
+          email: 'aygul@example.com',
+          code: '123456',
+        ),
+        isTrue,
+      );
       expect(controller.state.status, AuthStatus.authenticated);
     });
+
+    test(
+      'a failed send leaves the error for the screen and returns null',
+      () async {
+        when(
+          () => repository.startRegistration(
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+            fullName: any(named: 'fullName'),
+            referredByUsername: any(named: 'referredByUsername'),
+            locale: any(named: 'locale'),
+          ),
+        ).thenThrow(const AppException(kind: AppErrorKind.network));
+
+        expect(
+          await controller.startRegistration(
+            email: 'aygul@example.com',
+            password: 'secret123',
+          ),
+          isNull,
+        );
+        expect(controller.state.error, isNotNull);
+        expect(controller.state.busy, isFalse);
+      },
+    );
   });
 
   group('ending a session', () {
