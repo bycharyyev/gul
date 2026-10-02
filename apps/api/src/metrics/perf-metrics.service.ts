@@ -249,9 +249,8 @@ export class PerfMetricsService implements OnModuleInit, OnModuleDestroy {
 
 /** Which server and process this is, for the page. Set NODE_LABEL in compose; host name otherwise. */
 export function nodeLabel(): string {
-  const base = (process.env.NODE_LABEL ?? "").trim() || os.hostname();
-  const port = process.env.PORT ?? "4000";
-  return `${base}:${port}`;
+  const label = (process.env.NODE_LABEL ?? "").trim();
+  return label || `${os.hostname()}:${process.env.PORT ?? "4000"}`;
 }
 
 function cpuTotals() {

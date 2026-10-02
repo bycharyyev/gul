@@ -183,7 +183,7 @@ jobs:
           set_kv MAIL_FROM 'Gulyaly <noreply@gulyaly.com>'
           set_kv MAIL_TLS_CA_BASE64 '__MAIL_CA_PLACEHOLDER__'
           set_kv MAIL_TLS_SERVERNAME 'mail.gulyaly.com'
-          docker compose up -d --force-recreate api
+          docker compose up -d --force-recreate api api-2 api-worker
           SCRIPT
           CA_B64=$(cat /tmp/mail-cert.b64)
           sed -i "s#__MAIL_HOST_PLACEHOLDER__#${{ secrets.SECONDARY_HOST }}#" /tmp/mail-env-update.sh

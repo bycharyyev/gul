@@ -116,8 +116,11 @@ Phase A, merged 2026-10-02: `APP_ROLE` (`all` | `http` | `worker`) gates every B
 sweeper, cron and Telegram poller. `GET /api/health/role` reports it. Production keeps `all`, so
 there is no runtime change.
 
-Phase B (2 http processes + 1 worker per node, connection limits, nginx upstream, rolling deploy)
-is designed in ADR 0008 and awaits owner approval.
+Phase B (approved and shipped 2026-10-02): per node `api` + `api-2` (http, 4000/4002) behind the
+nginx `least_conn` upstream, and `api-worker` (4001, health only). `PRISMA_CONNECTION_LIMIT=6` per
+process, so at most 36 database connections for both nodes. The deploy replaces worker → api →
+api-2 with a health check between each step and rolls everything back if any fails.
+`throughput.sh` now spreads its load over every HTTP process that answers.
 
 ## Stage 4 — front-end and media
 

@@ -379,7 +379,7 @@ jobs:
             # within seconds, so it is a wait, not an error.
             up_with_retry() {
               for attempt in 1 2 3; do
-                if docker compose up -d; then
+                if docker compose up -d "$@"; then
                   return 0
                 fi
                 echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
@@ -388,14 +388,32 @@ jobs:
               return 1
             }
 
-            wait_healthy() {
+            wait_port() {
               for i in $(seq 1 15); do
-                if curl -fsS http://127.0.0.1:4000/api/health > /dev/null; then
+                if curl -fsS "http://127.0.0.1:$1/api/health" > /dev/null; then
                   return 0
                 fi
                 sleep 2
               done
+              echo "process on port $1 did not become healthy" >&2
               return 1
+            }
+
+            # ADR 0008: api-worker (4001), api (4000), api-2 (4002). All three must answer.
+            wait_healthy() {
+              wait_port 4001 && wait_port 4000 && wait_port 4002
+            }
+
+            # One process at a time, so one HTTP process is always serving while the other is
+            # replaced (the nginx least_conn upstream skips the one that is down). The worker goes
+            # first: if the new release cannot even start its background work, the HTTP processes
+            # are never touched. The final plain `up -d` brings web/admin (and anything else that
+            # changed) up to date; services already current are left alone.
+            rolling_up() {
+              up_with_retry --no-deps api-worker && wait_port 4001 \
+                && up_with_retry --no-deps api && wait_port 4000 \
+                && up_with_retry --no-deps api-2 && wait_port 4002 \
+                && up_with_retry
             }
 
             # Reclaim BEFORE pulling, not only after a successful deploy.
@@ -423,9 +441,8 @@ jobs:
             # Deploy migrations must remain backward-compatible with the currently running
             # image so rollback stays possible.
             docker compose run --rm api npx prisma migrate deploy
-            up_with_retry
 
-            if wait_healthy; then
+            if rolling_up && wait_healthy; then
               echo "api healthy on $NEW_TAG"
               # -a (not just dangling) with a 48h grace window -- every deploy leaves the
               # previous SHA-tagged images fully tagged with 0 containers using them, so plain
@@ -456,6 +473,7 @@ jobs:
               echo "rolling back to $PREV_TAG" >&2
               set_tag "$PREV_TAG"
               pull_with_retry
+              # Not rolling: the release is already broken, so get every process back at once.
               up_with_retry
               if wait_healthy; then
                 echo "rolled back to $PREV_TAG successfully"
@@ -545,32 +563,44 @@ jobs:
               echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2
               sleep $((attempt * 15))
             done
-            for attempt in 1 2 3; do
-              # --remove-orphans: without it a service deleted from the compose file keeps running,
-              # which is exactly how this node went on serving from its own Redis after that
-              # service was removed from the file. pg-standby is unaffected -- it was started with
-              # a plain docker run and carries no compose project label, so compose does not
-              # consider it an orphan of this project.
-              docker compose up -d --remove-orphans && break
-              echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
-              sleep $((attempt * 10))
-            done
-            for i in $(seq 1 15); do
-              if curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null; then
-                echo "secondary healthy on ${{ github.sha }}"
-                exit 0
-              fi
-              sleep 2
-            done
+            up_retry() {
+              for attempt in 1 2 3; do
+                docker compose up -d "$@" && return 0
+                echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
+                sleep $((attempt * 10))
+              done
+              return 1
+            }
+            ready() {
+              for i in $(seq 1 15); do
+                curl -fsS "http://127.0.0.1:$1/api/health/ready" > /dev/null && return 0
+                sleep 2
+              done
+              echo "port $1 did not become ready" >&2
+              return 1
+            }
+            # Same rolling order as the primary (ADR 0008): worker, then one HTTP process at a time.
+            # --remove-orphans: without it a service deleted from the compose file keeps running,
+            # which is exactly how this node went on serving from its own Redis after that service
+            # was removed from the file. pg-standby is unaffected -- it was started with a plain
+            # docker run and carries no compose project label, so compose does not consider it an
+            # orphan of this project.
+            if up_retry --no-deps api-worker && ready 4001 \
+              && up_retry --no-deps api && ready 4000 \
+              && up_retry --no-deps api-2 && ready 4002 \
+              && up_retry --remove-orphans && ready 4000 && ready 4002 && ready 4001; then
+              echo "secondary healthy on ${{ github.sha }}"
+              exit 0
+            fi
             echo "secondary did not become healthy; rolling back to $PREV_TAG" >&2
             [ -n "$PREV_TAG" ] || { echo "no previous IMAGE_TAG is available for rollback" >&2; exit 1; }
             set_image_tag "$PREV_TAG"
             docker compose pull
             docker compose up -d --remove-orphans
-            for i in $(seq 1 30); do
-              curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && { echo "rollback to $PREV_TAG is healthy"; exit 1; }
-              sleep 2
-            done
+            if ready 4000 && ready 4002 && ready 4001; then
+              echo "rollback to $PREV_TAG is healthy"
+              exit 1
+            fi
             echo "ROLLBACK FAILED on secondary -- immediate operator action required" >&2
             exit 1
           ' < /dev/null
