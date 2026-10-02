@@ -45,6 +45,11 @@ export interface PaymentWebhookInput {
 export interface PaymentProvider {
   readonly key: string;
   /**
+   * Plain-text body some acquirers require as the webhook answer (FreeKassa: "YES"); without it
+   * they keep re-sending. Unset means the default JSON acknowledgement.
+   */
+  readonly webhookAck?: string;
+  /**
    * `idempotencyKey` is generated and persisted by PaymentsService *before* this is called, so a
    * real gateway integration can pass it through as its own idempotency key -- if the process
    * crashes after the gateway accepts the charge but before we record the result, retrying

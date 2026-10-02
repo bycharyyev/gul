@@ -1,7 +1,8 @@
-import { Controller, Get, Headers, HttpCode, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
-import type { Request } from "express";
+import { Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { PaymentsService } from "./payments.service";
+import { PaymentProviderRegistry } from "./payment-provider.registry";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -13,13 +14,25 @@ import { ConfirmManualPaymentDto } from "./dto/confirm-manual-payment.dto";
 @ApiBearerAuth()
 @Controller("payments")
 export class PaymentsController {
-  constructor(private payments: PaymentsService) {}
+  constructor(
+    private payments: PaymentsService,
+    private providers: PaymentProviderRegistry,
+  ) {}
 
   /** Public trust boundary: provider adapter authenticates the exact raw bytes before parsing. */
   @Post("webhooks/:provider")
   @HttpCode(200)
-  webhook(@Param("provider") provider: string, @Req() req: Request) {
-    return this.payments.receiveWebhook(provider, Buffer.isBuffer(req.body) ? req.body : undefined, req.headers);
+  async webhook(@Param("provider") provider: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.payments.receiveWebhook(provider, Buffer.isBuffer(req.body) ? req.body : undefined, req.headers);
+    // Some acquirers accept only an exact plain-text answer (FreeKassa: "YES") and re-send until
+    // they get it. Sent only after the event was verified and stored in the inbox; a verification
+    // failure throws above and gets an error, so the acquirer retries.
+    const ack = this.providers.webhookAck(provider);
+    if (ack) {
+      res.type("text/plain");
+      return ack;
+    }
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,6 +1,6 @@
 # ADR-0005: Payment and top-up provider boundaries
 
-**Status:** Accepted
+**Status:** Accepted. First acquirer chosen 2026-10-02: **FreeKassa** (`providers/freekassa-payment.provider.ts`, key `freekassa`).
 
 **Date:** 2026-09-06 (revised 2026-09-07)
 
