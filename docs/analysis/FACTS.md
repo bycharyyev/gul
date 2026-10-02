@@ -21,7 +21,7 @@
 | Where | Test files | Test lines |
 | --- | --- | --- |
 | API (jest) | 84 | 12234 |
-| Mobile (flutter test) | 53 | 7509 |
+| Mobile (flutter test) | 53 | 7506 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
 
