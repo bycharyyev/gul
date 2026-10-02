@@ -101,6 +101,8 @@ export interface ChatConversationDto {
     officialCategory?: ChatOfficialCategory | null;
   };
   messages: ChatMessageDto[];
+  /** True when the read was given `after` and `messages` holds only what came later: append. */
+  incremental?: boolean;
 }
 export interface ChatChannelDto {
   id: string;
