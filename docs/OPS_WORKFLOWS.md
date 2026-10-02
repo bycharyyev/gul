@@ -21,6 +21,7 @@ recoverable by re-running or reverting · *disruptive* — restarts or recreates
 | `audit-servers.yml` | Daily (`server-audit.sh`); manual for any script in `infra/checks/`. | read-only |
 | `prune-images.yml` | Daily: removes unused Docker images. | writes |
 | `check-exposed-ports.yml` | Mondays: what a stranger can connect to, from a neutral runner. | read-only |
+| `edge-latency.yml` | How long each node takes to answer from outside (connect / TLS / first byte, plus plain HTTP), every 6 h; fails over 2 s. | read-only |
 | `email-dns-monitor.yml` | Daily: SPF / DKIM / DMARC / MX still resolve as expected. | read-only |
 
 ## Something looks wrong — diagnose first

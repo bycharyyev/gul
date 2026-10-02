@@ -1,0 +1,36 @@
+name: Edge latency (read-only)
+
+# How long each node takes to answer a visitor, measured from outside (a GitHub runner), per
+# phase: TCP connect, TLS handshake, first byte. DNS round-robins visitors across both nodes, so a
+# slow node is slow for about half of them -- and a loopback test on the box cannot see that.
+# Plain HTTP on port 80 is measured too: it tells a TLS problem from a "first answer is late" one.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Measure both nodes
+        env:
+          PRIMARY: ${{ secrets.DEPLOY_HOST }}
+          SECONDARY: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          slow=0
+          for node in primary secondary; do
+            ip=$([ "$node" = primary ] && echo "$PRIMARY" || echo "$SECONDARY")
+            for i in 1 2 3; do
+              curl -s -o /dev/null --resolve "api.gulyaly.com:443:$ip" \
+                -w "$node https  connect=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total}\n" \
+                https://api.gulyaly.com/api/health
+              curl -s -o /dev/null -H "Host: gulyaly.com" \
+                -w "$node http80 connect=%{time_connect} ttfb=%{time_starttransfer} total=%{time_total}\n" "http://$ip/"
+            done
+          done | tee /tmp/edge.txt
+          # Anything over 2 s for a health check is broken, not slow.
+          awk '{for(i=1;i<=NF;i++) if($i ~ /^total=/){split($i,a,"="); if(a[2]+0 > 2) bad=1}} END{exit bad}' /tmp/edge.txt \
+            || { echo "::warning::a node took over 2 s to answer from outside"; slow=1; }
+          exit $slow
