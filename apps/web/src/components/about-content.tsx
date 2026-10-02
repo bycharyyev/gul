@@ -72,6 +72,25 @@ export function AboutContent() {
         })}
       </p>
 
+      <SectionTitle>{t("web.about.docsTitle")}</SectionTitle>
+      <ul className="list-disc space-y-1 pl-5">
+        <li>
+          <Link href="/terms" className={linkClass}>
+            {t("web.about.docsTerms")}
+          </Link>
+        </li>
+        <li>
+          <Link href="/privacy" className={linkClass}>
+            {t("web.about.docsPrivacy")}
+          </Link>
+        </li>
+        <li>
+          <Link href="/contact" className={linkClass}>
+            {t("web.about.docsSupport")}
+          </Link>
+        </li>
+      </ul>
+
       <SectionTitle>{t("web.about.contactTitle")}</SectionTitle>
       <p>
         {withSlots(t("web.about.contact"), {

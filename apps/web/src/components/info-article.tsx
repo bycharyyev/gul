@@ -17,11 +17,20 @@ export async function fetchContentPage(slug: string): Promise<ContentPageDto | n
   }
 }
 
-export function InfoArticle({ title, children }: { title: string; children: ReactNode }) {
+/** "Редакция от 02.10.2026" for a legal page: the date its text last changed in the admin. */
+export function editionLabel(updatedAt: string | undefined): string | undefined {
+  if (!updatedAt) return undefined;
+  const d = new Date(updatedAt);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return `Редакция от ${d.toLocaleDateString("ru-RU", { timeZone: "Asia/Ashgabat" })}`;
+}
+
+export function InfoArticle({ title, edition, children }: { title: string; edition?: string; children: ReactNode }) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">
       <article>
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        {edition && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{edition}</p>}
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{children}</div>
       </article>
     </div>

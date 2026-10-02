@@ -9,12 +9,12 @@
 | Area | Source lines | Files |
 | --- | --- | --- |
 | API (NestJS) | 25989 | 370 |
-| Web (Next.js) | 10799 | 89 |
+| Web (Next.js) | 10827 | 89 |
 | Admin (Vite) | 14411 | 74 |
 | Mobile (Flutter) | 26139 | 131 |
 | packages/types | 2427 | 14 |
 | packages/api-client | 2291 | 6 |
-| packages/i18n | 5193 | 11 |
+| packages/i18n | 5205 | 11 |
 
 ## Automated tests
 
