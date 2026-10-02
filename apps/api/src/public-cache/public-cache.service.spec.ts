@@ -186,6 +186,7 @@ describe("PublicCacheService", () => {
     await flush();
     await cache.wrap("catalog", "services", {}, 30, async () => 1);
     await flush();
+    await cache.flushStats();
     const [today] = await cache.dailyStats(1);
     expect(today.groups.catalog).toMatchObject({ miss: 1, hit: 1 });
   });

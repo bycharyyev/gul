@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import IORedis from "ioredis";
 
 /**
@@ -58,11 +58,14 @@ return 1
  *   a cached price can at worst be shown for a few seconds after an edit; it is never charged.
  */
 @Injectable()
-export class PublicCacheService implements OnModuleDestroy {
+export class PublicCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PublicCacheService.name);
   private readonly inflight = new Map<string, Promise<unknown>>();
   private readonly counters = new Map<CacheGroup, CacheGroupStats>();
   private lastErrorLog = 0;
+  /** Daily counter increments waiting for the next flush (field -> delta). */
+  private pendingStats = new Map<string, number>();
+  private flushTimer?: NodeJS.Timeout;
 
   /** Built by PublicCacheModule's factory (or a test) -- never resolved by type injection. */
   constructor(private readonly redis: IORedis) {}
@@ -81,8 +84,27 @@ export class PublicCacheService implements OnModuleDestroy {
     return client;
   }
 
+  onModuleInit() {
+    this.flushTimer = setInterval(() => void this.flushStats(), 5_000);
+    this.flushTimer.unref();
+  }
+
   async onModuleDestroy() {
+    if (this.flushTimer) clearInterval(this.flushTimer);
+    await this.flushStats();
     this.redis.disconnect();
+  }
+
+  /** Writes the accumulated daily counters in one pipeline; a failed write drops the batch. */
+  async flushStats(): Promise<void> {
+    if (this.pendingStats.size === 0) return;
+    const batch = this.pendingStats;
+    this.pendingStats = new Map();
+    const key = statsKey(dayKey(new Date()));
+    const p = this.redis.pipeline();
+    for (const [field, n] of batch) p.hincrby(key, field, n);
+    p.expire(key, STATS_TTL_SECONDS);
+    await p.exec().catch(() => undefined);
   }
 
   /**
@@ -197,14 +219,11 @@ export class PublicCacheService implements OnModuleDestroy {
     stats[outcome] += 1;
     stats[`${outcome}Ms`] += ms;
     if (outcome === "error") return; // Redis is the thing that just failed.
-    const key = statsKey(dayKey(new Date()));
-    this.redis
-      .pipeline()
-      .hincrby(key, `${group}|${outcome}`, 1)
-      .hincrby(key, `${group}|${outcome}Ms`, Math.round(ms))
-      .expire(key, STATS_TTL_SECONDS)
-      .exec()
-      .catch(() => undefined);
+    // Accumulated and flushed every 5 s rather than written per request: a cache hit must cost
+    // one Redis round trip, not two.
+    const add = (field: string, n: number) => this.pendingStats.set(field, (this.pendingStats.get(field) ?? 0) + n);
+    add(`${group}|${outcome}`, 1);
+    add(`${group}|${outcome}Ms`, Math.round(ms));
   }
 
   /** At most one warning a minute: with Redis down every request would otherwise log one. */

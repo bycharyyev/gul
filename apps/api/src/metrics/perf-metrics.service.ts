@@ -13,6 +13,7 @@ const MINUTE_TTL_S = 2 * 60 * 60; // minute buckets only serve the 5 m and 1 h v
 const HOUR_TTL_S = 8 * 24 * 60 * 60; // hour buckets serve 24 h and 7 d
 const NODE_TTL_S = 60; // a node that stopped reporting disappears within a minute
 const HEARTBEAT_MS = 15_000;
+const FLUSH_MS = 5_000;
 
 export interface PerfBucket {
   /** Bucket start, ISO. */
@@ -63,7 +64,10 @@ export interface NodeReport {
 export class PerfMetricsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PerfMetricsService.name);
   private timer?: NodeJS.Timeout;
+  private flushTimer?: NodeJS.Timeout;
   private lastCpu = cpuTotals();
+  private pending = new Map<string, Map<string, number>>();
+  private pendingUsers = new Map<string, Set<string>>();
 
   constructor(private readonly redis: IORedis) {}
 
@@ -82,39 +86,65 @@ export class PerfMetricsService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     this.timer = setInterval(() => void this.heartbeat(), HEARTBEAT_MS);
     this.timer.unref();
+    this.flushTimer = setInterval(() => void this.flush(), FLUSH_MS);
+    this.flushTimer.unref();
     void this.heartbeat();
   }
 
-  onModuleDestroy() {
+  async onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
+    if (this.flushTimer) clearInterval(this.flushTimer);
+    await this.flush(); // the last few seconds before a deploy restart
     this.redis.disconnect();
   }
 
-  /** One finished response. Never throws, never awaited by the request. */
+  /**
+   * One finished response. Pure in-memory bookkeeping: the counters are flushed to Redis in one
+   * pipeline every few seconds (`flush`). Writing per request cost ~14 Redis commands each and
+   * measurably lowered throughput (stage 5, 2026-10-02); batching makes the cost per request a few
+   * map updates.
+   */
   record(statusCode: number, durationMs: number, userId?: string | null, now = new Date()): void {
     const minute = minuteKey(now);
     const hour = hourKey(now);
     const bucket = bucketIndex(durationMs);
     const cls = `s${Math.floor(statusCode / 100)}`;
-    const p = this.redis.pipeline();
-    for (const [key, ttl] of [
-      [`perf:m:${minute}`, MINUTE_TTL_S],
-      [`perf:h:${hour}`, HOUR_TTL_S],
-    ] as const) {
-      p.hincrby(key, "n", 1);
-      p.hincrby(key, "sum", Math.round(durationMs));
-      p.hincrby(key, cls, 1);
-      if (statusCode === 429) p.hincrby(key, "s429", 1);
-      p.hincrby(key, `b${bucket}`, 1);
-      p.expire(key, ttl);
+    for (const key of [`perf:m:${minute}`, `perf:h:${hour}`]) {
+      const counters = this.pending.get(key) ?? new Map<string, number>();
+      this.pending.set(key, counters);
+      const add = (field: string, n: number) => counters.set(field, (counters.get(field) ?? 0) + n);
+      add("n", 1);
+      add("sum", Math.round(durationMs));
+      add(cls, 1);
+      if (statusCode === 429) add("s429", 1);
+      add(`b${bucket}`, 1);
     }
     if (userId) {
-      p.pfadd(`perf:um:${minute}`, userId);
-      p.expire(`perf:um:${minute}`, MINUTE_TTL_S);
-      p.pfadd(`perf:uh:${hour}`, userId);
-      p.expire(`perf:uh:${hour}`, HOUR_TTL_S);
+      for (const key of [`perf:um:${minute}`, `perf:uh:${hour}`]) {
+        const ids = this.pendingUsers.get(key) ?? new Set<string>();
+        this.pendingUsers.set(key, ids);
+        ids.add(userId);
+      }
     }
-    p.exec().catch(() => undefined);
+  }
+
+  /** Writes and clears what `record` accumulated. A failed write drops the batch, never retries. */
+  async flush(): Promise<void> {
+    if (this.pending.size === 0 && this.pendingUsers.size === 0) return;
+    const counters = this.pending;
+    const users = this.pendingUsers;
+    this.pending = new Map();
+    this.pendingUsers = new Map();
+    const p = this.redis.pipeline();
+    for (const [key, fields] of counters) {
+      for (const [field, n] of fields) p.hincrby(key, field, n);
+      p.expire(key, key.startsWith("perf:m:") ? MINUTE_TTL_S : HOUR_TTL_S);
+    }
+    for (const [key, ids] of users) {
+      p.pfadd(key, ...ids);
+      p.expire(key, key.startsWith("perf:um:") ? MINUTE_TTL_S : HOUR_TTL_S);
+    }
+    await p.exec().catch(() => undefined);
   }
 
   /** Request totals and a time series for the period, across both nodes. */

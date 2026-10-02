@@ -19,7 +19,10 @@ class FakeRedis {
         return p;
       },
       expire: () => (ops.push(() => 1), p),
-      pfadd: (k: string, v: string) => (ops.push(() => (this.sets.get(k) ?? this.sets.set(k, new Set()).get(k)!).add(v)), p),
+      pfadd: (k: string, ...vs: string[]) => (
+        ops.push(() => vs.forEach((v) => (this.sets.get(k) ?? this.sets.set(k, new Set()).get(k)!).add(v))),
+        p
+      ),
       hgetall: (k: string) => (ops.push(() => Object.fromEntries([...(this.hashes.get(k) ?? new Map())].map(([f, v]) => [f, String(v)]))), p),
       exec: async () => ops.map((op) => [null, op()]),
     };
@@ -46,7 +49,8 @@ describe("PerfMetricsService", () => {
     perf.record(200, 40, "u2", NOW);
     perf.record(429, 1, null, NOW);
     perf.record(500, 900, "u1", NOW);
-    await new Promise((r) => setImmediate(r));
+    expect(redis.hashes.size).toBe(0); // nothing touches Redis per request
+    await perf.flush();
 
     const snap = await perf.snapshot("5m", NOW);
     expect(snap.totals).toMatchObject({ requests: 4, status2xx: 2, status4xx: 1, status429: 1, status5xx: 1 });
@@ -68,6 +72,7 @@ describe("PerfMetricsService", () => {
     };
     const perf = new PerfMetricsService(broken as never);
     expect(() => perf.record(200, 5, "u1")).not.toThrow();
+    return expect(perf.flush()).resolves.toBeUndefined();
   });
 });
 
