@@ -6,6 +6,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 type AuthedUser = { userId: string; role: string };
 
@@ -27,6 +28,7 @@ export class MarketplaceSettingsController {
   /// same as ReferralsService.updateSettings.
   @Roles("ADMIN")
   @Patch()
+  @InvalidatesPublicCache("content")
   updateSettings(@Body() dto: UpdateMarketplaceSettingsDto, @CurrentUser() user: AuthedUser) {
     return this.marketplaceSettings.updateSettings(dto, user.userId);
   }
