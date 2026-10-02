@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { InfoArticle, fetchContentPage, renderBody } from "@/components/info-article";
+import { InfoArticle, editionLabel, fetchContentPage, renderBody } from "@/components/info-article";
 
 export const metadata: Metadata = {
-  title: "Условия использования и оферта",
+  title: "Пользовательское соглашение и оферта",
   description: "Публичная оферта и условия использования сервиса Gulyaly.",
   alternates: { canonical: "/terms" },
 };
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default async function TermsPage() {
   const page = await fetchContentPage("offer");
   return (
-    <InfoArticle title={page?.title ?? "Условия использования"}>
+    <InfoArticle title={page?.title ?? "Условия использования"} edition={editionLabel(page?.updatedAt)}>
       {page ? (
         renderBody(page.body)
       ) : (

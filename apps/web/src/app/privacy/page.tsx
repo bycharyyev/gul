@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { InfoArticle, fetchContentPage, renderBody } from "@/components/info-article";
+import { InfoArticle, editionLabel, fetchContentPage, renderBody } from "@/components/info-article";
 
 export const metadata: Metadata = {
   title: "Политика конфиденциальности",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function PrivacyPage() {
   const page = await fetchContentPage("privacy");
   return (
-    <InfoArticle title={page?.title ?? "Политика конфиденциальности"}>
+    <InfoArticle title={page?.title ?? "Политика конфиденциальности"} edition={editionLabel(page?.updatedAt)}>
       {page ? (
         renderBody(page.body)
       ) : (
