@@ -256,4 +256,77 @@ void main() {
       expect(view.canPost, isTrue);
     },
   );
+
+  group('incremental reads keep every earlier message', () {
+    Map<String, dynamic> msg(String id, int minute) => {
+      'id': id,
+      'body': 'b$id',
+      'createdAt': DateTime.utc(2026, 10, 2, 10, minute).toIso8601String(),
+      'authorId': 'u1',
+    };
+
+    test(
+      'first read is full; later polls ask after the last server id and append',
+      () async {
+        final paths = <String>[];
+        final answers = [
+          {
+            'room': {'title': 'Group', 'kind': 'GROUP', 'canPost': true},
+            'messages': [msg('m1', 1), msg('m2', 2)],
+          },
+          {
+            'room': {'title': 'Group', 'kind': 'GROUP', 'canPost': true},
+            'messages': [msg('m3', 3)],
+            'incremental': true,
+          },
+          {
+            'room': {'title': 'Group', 'kind': 'GROUP', 'canPost': true},
+            'messages': <Map<String, dynamic>>[],
+            'incremental': true,
+          },
+        ];
+        when(() => api.get<Map<String, dynamic>>(any())).thenAnswer((
+          inv,
+        ) async {
+          paths.add(inv.positionalArguments.first as String);
+          return answers[paths.length - 1];
+        });
+
+        final first = await repository.messages('room:r1');
+        final second = await repository.messages('room:r1');
+        final third = await repository.messages('room:r1');
+
+        expect(paths[0], '/chat/rooms/r1/messages');
+        expect(paths[1], '/chat/rooms/r1/messages?after=m2');
+        expect(paths[2], '/chat/rooms/r1/messages?after=m3');
+        expect(first.messages.map((m) => m.id), ['m1', 'm2']);
+        expect(second.messages.map((m) => m.id), ['m1', 'm2', 'm3']);
+        // Nothing new: everything loaded before is still there.
+        expect(third.messages.map((m) => m.id), ['m1', 'm2', 'm3']);
+      },
+    );
+
+    test(
+      'a message from the other side stored before ours is placed above it, once',
+      () async {
+        var call = 0;
+        when(() => api.get<Map<String, dynamic>>(any())).thenAnswer((_) async {
+          call++;
+          return call == 1
+              ? {
+                  'room': {'kind': 'GROUP'},
+                  'messages': [msg('m1', 1)],
+                }
+              : {
+                  'room': {'kind': 'GROUP'},
+                  'messages': [msg('theirs', 2), msg('m1', 1)],
+                  'incremental': true,
+                };
+        });
+        await repository.messages('room:r1');
+        final view = await repository.messages('room:r1');
+        expect(view.messages.map((m) => m.id), ['m1', 'theirs']);
+      },
+    );
+  });
 }

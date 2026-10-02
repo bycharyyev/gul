@@ -11,7 +11,7 @@
 | API (NestJS) | 25630 | 366 |
 | Web (Next.js) | 10799 | 89 |
 | Admin (Vite) | 14337 | 74 |
-| Mobile (Flutter) | 26024 | 130 |
+| Mobile (Flutter) | 26139 | 131 |
 | packages/types | 2424 | 14 |
 | packages/api-client | 2277 | 6 |
 | packages/i18n | 5193 | 11 |
@@ -21,7 +21,7 @@
 | Where | Test files | Test lines |
 | --- | --- | --- |
 | API (jest) | 84 | 12234 |
-| Mobile (flutter test) | 53 | 7506 |
+| Mobile (flutter test) | 53 | 7636 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
 
