@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const emptyDraft: CreateSellerInput = {
+  email: "",
   phone: "",
   password: "",
   fullName: "",
@@ -41,7 +42,7 @@ export default function SellersPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createSeller(draft);
+      const created = await api.createSeller({ ...draft, phone: draft.phone?.trim() || undefined });
       setSellers((prev) => [created, ...prev]);
       setDraft(emptyDraft);
       setShowCreate(false);
@@ -70,12 +71,21 @@ export default function SellersPage() {
         <Card className="p-5">
           <form onSubmit={createSeller} className="grid grid-cols-2 gap-4">
             <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">{t("admin.team.emailLabel")}</label>
+              <Input
+                type="email"
+                value={draft.email}
+                onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                placeholder="shop@example.com"
+                required
+              />
+            </div>
+            <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">{t("admin.sellers.phoneLabel")}</label>
               <Input
-                value={draft.phone}
+                value={draft.phone ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
                 placeholder={t("admin.sellers.phonePlaceholder")}
-                required
               />
             </div>
             <div>
@@ -168,7 +178,7 @@ export default function SellersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-brand-600">@{seller.handle}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{seller.user.phone}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{seller.user.email ?? seller.user.phone ?? "—"}</td>
                 <td className="px-4 py-3">{seller.balanceTmt} TMT</td>
                 <td className="px-4 py-3">
                   {seller.isEnabled ? (

@@ -70,7 +70,7 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.signedInNotice":
       "Вы вошли в аккаунт — телефон, почта и пароль берутся из него. Заполните только сведения о магазине.",
     "web.becomeSeller.emailLabel": "Email",
-    "web.becomeSeller.emailHint": "На него придёт решение по заявке — это единственный способ с вами связаться до одобрения.",
+    "web.becomeSeller.emailHint": "С ним вы будете входить в кабинет продавца. На него же придёт решение по заявке.",
     "web.becomeSeller.passwordLabel": "Пароль",
     "web.becomeSeller.fullNameLabel": "Ваше имя (необязательно)",
     "web.becomeSeller.handleLabel": "Username магазина",
@@ -280,7 +280,7 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.signedInNotice":
       "You are signed in — phone, email and password come from your account. Fill in the shop details only.",
     "web.becomeSeller.emailLabel": "Email",
-    "web.becomeSeller.emailHint": "The decision on your application comes here — it is the only way to reach you before approval.",
+    "web.becomeSeller.emailHint": "You will sign in to the seller account with it. The decision on your application comes here too.",
     "web.becomeSeller.passwordLabel": "Password",
     "web.becomeSeller.fullNameLabel": "Your name (optional)",
     "web.becomeSeller.handleLabel": "Shop username",
@@ -480,7 +480,7 @@ export const webMainDict: Record<Locale, Record<string, string>> = {
     "web.becomeSeller.signedInNotice":
       "Siz hasabyňyza girdiňiz — telefon, poçta we parol şondan alynýar. Diňe dükan maglumatlaryny dolduryň.",
     "web.becomeSeller.emailLabel": "Email",
-    "web.becomeSeller.emailHint": "Arza boýunça karar şu salga geler — tassyklanýança siziň bilen habarlaşmagyň ýeke-täk ýoly.",
+    "web.becomeSeller.emailHint": "Satyjy kabinetine şu e-poçta bilen girersiňiz. Arza boýunça karar hem şu salga geler.",
     "web.becomeSeller.passwordLabel": "Parol",
     "web.becomeSeller.fullNameLabel": "Adyňyz (hökman däl)",
     "web.becomeSeller.handleLabel": "Dükanyň username-i",

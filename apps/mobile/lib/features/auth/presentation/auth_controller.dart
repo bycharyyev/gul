@@ -91,24 +91,40 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
-  Future<bool> login({required String phone, required String password}) =>
-      _run(() => _repository.login(phone: phone, password: password));
+  Future<bool> login({required String email, required String password}) =>
+      _run(() => _repository.login(email: email, password: password));
 
-  Future<bool> register({
-    required String phone,
+  /// Mails the sign-up code. Returns where it went and how long it lives, or null on failure (the
+  /// error is in [AuthState.error]). Does not authenticate: that is [confirmRegistration].
+  Future<({String email, int expiresInMinutes})?> startRegistration({
+    required String email,
     required String password,
     String? fullName,
     String? referredByUsername,
     String? locale,
-  }) => _run(
-    () => _repository.register(
-      phone: phone,
-      password: password,
-      fullName: fullName,
-      referredByUsername: referredByUsername,
-      locale: locale,
-    ),
-  );
+  }) async {
+    if (state.busy) return null;
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final started = await _repository.startRegistration(
+        email: email,
+        password: password,
+        fullName: fullName,
+        referredByUsername: referredByUsername,
+        locale: locale,
+      );
+      state = state.copyWith(busy: false);
+      return started;
+    } on AppException catch (e) {
+      state = state.copyWith(busy: false, error: e);
+      return null;
+    }
+  }
+
+  Future<bool> confirmRegistration({
+    required String email,
+    required String code,
+  }) => _run(() => _repository.confirmRegistration(email: email, code: code));
 
   /// Signing out always succeeds from the user's point of view. If clearing the keystore fails
   /// the app still drops the session — leaving someone stuck on a screen they asked to leave is

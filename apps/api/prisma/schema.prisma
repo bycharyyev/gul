@@ -19,7 +19,9 @@ enum UserRole {
 
 model User {
   id              String    @id @default(cuid())
-  phone           String    @unique
+  // Optional since 2026-10-02: accounts are created and signed into by email. A phone is added
+  // later in the profile (and earns the one-off phone bonus, see phoneBonusAt).
+  phone           String?   @unique
   email           String?   @unique
   // Set only once the address survives a round-trip through AUTH_EMAIL_VERIFICATION. Order and
   // other non-security mail is only ever sent to a verified address -- an unverified one is
@@ -59,6 +61,9 @@ model User {
   username            String     @unique // auto-generated at registration, user-changeable; also this user's own referral code
   referredByUsername  String? // the code they registered with, if any (denormalized, survives later username changes)
   referralBalanceTmt  Decimal    @default(0) @db.Decimal(12, 2) // accrued reward, auto-applied at checkout
+  // Set once, when the 1 TMT bonus for adding a phone was credited to referralBalanceTmt. The
+  // bonus needs a phone AND a paid order, so a throwaway account with an invented number gets nothing.
+  phoneBonusAt        DateTime?
   referredById        String?
   referredBy          User?      @relation("UserReferrals", fields: [referredById], references: [id])
   referrals           User[]     @relation("UserReferrals")
@@ -1186,6 +1191,25 @@ model PasswordReset {
 
 // A pending email-verification code. The code itself is only ever stored hashed and is never
 // logged; `attempts` caps guessing and the row is consumed on first success.
+/// A sign-up waiting for its emailed code. No User exists until the code is confirmed, so an
+/// address nobody can read never becomes an account (and never blocks its real owner).
+model PendingRegistration {
+  id           String    @id @default(cuid())
+  email        String
+  passwordHash String
+  fullName     String?
+  locale       String    @default("ru")
+  /// Referral code and UTM attribution captured at sign-up, applied when the account is created.
+  attribution  Json?
+  codeHash     String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@index([email, createdAt])
+}
+
 model EmailVerification {
   id         String    @id @default(cuid())
   userId     String
@@ -1299,7 +1323,8 @@ enum SellerApplicationStatus {
 // Public self-signup — collected here, NOT turned into a User/Seller until an admin approves it.
 model SellerApplication {
   id           String                  @id @default(cuid())
-  phone        String
+  // Optional contact since sign-in moved to email (2026-10-02).
+  phone        String?
   // Required by the DTO going forward, nullable in the column so applications filed before this
   // existed still read. It is the only channel that reaches an applicant: Telegram linking needs
   // an approved Seller to generate a code, so before approval there is nothing else.

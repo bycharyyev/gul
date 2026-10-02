@@ -8,12 +8,13 @@ import { ReferralsModule } from "../referrals/referrals.module";
 import { EmailModule } from "../email/email.module";
 import { PasswordResetService } from "./password-reset.service";
 import { LoginAttemptsService } from "./login-attempts.service";
+import { RegistrationService } from "./registration.service";
 import { QueueModule } from "../queue/queue.module";
 
 @Module({
   imports: [PassportModule, JwtModule.register({}), ReferralsModule, EmailModule, QueueModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PasswordResetService, LoginAttemptsService],
+  providers: [AuthService, JwtStrategy, PasswordResetService, LoginAttemptsService, RegistrationService],
   exports: [AuthService],
 })
 export class AuthModule {}

@@ -445,19 +445,23 @@ export class PushCampaignService {
     }
   }
 
-  /** One person: an account id or a phone number. Recorded as a campaign so it has statistics. */
+  /** One person: an account id, an email or a phone number. Recorded as a campaign so it has statistics. */
   async sendOne(dto: SendOneDto, adminId: string) {
     const target = dto.target.trim();
     const user = await this.prisma.user.findFirst({
-      where: target.startsWith("+") ? { phone: target } : { OR: [{ id: target }, { phone: target }] },
-      select: { id: true, phone: true },
+      where: target.startsWith("+")
+        ? { phone: target }
+        : target.includes("@")
+          ? { email: target.toLowerCase() }
+          : { OR: [{ id: target }, { phone: target }] },
+      select: { id: true, phone: true, email: true },
     });
     if (!user) throw new NotFoundException("No such person");
     const devices = await this.prisma.pushToken.count({ where: { userId: user.id } });
     if (devices === 0) throw new BadRequestException("This person has not signed in on the app, so there is nowhere to send");
     return this.createCampaign(
       {
-        name: `Личное: ${user.phone}`,
+        name: `Личное: ${user.email ?? user.phone ?? user.id}`,
         content: dto.content,
         audience: { type: "USERS", userIds: [user.id] },
         sendNow: true,
@@ -474,13 +478,14 @@ export class PushCampaignService {
       where: {
         OR: [
           { phone: { contains: q } },
+          { email: { contains: q, mode: "insensitive" } },
           { username: { contains: q, mode: "insensitive" } },
           { fullName: { contains: q, mode: "insensitive" } },
         ],
       },
       take: 15,
       orderBy: { createdAt: "desc" },
-      select: { id: true, phone: true, fullName: true, username: true, country: true, locale: true, _count: { select: { pushTokens: true } } },
+      select: { id: true, phone: true, email: true, fullName: true, username: true, country: true, locale: true, _count: { select: { pushTokens: true } } },
     });
     return users.map(({ _count, ...user }) => ({ ...user, devices: _count.pushTokens }));
   }

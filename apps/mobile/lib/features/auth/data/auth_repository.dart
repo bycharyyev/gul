@@ -12,17 +12,18 @@ class AuthRepository {
   final ApiClient _api;
   final TokenStore _store;
 
-  /// Login is phone + password. There is no email login on this backend.
-  Future<User> login({required String phone, required String password}) async {
+  /// Login is email + password (since 2026-10-02). A phone is optional and added in the profile.
+  Future<User> login({required String email, required String password}) async {
     final data = await _api.post<Map<String, dynamic>>(
       '/auth/login',
-      body: {'phone': phone, 'password': password},
+      body: {'email': email, 'password': password},
     );
     return _persist(data);
   }
 
-  Future<User> register({
-    required String phone,
+  /// Step 1 of sign-up: mails a 6-digit code to the address. No account and no session yet.
+  Future<({String email, int expiresInMinutes})> startRegistration({
+    required String email,
     required String password,
     String? fullName,
     String? referredByUsername,
@@ -31,13 +32,28 @@ class AuthRepository {
     final data = await _api.post<Map<String, dynamic>>(
       '/auth/register',
       body: {
-        'phone': phone,
+        'email': email,
         'password': password,
         if (fullName != null && fullName.isNotEmpty) 'fullName': fullName,
         if (referredByUsername != null && referredByUsername.isNotEmpty)
           'referredByUsername': referredByUsername,
         if (locale != null) 'locale': locale,
       },
+    );
+    return (
+      email: data['email'] as String? ?? email,
+      expiresInMinutes: (data['expiresInMinutes'] as num?)?.toInt() ?? 15,
+    );
+  }
+
+  /// Step 2 of sign-up: the mailed code creates the account and signs it in.
+  Future<User> confirmRegistration({
+    required String email,
+    required String code,
+  }) async {
+    final data = await _api.post<Map<String, dynamic>>(
+      '/auth/register/confirm',
+      body: {'email': email, 'code': code},
     );
     return _persist(data);
   }

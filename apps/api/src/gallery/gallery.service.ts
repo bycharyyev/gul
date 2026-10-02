@@ -241,7 +241,7 @@ export class GalleryService {
       orderBy: { createdAt: "desc" },
       include: {
         ...ORDER_INCLUDE,
-        user: { select: { id: true, phone: true, fullName: true } },
+        user: { select: { id: true, phone: true, email: true, fullName: true } },
       },
     });
   }
@@ -268,7 +268,7 @@ export class GalleryService {
       },
       include: {
         ...ORDER_INCLUDE,
-        user: { select: { id: true, phone: true, fullName: true } },
+        user: { select: { id: true, phone: true, email: true, fullName: true } },
       },
     });
     this.auditLog.record(adminId, "gallery-order.edit-details", "GalleryOrder", id, {

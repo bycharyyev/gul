@@ -1,10 +1,18 @@
-import { IsEnum, IsOptional, IsString, Length } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsEmail, IsEnum, IsOptional, IsString, Length, MaxLength } from "class-validator";
 import { USER_ROLES, type UserRole } from "@topup-hub/types";
 
 export class CreateStaffUserDto {
+  /** The staff member signs in with this address. */
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
+  @IsEmail({}, { message: "INVALID_EMAIL" })
+  @MaxLength(254)
+  email!: string;
+
+  @IsOptional()
   @IsString()
   @Length(6, 20)
-  phone!: string;
+  phone?: string;
 
   @IsString()
   @Length(8, 72)

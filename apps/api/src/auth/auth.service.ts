@@ -13,10 +13,9 @@ import { randomBytes, createHash } from "crypto";
 import { countryFromPhone } from "../common/phone-country";
 import { toAvatarUrl } from "../common/avatar-url.util";
 import { PrismaService } from "../prisma/prisma.service";
-import { ReferralsService } from "../referrals/referrals.service";
+import { PHONE_BONUS_TMT, ReferralsService } from "../referrals/referrals.service";
 import { ACCESS_TOKEN_SECRET } from "./jwt-secret";
 import { LoginAttemptsService } from "./login-attempts.service";
-import type { RegisterDto } from "./dto/register.dto";
 import type { LoginDto } from "./dto/login.dto";
 import type { ChangePasswordDto } from "./dto/change-password.dto";
 import type { UpdateMeDto } from "./dto/update-me.dto";
@@ -74,47 +73,32 @@ export class AuthService {
   // first screen of the app. A code has no language, so each client says it in the reader's own;
   // see `error.*` in packages/i18n and `_errorCodeKeys` in the mobile app's strings table.
   // Anything a person is meant to read belongs in those tables, not here.
-  async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    if (existing) throw new ConflictException("PHONE_ALREADY_REGISTERED");
+  //
+  // Sign-up lives in RegistrationService (email + mailed code); it ends in startSession below.
 
-    const passwordHash = await argon2.hash(dto.password);
-    const username = await this.referrals.generateUsername();
-    const user = await this.prisma.user.create({
-      data: {
-        phone: dto.phone,
-        passwordHash,
-        fullName: dto.fullName,
-        username,
-        locale: dto.locale ?? "ru",
-        // Worked out from the number, never asked: the person can correct it in their profile.
-        country: countryFromPhone(dto.phone),
-      },
-    });
-
-    if (dto.referredByUsername) {
-      try {
-        await this.referrals.recordReferral(user.id, dto.referredByUsername, {
-          utmSource: dto.utmSource,
-          utmMedium: dto.utmMedium,
-          utmCampaign: dto.utmCampaign,
-          referrerUrl: dto.referrerUrl,
-        });
-      } catch {
-        // a bad/garbage referral code must never block registration
-      }
-    }
-
+  /** Issues a token pair for a user and returns the same shape login and sign-up both answer with. */
+  async startSession(user: {
+    id: string;
+    role: string;
+    email: string | null;
+    phone: string | null;
+    fullName: string | null;
+    username: string;
+    avatarPath: string | null;
+    locale: string;
+    country: string | null;
+  }) {
     const tokens = await this.issueTokens(user.id, user.role);
     return {
       ...tokens,
       user: {
         id: user.id,
+        email: user.email,
         phone: user.phone,
         fullName: user.fullName,
         username: user.username,
         role: user.role,
-        avatarUrl: null,
+        avatarUrl: toAvatarUrl(user.avatarPath),
         locale: user.locale,
         country: user.country,
       },
@@ -122,10 +106,10 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // Keyed on the number being attacked, not the address it comes from: behind carrier NAT one
+    // Keyed on the account being attacked, not the address it comes from: behind carrier NAT one
     // address is a city, and a per-address limit tight enough to stop guessing would lock out
     // everybody sharing it. See LoginAttemptsService for the whole reasoning.
-    const verdict = await this.loginAttempts.check(dto.phone);
+    const verdict = await this.loginAttempts.check(dto.email);
     if (!verdict.allowed) {
       throw new HttpException(
         {
@@ -138,40 +122,27 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
-    // A failure is recorded for a number nobody holds, too. Skipping it would make an unknown
-    // number answer faster than a known one with a wrong password, which is a way to enumerate
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    // A failure is recorded for an address nobody holds, too. Skipping it would make an unknown
+    // address answer faster than a known one with a wrong password, which is a way to enumerate
     // who has an account here.
     if (!user) {
-      await this.loginAttempts.recordFailure(dto.phone);
+      await this.loginAttempts.recordFailure(dto.email);
       throw new UnauthorizedException("INVALID_CREDENTIALS");
     }
 
     const valid = await argon2.verify(user.passwordHash, dto.password);
     if (!valid) {
-      await this.loginAttempts.recordFailure(dto.phone);
+      await this.loginAttempts.recordFailure(dto.email);
       throw new UnauthorizedException("INVALID_CREDENTIALS");
     }
     if (user.isBlocked) throw new UnauthorizedException("ACCOUNT_BLOCKED");
 
     // The right password erases the history: somebody who signs in correctly is never delayed,
     // however often they do it.
-    await this.loginAttempts.clear(dto.phone);
+    await this.loginAttempts.clear(dto.email);
 
-    const tokens = await this.issueTokens(user.id, user.role);
-    return {
-      ...tokens,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        fullName: user.fullName,
-        username: user.username,
-        role: user.role,
-        avatarUrl: toAvatarUrl(user.avatarPath),
-        locale: user.locale,
-        country: user.country,
-      },
-    };
+    return this.startSession(user);
   }
 
   async refresh(refreshToken: string) {
@@ -272,7 +243,10 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true,
+        email: true,
+        emailVerified: true,
         phone: true,
+        phoneBonusAt: true,
         fullName: true,
         username: true,
         role: true,
@@ -283,21 +257,37 @@ export class AuthService {
     });
     if (!user) throw new NotFoundException("User not found");
     const { avatarPath, ...rest } = user;
-    return { ...rest, avatarUrl: toAvatarUrl(avatarPath) };
+    return { ...rest, avatarUrl: toAvatarUrl(avatarPath), phoneBonusTmt: PHONE_BONUS_TMT };
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {
+    let country = dto.country;
     if (dto.phone) {
       const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
       if (existing && existing.id !== userId) throw new ConflictException("PHONE_ALREADY_REGISTERED");
+      // Sign-up no longer asks for a number, so the country is guessed the first time one appears,
+      // unless the person chose one themselves.
+      if (!country) {
+        const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { country: true } });
+        if (!current?.country) country = countryFromPhone(dto.phone) ?? undefined;
+      }
     }
 
-    const user = await this.prisma.user.update({
+    await this.prisma.user.update({
       where: { id: userId },
-      data: { fullName: dto.fullName, phone: dto.phone, locale: dto.locale, country: dto.country },
+      data: { fullName: dto.fullName, phone: dto.phone, locale: dto.locale, country },
+    });
+    // Adding a phone may complete the conditions for the one-off phone bonus.
+    if (dto.phone) await this.referrals.maybeGrantPhoneBonus(userId);
+
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
       select: {
         id: true,
+        email: true,
+        emailVerified: true,
         phone: true,
+        phoneBonusAt: true,
         fullName: true,
         username: true,
         role: true,
@@ -307,7 +297,7 @@ export class AuthService {
       },
     });
     const { avatarPath, ...rest } = user;
-    return { ...rest, avatarUrl: toAvatarUrl(avatarPath) };
+    return { ...rest, avatarUrl: toAvatarUrl(avatarPath), phoneBonusTmt: PHONE_BONUS_TMT };
   }
 
   async updateLocale(userId: string, dto: UpdateLocaleDto) {
@@ -316,7 +306,10 @@ export class AuthService {
       data: { locale: dto.locale },
       select: {
         id: true,
+        email: true,
+        emailVerified: true,
         phone: true,
+        phoneBonusAt: true,
         fullName: true,
         username: true,
         role: true,
@@ -326,6 +319,6 @@ export class AuthService {
       },
     });
     const { avatarPath, ...rest } = user;
-    return { ...rest, avatarUrl: toAvatarUrl(avatarPath) };
+    return { ...rest, avatarUrl: toAvatarUrl(avatarPath), phoneBonusTmt: PHONE_BONUS_TMT };
   }
 }

@@ -1,14 +1,22 @@
 import { Transform } from "class-transformer";
-import { IsOptional, IsString, Length, Matches } from "class-validator";
+import { IsEmail, IsOptional, IsString, Length, Matches, MaxLength } from "class-validator";
 
 export class CreateSellerDto {
+  // Optional contact number; sign-in is by email.
+  @IsOptional()
   @IsString()
   @Length(6, 20)
-  phone!: string;
+  phone?: string;
 
   @IsString()
   @Length(8, 72)
   password!: string;
+
+  /** The seller signs in with this address. */
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
+  @IsEmail({}, { message: "INVALID_EMAIL" })
+  @MaxLength(254)
+  email!: string;
 
   @IsOptional()
   @IsString()

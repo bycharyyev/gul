@@ -15,7 +15,10 @@ import { Button } from "@/components/ui/button";
 export default function RegisterPage() {
   const { t, locale } = useTranslation();
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  // Set once the code has been mailed: the form then asks for the code instead.
+  const [sentTo, setSentTo] = useState<{ email: string; minutes: number } | null>(null);
+  const [code, setCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +40,8 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
     try {
-      await api.register({
-        phone,
+      const started = await api.register({
+        email: email.trim().toLowerCase(),
         password,
         fullName: fullName || undefined,
         locale,
@@ -48,6 +51,22 @@ export default function RegisterPage() {
         utmCampaign: referral?.utmCampaign,
         referrerUrl: referral?.referrerUrl,
       });
+      setSentTo({ email: started.email, minutes: started.expiresInMinutes });
+      setCode("");
+    } catch (err) {
+      setError(err instanceof ApiError ? translateError(t, err.message) : t("web.register.genericError"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onConfirm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sentTo) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await api.confirmRegistration({ email: sentTo.email, code: code.trim() });
       clearStoredReferral();
       router.push("/account");
     } catch (err) {
@@ -57,6 +76,57 @@ export default function RegisterPage() {
     }
   }
 
+  if (sentTo) {
+    return (
+      <div className="bg-hero-gradient min-h-[calc(100vh-4rem)]">
+        <div className="mx-auto max-w-md px-4 py-16">
+          <Card className="p-8">
+            <h1 className="text-xl font-bold">{t("web.register.codeTitle")}</h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              {t("web.register.codeHint", { email: sentTo.email, minutes: String(sentTo.minutes) })}
+            </p>
+            <form className="mt-6 space-y-4" onSubmit={onConfirm}>
+              <div>
+                <label className="mb-1 block text-sm font-medium">{t("web.register.codeLabel")}</label>
+                <Input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                />
+              </div>
+              {error && <p className="text-sm text-rose-600">{error}</p>}
+              <Button className="w-full" disabled={loading || code.length !== 6} type="submit">
+                {loading ? t("web.register.confirming") : t("web.register.confirm")}
+              </Button>
+            </form>
+            <div className="mt-4 flex justify-between text-sm">
+              <button
+                type="button"
+                className="text-slate-500 hover:underline dark:text-slate-400"
+                onClick={() => {
+                  setSentTo(null);
+                  setError(null);
+                }}
+              >
+                {t("web.register.changeEmail")}
+              </button>
+              <button
+                type="button"
+                className="font-medium text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-300"
+                disabled={loading}
+                onClick={(e) => onSubmit(e as unknown as React.FormEvent)}
+              >
+                {t("web.register.resend")}
+              </button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-hero-gradient min-h-[calc(100vh-4rem)]">
       <div className="mx-auto max-w-md px-4 py-16">
@@ -64,8 +134,14 @@ export default function RegisterPage() {
           <h1 className="text-xl font-bold">{t("web.register.title")}</h1>
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label className="mb-1 block text-sm font-medium">{t("web.register.phone")}</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+70000000000" />
+              <label className="mb-1 block text-sm font-medium">{t("web.register.email")}</label>
+              <Input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">{t("web.register.fullName")}</label>

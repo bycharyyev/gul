@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/l10n/countries.dart';
 import '../../../core/l10n/strings.dart';
@@ -72,6 +73,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
   }
 
+  /// "Add a phone, get N TMT" until the bonus is earned, then a thank-you; nothing when the
+  /// server did not say how big the bonus is.
+  String? _phoneBonusHint(Strings strings) {
+    // The bonus is a referral-balance credit, so it is part of the reward surface this build
+    // hides (see kReferralRewardsEnabled): the store declaration says no financial features.
+    if (!kReferralRewardsEnabled) return null;
+    final user = ref.read(authControllerProvider).user;
+    final amount = user?.phoneBonusTmt;
+    if (user == null || amount == null || amount <= 0) return null;
+    final key = user.phoneBonusAt != null
+        ? 'edit.phoneBonusEarned'
+        : 'edit.phoneBonusOffer';
+    return strings.get(key).replaceAll('{amount}', amount.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
@@ -110,8 +126,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
           ],
           onFieldSubmitted: (_) => _submit(),
-          decoration: InputDecoration(labelText: strings.get('edit.phone')),
-          validator: (v) => validatePhone(v, strings),
+          decoration: InputDecoration(
+            labelText: strings.get('edit.phone'),
+            helperText: _phoneBonusHint(strings),
+            helperMaxLines: 3,
+          ),
+          // Optional since sign-in moved to email; checked only when something is typed.
+          validator: (v) => (v == null || v.trim().isEmpty)
+              ? null
+              : validatePhone(v, strings),
         ),
         const SizedBox(height: 14),
         DropdownButtonFormField<String>(

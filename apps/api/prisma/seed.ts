@@ -255,10 +255,18 @@ async function main() {
   ] as const;
   for (const [code, name, allowedHosts] of marketplaceSources) await prisma.marketplacePurchaseSource.upsert({ where: { code }, create: { code, name, allowedHosts: [...allowedHosts], adapterKey: "manual", requiresManualReview: true }, update: { name, allowedHosts: [...allowedHosts] } });
   await prisma.marketplacePurchaseSettings.upsert({ where: { id: "singleton" }, create: {}, update: {} });
+  // Sign-in is by email (since 2026-10-02). The address is the seeder's own, so it is trusted as
+  // verified; an existing admin row (matched by username) is left untouched.
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "").trim().toLowerCase();
+  if (!adminEmail.includes("@")) {
+    throw new Error("SEED_ADMIN_EMAIL is not set. Set it before seeding: SEED_ADMIN_EMAIL='you@example.com'");
+  }
   await prisma.user.upsert({
-    where: { phone: "+70000000000" },
+    where: { username: "admin" },
     create: {
-      phone: "+70000000000",
+      email: adminEmail,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
       passwordHash: await argon2.hash(adminPassword),
       fullName: "Platform Admin",
       username: "admin",
@@ -270,7 +278,7 @@ async function main() {
   // The password is not echoed: seed output ends up in CI logs and terminal scrollback, and
   // whoever ran this already knows what they passed in.
   // eslint-disable-next-line no-console
-  console.log("Seed complete. Admin login: +70000000000 (password: the SEED_ADMIN_PASSWORD you set)");
+  console.log(`Seed complete. Admin login: ${adminEmail} (password: the SEED_ADMIN_PASSWORD you set)`);
 }
 
 main()

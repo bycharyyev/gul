@@ -33,7 +33,7 @@ Single test in a given package: run the package's own test runner directly from 
 
 **Local infra:** `docker compose up -d` starts Postgres (5432) + Redis (6379). Copy each app's `.env.example` to `.env`/`.env.local` before first run.
 
-**Seeded admin login:** phone `+70000000000`. The password is whatever `SEED_ADMIN_PASSWORD` was set to — the seed refuses to run without it, so there is no default to look up here or anywhere else.
+**Seeded admin login:** the address in `SEED_ADMIN_EMAIL`, with whatever `SEED_ADMIN_PASSWORD` was set to — the seed refuses to run without either, so there is no default to look up here or anywhere else.
 
 ## Working agreements
 
@@ -68,7 +68,7 @@ Each folder is a self-contained Nest module (the full list and the count are in 
 
 **Domain model** (`prisma/schema.prisma`): `User` (role: CUSTOMER/SUPPORT/MANAGER/ADMIN — staff and customers are the same table), `Service` (catalog item, e.g. TMCELL), `Rate` (per-service, per-currency conversion), `PaymentMethod`, `Order` (attributed to either a `User` **or** an `ApiKey`, never both), `Payment`, `TopupJob`, `ApiKey`, `AuditLog` (written by the services that change privileges, money and content). A second vertical lives alongside the top-up core: `GalleryCategory`/`GalleryProduct`/`GalleryOrder` (a flowers/gifts marketplace), `Seller`/`SellerApplication`/`WithdrawalRequest` (multi-vendor onboarding + payouts — a `Seller` links a Telegram chat via a one-time code to get order notifications), and `Referral`/`ReferralSettings` (customer- and seller-sourced referrals, configurable TMT rewards). Plus CMS-ish content the admin manages without a redeploy (`Story`, `HomeSlide`, `SocialLink`, `ContentPage`), support chat (`SupportThread`/`SupportMessage`), conversations (`ChatRoom`/`ChatMember`/`ChatMessage` — see "Chat" below), `Storefront` (a seller's own sections of their shop), and `ManagedSubdomain` (see below).
 
-**Auth**: JWT access token (short-lived) + opaque refresh token (hashed, stored in `RefreshToken`, rotated on use). `packages/api-client` auto-retries a 401 once via `/auth/refresh` before giving up and calling `onSessionExpired`. Partner requests use a completely separate mechanism — see below.
+**Auth**: sign-in is **email + password for everyone** (customers, sellers, staff) since 2026-10-02; the phone is optional and added later in the profile (`User.phone` is nullable). Sign-up is two calls — `POST /auth/register` mails a 6-digit code and stores a `PendingRegistration` (no `User` yet), `POST /auth/register/confirm` creates the account with a verified email and returns the session (`auth/registration.service.ts`). Adding a phone earns a one-off 1 TMT credit to `referralBalanceTmt`, but only once the account also has a completed order (`ReferralsService.maybeGrantPhoneBonus`; phones are not verified, so a bonus for the number alone would pay out to throwaway accounts). The Android app hides the bonus text behind `kReferralRewardsEnabled` like every other reward. JWT access token (short-lived) + opaque refresh token (hashed, stored in `RefreshToken`, rotated on use). `packages/api-client` auto-retries a 401 once via `/auth/refresh` before giving up and calling `onSessionExpired`. Partner requests use a completely separate mechanism — see below.
 
 **Order lifecycle**: `PENDING_PAYMENT → PAID → PROCESSING → COMPLETED | FAILED`, with `CANCELLED`/`REFUNDED` reachable from most states. Allowed admin-triggered transitions are whitelisted in `orders/order-state-machine.ts` (`ADMIN_ORDER_TRANSITIONS`, checked via `common/state-machine.ts`) — don't bypass this map. Payment confirmation (`PaymentsService.confirmPayment`) enqueues a BullMQ job (`queue/queue.module.ts`, queue name `topup-queue`); `orders/topup.processor.ts` is the worker that calls an `OperatorGateway` (selected at startup by `orders/operator-gateway.provider.ts`, see "Top-up fulfilment" below) and flips the order to `COMPLETED`/`FAILED`/neither. Swap the gateway implementation to integrate a real operator/reseller API — nothing else in the order flow needs to change. A third outcome exists: `UNKNOWN` deliberately leaves the order in PROCESSING rather than guess, because the operator may have received the request before the connection died.
 
@@ -239,7 +239,8 @@ untrusted for writes until that happens.
 > the paid REG.RU mailbox `noreply@gulyaly.com` (`mail.hosting.reg.ru:465`) on both hosts, set by
 > `switch-mail-to-regru.yml`; mail through this relay landed in spam. Never point `MAIL_*` back at
 > it and never re-run `setup-mail-relay.yml`. Server alerts (`infra/alerts`) moved to REG.RU too
-> (`switch-alerts-to-regru.yml`), and the relay's Postfix/OpenDKIM are stopped. What follows is history.
+> (`switch-alerts-to-regru.yml`). The relay's Postfix/OpenDKIM still run but carry nothing; stopping them is
+> `switch-alerts-to-regru.yml` with `disable_relay` (an owner action — the step was refused to the agent). What follows is history.
 
 `setup-mail-relay.yml` installs Postfix on the secondary as an authenticated submission relay
 (port 587, SASL, STARTTLS) and points the primary's `MAIL_HOST` at it. Port 587 is firewalled to

@@ -30,7 +30,7 @@ export function SiteHeader() {
       api
         .getMe()
         .then((me) => {
-          setName(me.fullName || me.phone);
+          setName(me.fullName || me.email || me.phone || "");
           setIsSeller(me.role === "SELLER");
           setAvatarUrl(me.avatarUrl);
         })

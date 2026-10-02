@@ -21,7 +21,7 @@ Widget _harness(MockAuthRepository repository) => ProviderScope(
 );
 
 Future<void> _fillAndSubmit(WidgetTester t, {String referral = '1000'}) async {
-  await t.enterText(find.byType(TextFormField).at(0), '+99361234567');
+  await t.enterText(find.byType(TextFormField).at(0), 'aygul@example.com');
   await t.enterText(find.byType(TextFormField).at(1), 'secret123');
   await t.enterText(find.byType(TextFormField).at(2), 'Aygul');
   await t.enterText(find.byType(TextFormField).at(3), referral);
@@ -42,7 +42,7 @@ void main() {
   });
 
   testWidgets(
-    'a phone that already has an account says so, in the reader\'s language',
+    'an email that already has an account says so, in the reader\'s language',
     (t) async {
       // Reachable without anybody doing anything wrong: a registration that times out on a bad
       // connection may still have succeeded on the server, and the retry then collides with the
@@ -50,8 +50,8 @@ void main() {
       // over every localised string and leave a Russian-speaking customer at a dead end — with the
       // sign-in link they need sitting right under the banner.
       when(
-        () => repository.register(
-          phone: any(named: 'phone'),
+        () => repository.startRegistration(
+          email: any(named: 'email'),
           password: any(named: 'password'),
           fullName: any(named: 'fullName'),
           referredByUsername: any(named: 'referredByUsername'),
@@ -61,7 +61,7 @@ void main() {
         const AppException(
           kind: AppErrorKind.conflict,
           statusCode: 409,
-          serverMessage: 'Phone already registered',
+          serverMessage: 'EMAIL_ALREADY_REGISTERED',
         ),
       );
 
@@ -69,10 +69,10 @@ void main() {
       await _fillAndSubmit(t);
 
       expect(
-        find.text(_strings.get('auth.register.phoneTaken')),
+        find.text(_strings.get('auth.register.emailTaken')),
         findsOneWidget,
       );
-      expect(find.text('Phone already registered'), findsNothing);
+      expect(find.text('EMAIL_ALREADY_REGISTERED'), findsNothing);
     },
   );
 
@@ -82,8 +82,8 @@ void main() {
     // their reward, and nothing on screen would show that anything had gone missing.
     var attempts = 0;
     when(
-      () => repository.register(
-        phone: any(named: 'phone'),
+      () => repository.startRegistration(
+        email: any(named: 'email'),
         password: any(named: 'password'),
         fullName: any(named: 'fullName'),
         referredByUsername: any(named: 'referredByUsername'),
@@ -92,13 +92,7 @@ void main() {
     ).thenAnswer((_) async {
       attempts++;
       if (attempts == 1) throw const AppException(kind: AppErrorKind.timeout);
-      return User.fromJson(const {
-        'id': 'usr_9',
-        'phone': '+99361234567',
-        'username': '1007',
-        'role': 'CUSTOMER',
-        'locale': 'ru',
-      });
+      return (email: 'aygul@example.com', expiresInMinutes: 15);
     });
 
     await t.pumpWidget(_harness(repository));
@@ -120,8 +114,8 @@ void main() {
 
     expect(attempts, 2);
     final sent = verify(
-      () => repository.register(
-        phone: any(named: 'phone'),
+      () => repository.startRegistration(
+        email: any(named: 'email'),
         password: any(named: 'password'),
         fullName: any(named: 'fullName'),
         referredByUsername: captureAny(named: 'referredByUsername'),
@@ -130,4 +124,59 @@ void main() {
     ).captured;
     expect(sent, ['1000', '1000']);
   });
+
+  testWidgets(
+    'after the code is mailed the screen asks for it, then confirms',
+    (t) async {
+      when(
+        () => repository.startRegistration(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+          fullName: any(named: 'fullName'),
+          referredByUsername: any(named: 'referredByUsername'),
+          locale: any(named: 'locale'),
+        ),
+      ).thenAnswer(
+        (_) async => (email: 'aygul@example.com', expiresInMinutes: 15),
+      );
+      when(
+        () => repository.confirmRegistration(
+          email: any(named: 'email'),
+          code: any(named: 'code'),
+        ),
+      ).thenAnswer(
+        (_) async => User.fromJson(const {
+          'id': 'usr_9',
+          'email': 'aygul@example.com',
+          'username': '1007',
+          'role': 'CUSTOMER',
+          'locale': 'ru',
+        }),
+      );
+
+      await t.pumpWidget(_harness(repository));
+      await _fillAndSubmit(t, referral: '');
+
+      expect(
+        find.text(_strings.get('auth.register.codeTitle')),
+        findsOneWidget,
+      );
+      await t.enterText(find.byType(TextField), '123456');
+      await t.pump();
+      await t.tap(
+        find.widgetWithText(
+          FilledButton,
+          _strings.get('auth.register.confirm'),
+        ),
+      );
+      await t.pumpAndSettle();
+
+      verify(
+        () => repository.confirmRegistration(
+          email: 'aygul@example.com',
+          code: '123456',
+        ),
+      ).called(1);
+    },
+  );
 }

@@ -29,7 +29,7 @@ export interface EmailLogDto {
   status: EmailStatus;
   error: string | null;
   userId: string | null;
-  user: { id: string; phone: string; fullName: string | null } | null;
+  user: { id: string; phone: string | null; email?: string | null; fullName: string | null } | null;
   createdAt: string;
 }
 

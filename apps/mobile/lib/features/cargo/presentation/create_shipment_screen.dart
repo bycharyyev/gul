@@ -106,7 +106,7 @@ class _CreateShipmentScreenState extends ConsumerState<CreateShipmentScreen> {
       if (!mounted) return;
       setState(() {
         if (_senderName.text.isEmpty) _senderName.text = me.fullName ?? '';
-        if (_senderPhone.text.isEmpty) _senderPhone.text = me.phone;
+        if (_senderPhone.text.isEmpty) _senderPhone.text = me.phone ?? '';
       });
     } catch (_) {
       // A missing profile is not worth an error here -- the fields simply stay empty.

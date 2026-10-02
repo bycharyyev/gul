@@ -23,6 +23,10 @@ export interface ReferralAttribution {
   referrerUrl?: string;
 }
 
+
+/** Bonus for adding a phone to an account (see maybeGrantPhoneBonus). */
+export const PHONE_BONUS_TMT = 1;
+
 @Injectable()
 export class ReferralsService {
   constructor(
@@ -197,6 +201,29 @@ export class ReferralsService {
     ]);
   }
 
+  /**
+   * One-off bonus for adding a phone to the account, credited to referralBalanceTmt (spent as an
+   * automatic discount on the next order, never paid out). Granted only once the account has a
+   * phone AND a completed order: phones are not verified yet, so a bonus for the number alone
+   * would pay out to throwaway accounts with invented numbers. Called after a phone is saved and
+   * after an order completes, whichever comes second grants it. Idempotent: the conditional
+   * update on phoneBonusAt is the claim. Returns whether this call credited it.
+   */
+  async maybeGrantPhoneBonus(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { phone: true, phoneBonusAt: true },
+    });
+    if (!user?.phone || user.phoneBonusAt) return false;
+    const completed = await this.prisma.order.count({ where: { userId, status: "COMPLETED" } });
+    if (completed === 0) return false;
+    const claimed = await this.prisma.user.updateMany({
+      where: { id: userId, phoneBonusAt: null, phone: { not: null } },
+      data: { phoneBonusAt: new Date(), referralBalanceTmt: { increment: PHONE_BONUS_TMT } },
+    });
+    return claimed.count > 0;
+  }
+
   /** Idempotent -- safe to call on every order-status transition. No-op if already rewarded,
    *  never referred, or the program is currently disabled. */
   async maybeRewardReferral(refereeUserId: string, qualifyingOrderId: string) {
@@ -308,9 +335,9 @@ export class ReferralsService {
       orderBy: { createdAt: "desc" },
       take: 200,
       include: {
-        referrerUser: { select: { id: true, phone: true, fullName: true } },
+        referrerUser: { select: { id: true, phone: true, email: true, fullName: true } },
         referrerSeller: { select: { id: true, handle: true, shopName: true } },
-        refereeUser: { select: { id: true, phone: true, fullName: true } },
+        refereeUser: { select: { id: true, phone: true, email: true, fullName: true } },
       },
     });
 
@@ -320,8 +347,8 @@ export class ReferralsService {
       referrer:
         r.referrerType === "SELLER"
           ? { id: r.referrerSeller?.id ?? null, label: r.referrerSeller ? `@${r.referrerSeller.handle}` : "—" }
-          : { id: r.referrerUser?.id ?? null, label: r.referrerUser?.fullName || r.referrerUser?.phone || "—" },
-      referee: { id: r.refereeUser.id, label: r.refereeUser.fullName || r.refereeUser.phone },
+          : { id: r.referrerUser?.id ?? null, label: r.referrerUser?.fullName || r.referrerUser?.phone || r.referrerUser?.email || "—" },
+      referee: { id: r.refereeUser.id, label: r.refereeUser.fullName || r.refereeUser.phone || r.refereeUser.email || "—" },
       username: r.username,
       status: r.status,
       rewardAmountTmt: r.rewardAmountTmt ? Number(r.rewardAmountTmt) : null,
@@ -358,9 +385,9 @@ export class ReferralsService {
       } else if (g.referrerType === "CUSTOMER" && g.referrerUserId) {
         const user = await this.prisma.user.findUnique({
           where: { id: g.referrerUserId },
-          select: { fullName: true, phone: true },
+          select: { fullName: true, phone: true, email: true },
         });
-        label = user ? user.fullName || user.phone : "—";
+        label = user ? user.fullName || user.phone || user.email || "—" : "—";
       }
       results.push({
         referrerType: g.referrerType,

@@ -339,3 +339,50 @@ describe("ReferralsService", () => {
     });
   });
 });
+
+describe("ReferralsService.maybeGrantPhoneBonus", () => {
+  function setup(user: { phone: string | null; phoneBonusAt: Date | null } | null, completedOrders: number) {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(user),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      order: { count: jest.fn().mockResolvedValue(completedOrders) },
+    };
+    const service = new ReferralsService(prisma as never, {} as never, { record: jest.fn() } as never);
+    return { service, prisma };
+  }
+
+  it("credits 1 TMT once there is a phone and a completed order, claiming it atomically", async () => {
+    const { service, prisma } = setup({ phone: "+99361234567", phoneBonusAt: null }, 1);
+
+    await expect(service.maybeGrantPhoneBonus("u1")).resolves.toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "u1", phoneBonusAt: null, phone: { not: null } },
+      data: { phoneBonusAt: expect.any(Date), referralBalanceTmt: { increment: 1 } },
+    });
+  });
+
+  it("pays nothing for a phone alone: an invented number on a throwaway account earns no bonus", async () => {
+    const { service, prisma } = setup({ phone: "+99361234567", phoneBonusAt: null }, 0);
+
+    await expect(service.maybeGrantPhoneBonus("u1")).resolves.toBe(false);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("pays nothing without a phone, and never twice", async () => {
+    const noPhone = setup({ phone: null, phoneBonusAt: null }, 3);
+    await expect(noPhone.service.maybeGrantPhoneBonus("u1")).resolves.toBe(false);
+    expect(noPhone.prisma.user.updateMany).not.toHaveBeenCalled();
+
+    const already = setup({ phone: "+99361234567", phoneBonusAt: new Date() }, 3);
+    await expect(already.service.maybeGrantPhoneBonus("u1")).resolves.toBe(false);
+    expect(already.prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("reports false when a concurrent call already claimed the bonus", async () => {
+    const { service, prisma } = setup({ phone: "+99361234567", phoneBonusAt: null }, 1);
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.maybeGrantPhoneBonus("u1")).resolves.toBe(false);
+  });
+});

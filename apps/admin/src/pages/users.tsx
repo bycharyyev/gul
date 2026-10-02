@@ -31,7 +31,7 @@ const API_ORIGIN = (
 ).replace(/\/api$/, "");
 
 function initials(user: CustomerDto | CustomerDetailDto["user"]): string {
-  const source = user.fullName?.trim() || user.phone;
+  const source = user.fullName?.trim() || user.email || user.phone || "?";
   return source
     .split(/\s+/)
     .slice(0, 2)
@@ -147,7 +147,7 @@ export default function UsersPage() {
   async function removeUser(user: CustomerDto) {
     if (
       !(await confirmAction(
-        t("admin.users.deleteConfirm", { phone: user.phone }),
+        t("admin.users.deleteConfirm", { phone: user.email ?? user.phone ?? user.id }),
       ))
     )
       return;
@@ -282,25 +282,33 @@ export default function UsersPage() {
               {
                 id: "customer",
                 header: "Клиент",
-                sortValue: (user) => user.fullName || user.phone,
+                sortValue: (user) => user.fullName || user.email || user.phone || "",
                 csv: (user) => user.fullName ?? "",
                 cell: (user) => (
                   <div className="flex items-center gap-3">
                     <CustomerAvatar user={user} />
                     <div>
                       <p className="font-semibold text-slate-900">{user.fullName || "Без имени"}</p>
-                      <p className="mt-0.5 font-mono text-xs text-slate-500">{user.phone}</p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-500">{user.email ?? "—"}</p>
+                      {user.phone && <p className="font-mono text-xs text-slate-400">{user.phone}</p>}
                     </div>
                   </div>
                 ),
               },
               {
-                id: "phone",
-                header: "Телефон",
+                id: "email",
+                header: "Email",
                 // Shown inside the customer cell; the export gets it as its own column.
                 exportOnly: true,
                 cell: () => null,
-                csv: (user) => user.phone,
+                csv: (user) => user.email ?? "",
+              },
+              {
+                id: "phone",
+                header: "Телефон",
+                exportOnly: true,
+                cell: () => null,
+                csv: (user) => user.phone ?? "",
               },
               {
                 id: "orders",
@@ -382,13 +390,16 @@ export default function UsersPage() {
                       {detail.user.fullName || "Без имени"}
                     </h2>
                     <p className="font-mono text-sm text-slate-500">
-                      {detail.user.phone}
+                      {detail.user.email ?? "—"}
                     </p>
+                    {detail.user.phone && (
+                      <p className="font-mono text-xs text-slate-400">{detail.user.phone}</p>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <a
-                    href={`sms:${detail.user.phone}`}
+                    href={detail.user.phone ? `sms:${detail.user.phone}` : `mailto:${detail.user.email ?? ""}`}
                     className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     <MessageCircle className="h-3.5 w-3.5" /> Написать SMS

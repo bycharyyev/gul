@@ -82,8 +82,11 @@ export type OrderDto = z.infer<typeof orderSchema>;
 export const localeSchema = z.enum(["ru", "en", "tkm"]);
 export type LocaleInput = z.infer<typeof localeSchema>;
 
+// Accounts are created and signed into by email (since 2026-10-02). Sign-up is two calls:
+// `register` mails a 6-digit code, `confirmRegistration` checks it and returns the session.
+// A phone is optional and is added later in the profile.
 export const registerSchema = z.object({
-  phone: z.string().min(6).max(20),
+  email: z.string().email().max(254),
   password: z.string().min(8).max(72),
   fullName: z.string().min(1).max(120).optional(),
   referredByUsername: z.string().min(2).max(32).optional(),
@@ -97,8 +100,20 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const confirmRegistrationSchema = z.object({
+  email: z.string().email().max(254),
+  code: z.string().regex(/^\d{6}$/),
+});
+export type ConfirmRegistrationInput = z.infer<typeof confirmRegistrationSchema>;
+
+/** What `register` answers: no session yet, just where the code went and how long it lives. */
+export interface RegistrationStartedDto {
+  email: string;
+  expiresInMinutes: number;
+}
+
 export const loginSchema = z.object({
-  phone: z.string().min(6).max(20),
+  email: z.string().email().max(254),
   password: z.string().min(1),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -108,12 +123,20 @@ export const authResponseSchema = z.object({
   refreshToken: z.string(),
   user: z.object({
     id: z.string(),
-    phone: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
     fullName: z.string().nullable(),
     username: z.string(),
     role: z.string(),
     avatarUrl: z.string().nullable(),
     locale: z.string(),
+    country: z.string().nullable().optional(),
+    // Only on /auth/me and its PATCH responses:
+    emailVerified: z.boolean().optional(),
+    /** When the one-off bonus for adding a phone was credited; null while not earned yet. */
+    phoneBonusAt: z.string().nullable().optional(),
+    /** Size of that bonus, in TMT, so clients can advertise it without hard-coding it. */
+    phoneBonusTmt: z.number().optional(),
   }),
 });
 export type AuthResponse = z.infer<typeof authResponseSchema>;
@@ -243,7 +266,7 @@ export interface TopupJobDto {
 export interface OrderDetailDto extends OrderDto {
   service?: ServiceDto;
   paymentMethod?: PaymentMethodDto;
-  user?: { id: string; phone: string; fullName: string | null } | null;
+  user?: { id: string; phone: string | null; email?: string | null; fullName: string | null } | null;
   apiKey?: { id: string; name: string; ownerLabel: string } | null;
   payments?: PaymentDto[];
   topupJob?: TopupJobDto | null;
@@ -255,7 +278,8 @@ export interface OrderDetailDto extends OrderDto {
 
 export const staffUserSchema = z.object({
   id: z.string(),
-  phone: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
   fullName: z.string().nullable(),
   /** Doubles as the referral code: a number issued in sequence, or a custom one set by staff. */
   username: z.string(),
@@ -267,7 +291,9 @@ export const staffUserSchema = z.object({
 export type StaffUserDto = z.infer<typeof staffUserSchema>;
 
 export const createStaffUserSchema = z.object({
-  phone: z.string().min(6).max(20),
+  /** Staff sign in with this address. */
+  email: z.string().email().max(254),
+  phone: z.string().min(6).max(20).optional(),
   password: z.string().min(8).max(72),
   fullName: z.string().min(1).max(120).optional(),
   role: z.enum(USER_ROLES),
@@ -497,7 +523,7 @@ export interface ApiKeyDto {
   previousKeyExpiresAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
-  createdBy: { id: string; fullName: string | null; phone: string };
+  createdBy: { id: string; fullName: string | null; phone: string | null; email?: string | null };
 }
 
 export interface CreateApiKeyResult extends ApiKeyDto {
@@ -588,7 +614,7 @@ export interface SupportThreadDto {
   status: SupportThreadStatus;
   lastMessageAt: string;
   createdAt: string;
-  user: { id: string; phone: string; fullName: string | null };
+  user: { id: string; phone: string | null; email?: string | null; fullName: string | null };
 }
 
 export interface SupportThreadWithUnreadDto extends SupportThreadDto {

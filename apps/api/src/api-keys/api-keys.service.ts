@@ -24,7 +24,7 @@ const SAFE_SELECT = {
   lastUsedAt: true,
   sellerId: true,
   createdAt: true,
-  createdBy: { select: { id: true, fullName: true, phone: true } },
+  createdBy: { select: { id: true, fullName: true, phone: true, email: true } },
 };
 
 @Injectable()

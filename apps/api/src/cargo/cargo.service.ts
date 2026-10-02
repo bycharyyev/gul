@@ -18,7 +18,7 @@ import { canTransition } from "../common/state-machine";
 
 type DecimalInput = Prisma.Decimal | number | string;
 
-const SAFE_USER_SELECT = { id: true, phone: true, fullName: true } as const;
+const SAFE_USER_SELECT = { id: true, phone: true, email: true, fullName: true } as const;
 const EXCHANGE_RATE_ID = "singleton";
 
 const SHIPMENT_INCLUDE = {
