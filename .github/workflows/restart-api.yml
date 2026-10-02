@@ -37,7 +37,7 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
             set -e
             cd /opt/gul
-            docker compose up -d --force-recreate --no-deps api
+            docker compose up -d --force-recreate --no-deps api api-2 api-worker
             for i in $(seq 1 20); do
               curl -fsS http://127.0.0.1:4000/api/health > /dev/null && echo "primary healthy" && exit 0
               sleep 2
@@ -52,7 +52,7 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
             set -e
             cd /opt/gul-secondary
-            docker compose up -d --force-recreate --no-deps api
+            docker compose up -d --force-recreate --no-deps api api-2 api-worker
             for i in $(seq 1 20); do
               curl -fsS http://127.0.0.1:4000/api/health > /dev/null && echo "secondary healthy" && exit 0
               sleep 2

@@ -6,6 +6,7 @@ import type {
   SupportThreadWithUnreadDto,
 } from "@topup-hub/types";
 import { useTranslation, LOCALE_BCP47 } from "@topup-hub/i18n";
+import { mergeMessages } from "@topup-hub/api-client";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,9 +33,13 @@ export default function SupportPage() {
   const [attachment, setAttachment] = useState<ChatAttachmentInput | null>(null);
   const [uploading, setUploading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // Last message id the server sent for the open thread; polls ask only for what came after it.
+  // Never the id of a reply we just sent: a customer message stored just before it would be missed.
+  const cursorRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     function refreshList() {
+      if (document.hidden) return;
       api.listSupportThreads().then(setThreads).catch(() => {});
     }
     refreshList();
@@ -48,9 +53,21 @@ export default function SupportPage() {
       setDetail(null);
       return;
     }
+    cursorRef.current = undefined;
     function refreshDetail() {
-      if (!selectedId) return;
-      api.getSupportThread(selectedId).then(setDetail).catch(() => {});
+      if (!selectedId || document.hidden) return;
+      api
+        .getSupportThread(selectedId, cursorRef.current)
+        .then((data) => {
+          const last = data.messages.at(-1)?.id;
+          if (last) cursorRef.current = last;
+          setDetail((prev) =>
+            prev && data.incremental
+              ? { ...data, messages: mergeMessages(prev.messages, data.messages, true) }
+              : data,
+          );
+        })
+        .catch(() => {});
     }
     refreshDetail();
     const id = window.setInterval(refreshDetail, POLL_MS);

@@ -12,6 +12,8 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { SellersService } from "../sellers/sellers.service";
+import { PublicCacheService } from "../public-cache/public-cache.service";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 type AuthedUser = { userId: string; role: string };
 
@@ -21,13 +23,14 @@ export class GalleryController {
   constructor(
     private gallery: GalleryService,
     private sellers: SellersService,
+    private cache: PublicCacheService,
   ) {}
 
   // ---- Public ----
 
   @Get("categories")
   listCategories() {
-    return this.gallery.listCategories();
+    return this.cache.wrap("gallery", "categories", {}, 60, () => this.gallery.listCategories());
   }
 
   @Get("products")
@@ -37,12 +40,17 @@ export class GalleryController {
     @Query("storefrontId") storefrontId?: string,
     @Query("search") search?: string,
   ) {
-    return this.gallery.listProducts({ categoryId, sellerId, storefrontId, search });
+    // A search is cached too, but keyed on the exact text, so it only helps when the same query
+    // repeats; every other filter is part of the key as well.
+    return this.cache.wrap("gallery", "products", { categoryId, sellerId, storefrontId, search }, 30, () =>
+      this.gallery.listProducts({ categoryId, sellerId, storefrontId, search }),
+    );
   }
 
+  // A missing product throws inside the loader, and a throw is never cached.
   @Get("products/:id")
   getProduct(@Param("id") id: string) {
-    return this.gallery.getProduct(id);
+    return this.cache.wrap("gallery", "product", { id }, 60, () => this.gallery.getProduct(id));
   }
 
   // ---- Customer ----
@@ -75,6 +83,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Post("admin/categories")
+  @InvalidatesPublicCache("gallery")
   createCategory(@Body() dto: UpsertGalleryCategoryDto) {
     return this.gallery.createCategory(dto);
   }
@@ -83,6 +92,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Patch("admin/categories/:id")
+  @InvalidatesPublicCache("gallery")
   updateCategory(@Param("id") id: string, @Body() dto: Partial<UpsertGalleryCategoryDto>) {
     return this.gallery.updateCategory(id, dto);
   }
@@ -92,6 +102,7 @@ export class GalleryController {
   @Roles("ADMIN")
   @HttpCode(204)
   @Delete("admin/categories/:id")
+  @InvalidatesPublicCache("gallery")
   deleteCategory(@Param("id") id: string) {
     return this.gallery.deleteCategory(id);
   }
@@ -110,6 +121,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Post("admin/products")
+  @InvalidatesPublicCache("gallery")
   createProduct(@Body() dto: UpsertGalleryProductDto) {
     return this.gallery.createProduct(dto);
   }
@@ -118,6 +130,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Patch("admin/products/:id")
+  @InvalidatesPublicCache("gallery")
   updateProduct(@Param("id") id: string, @Body() dto: Partial<UpsertGalleryProductDto>) {
     return this.gallery.updateProduct(id, dto);
   }
@@ -127,6 +140,7 @@ export class GalleryController {
   @Roles("ADMIN")
   @HttpCode(204)
   @Delete("admin/products/:id")
+  @InvalidatesPublicCache("gallery")
   deleteProduct(@Param("id") id: string) {
     return this.gallery.deleteProduct(id);
   }
@@ -178,6 +192,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Post("seller/storefronts")
+  @InvalidatesPublicCache("gallery")
   async createMyStorefront(@Body() dto: UpsertStorefrontDto, @CurrentUser() user: AuthedUser) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
     return this.gallery.createMyStorefront(sellerId, dto);
@@ -187,6 +202,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Patch("seller/storefronts/:id")
+  @InvalidatesPublicCache("gallery")
   async updateMyStorefront(
     @Param("id") id: string,
     @Body() dto: Partial<UpsertStorefrontDto>,
@@ -202,6 +218,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Delete("seller/storefronts/:id")
+  @InvalidatesPublicCache("gallery")
   async deleteMyStorefront(@Param("id") id: string, @CurrentUser() user: AuthedUser) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
     return this.gallery.deleteMyStorefront(sellerId, id);
@@ -220,6 +237,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Post("seller/products")
+  @InvalidatesPublicCache("gallery")
   async createMyProduct(@Body() dto: UpsertGalleryProductDto, @CurrentUser() user: AuthedUser) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
     return this.gallery.createMyProduct(sellerId, dto);
@@ -229,6 +247,7 @@ export class GalleryController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Patch("seller/products/:id")
+  @InvalidatesPublicCache("gallery")
   async updateMyProduct(
     @Param("id") id: string,
     @Body() dto: Partial<UpsertGalleryProductDto>,
@@ -243,6 +262,7 @@ export class GalleryController {
   @Roles("SELLER")
   @HttpCode(204)
   @Delete("seller/products/:id")
+  @InvalidatesPublicCache("gallery")
   async deleteMyProduct(@Param("id") id: string, @CurrentUser() user: AuthedUser) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
     return this.gallery.deleteMyProduct(sellerId, id);

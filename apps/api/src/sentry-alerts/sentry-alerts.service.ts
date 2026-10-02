@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { AdminTelegramBotService } from "../admin-telegram-bot/admin-telegram-bot.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 interface SentryIssue {
   id: string;
@@ -40,6 +41,7 @@ export class SentryAlertsService {
   // gap, and a successful one reports each issue exactly once no matter how ticks line up.
   @Cron("*/15 * * * *")
   async checkForNewIssues() {
+    if (!runsBackgroundWork()) return; // ADR 0008: crons run on worker/all processes only
     const token = process.env.SENTRY_ALERT_TOKEN;
     if (!token) return;
     const org = process.env.SENTRY_ALERT_ORG ?? "gulyaly";

@@ -38,7 +38,7 @@ jobs:
           set_kv S3_SECRET_ACCESS_KEY '__S3_SECRET_ACCESS_KEY_PLACEHOLDER__'
           set_kv S3_PUBLIC_BUCKET '__S3_PUBLIC_BUCKET_PLACEHOLDER__'
           set_kv S3_PRIVATE_BUCKET '__S3_PRIVATE_BUCKET_PLACEHOLDER__'
-          docker compose up -d --force-recreate --no-deps api
+          docker compose up -d --force-recreate --no-deps api api-2 api-worker
           for i in $(seq 1 20); do
             curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
             sleep 2
@@ -88,7 +88,7 @@ jobs:
           set_kv S3_SECRET_ACCESS_KEY '__S3_SECRET_ACCESS_KEY_PLACEHOLDER__'
           set_kv S3_PUBLIC_BUCKET '__S3_PUBLIC_BUCKET_PLACEHOLDER__'
           set_kv S3_PRIVATE_BUCKET '__S3_PRIVATE_BUCKET_PLACEHOLDER__'
-          docker compose up -d --force-recreate --no-deps api
+          docker compose up -d --force-recreate --no-deps api api-2 api-worker
           for i in $(seq 1 20); do
             curl -fsS http://127.0.0.1:4000/api/health/ready > /dev/null && echo healthy && exit 0
             sleep 2

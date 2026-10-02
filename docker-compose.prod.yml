@@ -71,16 +71,25 @@ services:
       - "6379:6379"
     logging: *default-logging
 
-  api:
+  # ADR 0008: two HTTP processes (api, api-2) behind nginx's least_conn upstream, plus one
+  # background worker (api-worker: BullMQ, sweepers, crons, Telegram polling). One Node process is
+  # one event loop, and these boxes have 6 cores. Each process opens at most 6 database connections
+  # (PRISMA_CONNECTION_LIMIT), so 18 per node and 36 for both -- Prisma's default would be 13 each.
+  # The worker's port only serves health checks and is never in the nginx upstream.
+  api: &api-service
     image: ghcr.io/${GHCR_OWNER}/gul-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
-    environment:
+    environment: &api-env
       # Set here rather than in .env so that the password arriving and the client starting to use
       # it are the same `docker compose up`. Split across the two, there is a window where redis
       # demands a password the API is not sending, or the reverse -- and in that window nothing
       # can be queued on either node.
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+      # Which server and process this is on the admin Performance page.
+      NODE_LABEL: "primary-http-1"
+      APP_ROLE: "http"
+      PRISMA_CONNECTION_LIMIT: "6"
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,6 +102,23 @@ services:
       # cwd, /repo/apps/api) — set UPLOADS_DIR in /opt/gul/.env only if that ever changes.
       - uploads-data:/repo/apps/api/uploads
     logging: *default-logging
+
+  api-2:
+    <<: *api-service
+    environment:
+      <<: *api-env
+      NODE_LABEL: "primary-http-2"
+    ports:
+      - "127.0.0.1:4002:4000"
+
+  api-worker:
+    <<: *api-service
+    environment:
+      <<: *api-env
+      NODE_LABEL: "primary-worker"
+      APP_ROLE: "worker"
+    ports:
+      - "127.0.0.1:4001:4000"
 
   web:
     image: ghcr.io/${GHCR_OWNER}/gul-web:${IMAGE_TAG:-latest}

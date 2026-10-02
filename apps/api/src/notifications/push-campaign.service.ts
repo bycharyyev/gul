@@ -7,6 +7,7 @@ import { NotificationsService } from "./notifications.service";
 import type { AudienceDto, CreateCampaignDto, CreateTemplateDto, PushContentDto, SendOneDto, UpdateTemplateDto } from "./push-admin.dto";
 import { DEFAULT_TEMPLATES } from "./push-default-templates";
 import type { PushCategory, PushMessage } from "./push-message";
+import { runsBackgroundWork } from "../common/app-role";
 
 /** How many people are sent to at the same time inside one campaign. */
 const SEND_CONCURRENCY = 10;
@@ -416,6 +417,7 @@ export class PushCampaignService {
   /** Every minute: start campaigns whose time has come. */
   @Cron("* * * * *")
   async runDue() {
+    if (!runsBackgroundWork()) return; // ADR 0008: crons run on worker/all processes only
     const due = await this.prisma.pushCampaign.findMany({
       where: { status: "SCHEDULED", scheduledAt: { lte: new Date() } },
       select: { id: true },
@@ -433,6 +435,7 @@ export class PushCampaignService {
   /** Daily: old push records are only history, and the automatic ones are numerous. */
   @Cron("30 3 * * *")
   async purgeOldDeliveries() {
+    if (!runsBackgroundWork()) return; // ADR 0008: crons run on worker/all processes only
     const day = 24 * 60 * 60 * 1000;
     const system = await this.prisma.pushDelivery.deleteMany({
       where: { campaignId: null, createdAt: { lt: new Date(Date.now() - SYSTEM_RETENTION_DAYS * day) } },

@@ -34,21 +34,47 @@ services:
     networks: [gul-net]
     logging: *default-logging
 
-  api:
+  # ADR 0008: two HTTP processes (api, api-2) behind nginx's least_conn upstream, plus one
+  # background worker (api-worker: BullMQ, sweepers, crons, Telegram polling). One Node process is
+  # one event loop, and these boxes have 6 cores. Each process opens at most 6 database connections
+  # (PRISMA_CONNECTION_LIMIT), so 18 per node and 36 for both -- Prisma's default would be 13 each.
+  # The worker's port only serves health checks and is never in the nginx upstream.
+  api: &api-service
     image: ghcr.io/${GHCR_OWNER}/gul-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
-    environment:
+    environment: &api-env
       # PRIMARY_REDIS_HOST and REDIS_PASSWORD come from this node's .env, written by
       # enable-shared-queue.yml. Composed here rather than stored whole so the two facts stay
       # separate: the address is not a secret and the password is.
       REDIS_URL: "redis://:${REDIS_PASSWORD}@${PRIMARY_REDIS_HOST}:6379"
+      # Which server and process this is on the admin Performance page.
+      NODE_LABEL: "secondary-http-1"
+      APP_ROLE: "http"
+      PRISMA_CONNECTION_LIMIT: "6"
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
       - uploads-data:/repo/apps/api/uploads
     networks: [gul-net]
     logging: *default-logging
+
+  api-2:
+    <<: *api-service
+    environment:
+      <<: *api-env
+      NODE_LABEL: "secondary-http-2"
+    ports:
+      - "127.0.0.1:4002:4000"
+
+  api-worker:
+    <<: *api-service
+    environment:
+      <<: *api-env
+      NODE_LABEL: "secondary-worker"
+      APP_ROLE: "worker"
+    ports:
+      - "127.0.0.1:4001:4000"
 
   web:
     image: ghcr.io/${GHCR_OWNER}/gul-web:${IMAGE_TAG:-latest}

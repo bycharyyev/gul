@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { Queue } from "bullmq";
 import { PrismaService } from "../prisma/prisma.service";
 import { TOPUP_QUEUE } from "../queue/queue.module";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * Finds paid orders that never got processed, and puts them back in the queue.
@@ -47,6 +48,8 @@ export class StuckOrdersProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     this.startupTimer = setTimeout(() => {
       this.timer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
       this.timer.unref();

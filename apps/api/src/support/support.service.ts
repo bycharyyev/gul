@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
 import type { SupportThreadStatus } from "@prisma/client";
+import { afterCursor, INCREMENTAL_TAKE, parseAfter } from "../common/message-cursor";
 
 /** A message may be text, or a file, or both -- but not neither. */
 function assertNotBlank(body: string, attachmentUrl: string | null) {
@@ -33,17 +34,39 @@ export class SupportService {
 
   // ---- Customer: platform support (sellerId = null) or seller chat (sellerId set) ----
 
-  async getMyThread(userId: string, sellerId: string | null = null) {
+  async getMyThread(userId: string, sellerId: string | null = null, after?: string) {
     const thread = await this.getOrCreateThread(userId, sellerId);
+    const { messages, incremental } = await this.readMessages(thread.id, after);
+    // A poll that brought nothing from the other side has nothing to mark read -- skip the write
+    // rather than issue it every few seconds for every open chat.
+    if (!incremental || messages.some((m) => m.senderRole !== "CUSTOMER")) {
+      await this.prisma.supportMessage.updateMany({
+        where: { threadId: thread.id, senderRole: { in: ["STAFF", "SELLER"] }, readByCustomer: false },
+        data: { readByCustomer: true },
+      });
+    }
+    return { thread, messages, incremental };
+  }
+
+  /**
+   * The whole thread, or with a valid `after` (a message id in *this* thread) only what came
+   * later. An id from another thread resolves to nothing and falls back to the full read.
+   */
+  private async readMessages(threadId: string, after?: string) {
+    const afterId = parseAfter(after);
+    const cursor = afterId
+      ? await this.prisma.supportMessage.findFirst({ where: { id: afterId, threadId }, select: { id: true, createdAt: true } })
+      : null;
+    if (!cursor) {
+      const messages = await this.prisma.supportMessage.findMany({ where: { threadId }, orderBy: { createdAt: "asc" } });
+      return { messages, incremental: false };
+    }
     const messages = await this.prisma.supportMessage.findMany({
-      where: { threadId: thread.id },
-      orderBy: { createdAt: "asc" },
+      where: { threadId, ...afterCursor(cursor) },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: INCREMENTAL_TAKE,
     });
-    await this.prisma.supportMessage.updateMany({
-      where: { threadId: thread.id, senderRole: { in: ["STAFF", "SELLER"] }, readByCustomer: false },
-      data: { readByCustomer: true },
-    });
-    return { thread, messages };
+    return { messages, incremental: true };
   }
 
   async sendCustomerMessage(
@@ -77,11 +100,10 @@ export class SupportService {
     return this.withUnreadCounts(threads, "readByStaff");
   }
 
-  async getThreadForStaff(id: string) {
+  async getThreadForStaff(id: string, after?: string) {
     const thread = await this.prisma.supportThread.findFirst({ where: { id, sellerId: null }, include: THREAD_INCLUDE });
     if (!thread) throw new NotFoundException("Thread not found");
-    const messages = await this.markRead(id, "readByStaff");
-    return { thread, messages };
+    return { thread, ...(await this.markRead(id, "readByStaff", after)) };
   }
 
   async sendStaffMessage(threadId: string, authorId: string, body: string, attachment?: ChatAttachmentInput | null) {
@@ -107,11 +129,10 @@ export class SupportService {
     return this.withUnreadCounts(threads, "readByStaff");
   }
 
-  async getThreadForSeller(sellerId: string, id: string) {
+  async getThreadForSeller(sellerId: string, id: string, after?: string) {
     const thread = await this.prisma.supportThread.findFirst({ where: { id, sellerId }, include: THREAD_INCLUDE });
     if (!thread) throw new NotFoundException("Thread not found");
-    const messages = await this.markRead(id, "readByStaff");
-    return { thread, messages };
+    return { thread, ...(await this.markRead(id, "readByStaff", after)) };
   }
 
   async sendSellerMessage(
@@ -145,16 +166,15 @@ export class SupportService {
     return threads.map((t) => ({ ...t, unreadCount: unreadMap.get(t.id) ?? 0 }));
   }
 
-  private async markRead(threadId: string, field: "readByStaff") {
-    const messages = await this.prisma.supportMessage.findMany({
-      where: { threadId },
-      orderBy: { createdAt: "asc" },
-    });
-    await this.prisma.supportMessage.updateMany({
-      where: { threadId, senderRole: "CUSTOMER", [field]: false },
-      data: { [field]: true },
-    });
-    return messages;
+  private async markRead(threadId: string, field: "readByStaff", after?: string) {
+    const { messages, incremental } = await this.readMessages(threadId, after);
+    if (!incremental || messages.some((m) => m.senderRole === "CUSTOMER")) {
+      await this.prisma.supportMessage.updateMany({
+        where: { threadId, senderRole: "CUSTOMER", [field]: false },
+        data: { [field]: true },
+      });
+    }
+    return { messages, incremental };
   }
 
   private async postReply(

@@ -10,6 +10,7 @@ import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { validateAttachment, type ChatAttachmentInput } from "../common/chat-attachment";
+import { afterCursor, INCREMENTAL_TAKE, parseAfter } from "../common/message-cursor";
 
 /** One row of the customer's inbox, whichever kind of conversation produced it. */
 export type InboxEntry = {
@@ -549,16 +550,22 @@ export class ChatService {
     return member;
   }
 
-  async messages(roomId: string, userId: string) {
+  async messages(roomId: string, userId: string, after?: string) {
     await this.assertMember(roomId, userId);
     const room = await this.prisma.chatRoom.findUniqueOrThrow({
       where: { id: roomId },
       select: { id: true, title: true, kind: true, imageUrl: true, createdById: true, officialCategory: true },
     });
+    // Resolved inside this room only: a foreign or unknown id gives a full read, never a leak.
+    const afterId = parseAfter(after);
+    const cursor = afterId
+      ? await this.prisma.chatMessage.findFirst({ where: { id: afterId, roomId }, select: { id: true, createdAt: true } })
+      : null;
     const messages = await this.prisma.chatMessage.findMany({
-      where: { roomId },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: 200,
+      where: cursor ? { roomId, ...afterCursor(cursor) } : { roomId },
+      // Incremental: oldest-first from the cursor. Full: the newest 200, reversed below.
+      orderBy: cursor ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+      take: cursor ? INCREMENTAL_TAKE : 200,
       select: {
         id: true,
         body: true,
@@ -576,7 +583,9 @@ export class ChatService {
     const canPost = !room.officialCategory && (room.kind !== "CHANNEL" || room.createdById === userId);
     return {
       room: { id: room.id, title: room.title, kind: room.kind, imageUrl: room.imageUrl, officialCategory: room.officialCategory, canPost },
-      messages: messages.reverse(),
+      messages: cursor ? messages : messages.reverse(),
+      // True when `messages` holds only what came after the cursor; the client appends them.
+      incremental: !!cursor,
     };
   }
 
@@ -672,8 +681,12 @@ export class ChatService {
     return { thread, asShop: true };
   }
 
-  async threadMessages(threadId: string, userId: string) {
+  async threadMessages(threadId: string, userId: string, after?: string) {
     const { thread, asShop } = await this.ownedThread(threadId, userId);
+    const afterId = parseAfter(after);
+    const cursor = afterId
+      ? await this.prisma.supportMessage.findFirst({ where: { id: afterId, threadId }, select: { id: true, createdAt: true } })
+      : null;
     const [seller, messages] = await Promise.all([
       thread.sellerId
         ? this.prisma.seller.findUnique({
@@ -682,9 +695,9 @@ export class ChatService {
           })
         : Promise.resolve(null),
       this.prisma.supportMessage.findMany({
-        where: { threadId },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 200,
+        where: cursor ? { threadId, ...afterCursor(cursor) } : { threadId },
+        orderBy: cursor ? [{ createdAt: "asc" }, { id: "asc" }] : [{ createdAt: "desc" }, { id: "desc" }],
+        take: cursor ? INCREMENTAL_TAKE : 200,
         select: {
           id: true,
           body: true,
@@ -706,7 +719,8 @@ export class ChatService {
       : (seller?.shopName ?? "");
     return {
       room: { id: thread.id, title: counterparty, kind: "THREAD", canPost: true },
-      messages: messages.reverse(),
+      messages: cursor ? messages : messages.reverse(),
+      incremental: !!cursor,
     };
   }
 

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { EmailAlertService } from "./email-alert.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 /**
  * Alerts are about slow-moving conditions -- a quota filling up over hours, a queue backing up,
@@ -24,6 +25,8 @@ export class EmailAlertProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(private alerts: EmailAlertService) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     this.startupTimer = setTimeout(() => {
       this.timer = setInterval(() => void this.tick(), CHECK_INTERVAL_MS);
       // unref so a pending timer never delays SIGTERM on a deploy.

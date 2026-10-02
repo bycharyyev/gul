@@ -10,3 +10,4 @@ export * from "./platform.js";
 export * from "./social-feed.js";
 export * from "./chat.js";
 export * from "./push.js";
+export * from "./performance.js";

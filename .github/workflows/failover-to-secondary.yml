@@ -89,7 +89,7 @@ jobs:
               [ "$i" -eq 20 ] && { echo "local emergency Redis did not become ready" >&2; exit 1; }
               sleep 1
             done
-            docker compose up -d --force-recreate api
+            docker compose up -d --force-recreate api api-2 api-worker
           ' < /dev/null
 
       - name: Wait for the API to become healthy against its own local (promoted) database

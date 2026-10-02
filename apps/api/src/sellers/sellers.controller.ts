@@ -12,6 +12,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { SellerApplicationStatus } from "@prisma/client";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 type AuthedUser = { userId: string; role: string };
 
@@ -34,6 +35,7 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")
   @Post("admin")
+  @InvalidatesPublicCache("gallery")
   createSeller(@Body() dto: CreateSellerDto) {
     return this.sellers.createSeller(dto);
   }
@@ -42,6 +44,7 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")
   @Patch("admin/:id")
+  @InvalidatesPublicCache("gallery")
   updateSellerAdmin(@Param("id") id: string, @Body() dto: UpdateSellerDto) {
     return this.sellers.updateSellerAdmin(id, dto);
   }
@@ -60,6 +63,7 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("SELLER")
   @Patch("me")
+  @InvalidatesPublicCache("gallery")
   updateMyProfile(@Body() dto: UpdateSellerDto, @CurrentUser() user: AuthedUser) {
     return this.sellers.updateMyProfile(user.userId, dto);
   }
@@ -147,6 +151,7 @@ export class SellersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")
   @Post("applications/:id/approve")
+  @InvalidatesPublicCache("gallery")
   approveApplication(@Param("id") id: string, @Body() dto: ReviewApplicationDto, @CurrentUser() user: AuthedUser) {
     return this.sellers.approveApplication(id, dto, user.userId);
   }

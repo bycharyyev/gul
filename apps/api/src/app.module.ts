@@ -9,6 +9,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./storage/storage.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
 import { QueueModule } from "./queue/queue.module";
+import { PublicCacheModule } from "./public-cache/public-cache.module";
 import { AuthModule } from "./auth/auth.module";
 import { CatalogModule } from "./catalog/catalog.module";
 import { OrdersModule } from "./orders/orders.module";
@@ -64,6 +65,7 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
     AuditLogModule,
     SellerLedgerModule,
     QueueModule,
+    PublicCacheModule,
     AuthModule,
     CatalogModule,
     OrdersModule,

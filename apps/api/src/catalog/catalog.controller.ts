@@ -8,27 +8,35 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { PublicCacheService } from "../public-cache/public-cache.service";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 @ApiTags("catalog")
 @Controller("catalog")
 export class CatalogController {
-  constructor(private catalog: CatalogService) {}
+  constructor(
+    private catalog: CatalogService,
+    private cache: PublicCacheService,
+  ) {}
 
   // ---- Public ----
 
+  // Cached briefly in Redis (PublicCacheService) and dropped on every catalog edit. Display only:
+  // order creation reads rates from the database and snapshots them, so a cached price is never
+  // what anyone is charged.
   @Get("services")
   listServices() {
-    return this.catalog.listServices();
+    return this.cache.wrap("catalog", "services", {}, 30, () => this.catalog.listServices());
   }
 
   @Get("services/:id/rates")
   listRates(@Param("id") id: string) {
-    return this.catalog.listRates(id);
+    return this.cache.wrap("catalog", "rates", { id }, 30, () => this.catalog.listRates(id));
   }
 
   @Get("payment-methods")
   listPaymentMethods() {
-    return this.catalog.listPaymentMethods();
+    return this.cache.wrap("catalog", "payment-methods", {}, 60, () => this.catalog.listPaymentMethods());
   }
 
   // ---- Admin ----
@@ -37,6 +45,7 @@ export class CatalogController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Post("admin/services")
+  @InvalidatesPublicCache("catalog")
   createService(@Body() dto: UpsertServiceDto) {
     return this.catalog.createService(dto);
   }
@@ -45,6 +54,7 @@ export class CatalogController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Patch("admin/services/:id")
+  @InvalidatesPublicCache("catalog")
   updateService(@Param("id") id: string, @Body() dto: Partial<UpsertServiceDto>) {
     return this.catalog.updateService(id, dto);
   }
@@ -61,6 +71,7 @@ export class CatalogController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Patch("admin/services/:id/rates")
+  @InvalidatesPublicCache("catalog")
   upsertRate(
     @Param("id") id: string,
     @Body() dto: UpsertRateDto,
@@ -96,6 +107,7 @@ export class CatalogController {
   @Roles("ADMIN")
   @HttpCode(204)
   @Delete("admin/services/:id")
+  @InvalidatesPublicCache("catalog")
   deleteService(@Param("id") id: string) {
     return this.catalog.deleteService(id);
   }

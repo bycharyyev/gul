@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { ChatService } from "./chat.service";
@@ -41,9 +41,10 @@ export class ChatController {
     return this.chat.unreadTotal(user.userId);
   }
 
+  /** `?after=<message id>` returns only newer messages (`incremental: true`); see message-cursor.ts. */
   @Get("rooms/:id/messages")
-  messages(@Param("id") id: string, @CurrentUser() user: AuthedUser) {
-    return this.chat.messages(id, user.userId);
+  messages(@Param("id") id: string, @CurrentUser() user: AuthedUser, @Query("after") after?: string) {
+    return this.chat.messages(id, user.userId, after);
   }
 
   // A conversation is typed by a person, so the ceiling is generous enough never to interrupt one
@@ -154,8 +155,8 @@ export class ChatController {
   // conversation screen rather than one per storage shape.
 
   @Get("threads/:id/messages")
-  threadMessages(@Param("id") id: string, @CurrentUser() user: AuthedUser) {
-    return this.chat.threadMessages(id, user.userId);
+  threadMessages(@Param("id") id: string, @CurrentUser() user: AuthedUser, @Query("after") after?: string) {
+    return this.chat.threadMessages(id, user.userId, after);
   }
 
   @Throttle({ default: { limit: 30, ttl: 60_000 } })

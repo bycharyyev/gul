@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SupportMessageDto, SupportThreadWithMessagesDto, SupportThreadWithUnreadDto } from "@topup-hub/types";
 import { useTranslation } from "@topup-hub/i18n";
+import { mergeMessages } from "@topup-hub/api-client";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,9 +19,13 @@ export default function SellerChatPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // Last message id the server sent for the open thread (never one we just sent -- see web chat).
+  const cursorRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     function refresh() {
+      // A background tab polls nothing; the next visible tick catches up.
+      if (document.hidden) return;
       api.listSellerInboxThreads().then(setThreads).catch(() => {});
     }
     refresh();
@@ -33,9 +38,21 @@ export default function SellerChatPage() {
       setDetail(null);
       return;
     }
+    cursorRef.current = undefined;
     function refresh() {
-      if (!selectedId) return;
-      api.getSellerInboxThread(selectedId).then(setDetail).catch(() => {});
+      if (!selectedId || document.hidden) return;
+      api
+        .getSellerInboxThread(selectedId, cursorRef.current)
+        .then((data) => {
+          const last = data.messages.at(-1)?.id;
+          if (last) cursorRef.current = last;
+          setDetail((prev) =>
+            prev && data.incremental
+              ? { ...data, messages: mergeMessages(prev.messages, data.messages, true) }
+              : data,
+          );
+        })
+        .catch(() => {});
     }
     refresh();
     const id = window.setInterval(refresh, POLL_MS);

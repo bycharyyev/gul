@@ -15,13 +15,27 @@
 python3 - <<'PY'
 import http.client, time, threading, statistics
 
-HOST, PORT, PATH = "127.0.0.1", 4000, "/api/catalog/services"
+HOST, PATH = "127.0.0.1", "/api/catalog/services"
+
+# ADR 0008: a node runs two HTTP processes (4000 and 4002). Load is spread across every one that
+# answers, the way nginx's upstream spreads real traffic; with only 4000 up this is the old test.
+def _alive(port):
+    try:
+        c = http.client.HTTPConnection(HOST, port, timeout=2)
+        c.request("GET", "/api/health")
+        return c.getresponse().status == 200
+    except Exception:
+        return False
+
+PORTS = [p for p in (4000, 4002) if _alive(p)] or [4000]
+print("HTTP processes under test: %s" % ", ".join(str(p) for p in PORTS))
 
 def burst(n, concurrency):
     lat, lock, counter = [], threading.Lock(), {"i": 0}
 
     def worker(wid):
-        conn = http.client.HTTPConnection(HOST, PORT, timeout=10)
+        port = PORTS[wid % len(PORTS)]
+        conn = http.client.HTTPConnection(HOST, port, timeout=10)
         mine = []
         while True:
             with lock:
@@ -39,7 +53,7 @@ def burst(n, concurrency):
                 if r.status != 200:
                     return
             except Exception:
-                conn = http.client.HTTPConnection(HOST, PORT, timeout=10)
+                conn = http.client.HTTPConnection(HOST, port, timeout=10)
                 continue
             mine.append(time.perf_counter() - t0)
         with lock:
@@ -72,4 +86,4 @@ PY
 echo
 echo "--- нагрузка на машину сразу после теста ---"
 uptime
-docker stats --no-stream --format "{{.Name}}  cpu {{.CPUPerc}}  mem {{.MemUsage}}" 2>/dev/null | head -6
+docker stats --no-stream --format "{{.Name}}  cpu {{.CPUPerc}}  mem {{.MemUsage}}" 2>/dev/null | head -8

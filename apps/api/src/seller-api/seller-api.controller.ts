@@ -23,6 +23,7 @@ import { UpsertStorefrontDto } from "../gallery/dto/upsert-storefront.dto";
 import { UpdateGalleryOrderStatusDto } from "../gallery/dto/update-gallery-order-status.dto";
 import { SendChatMessageDto } from "../chat/dto/chat.dto";
 import { CreateChannelDto } from "../chat/dto/chat.dto";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 /**
  * The Seller API: one token, everything a shop owns.
@@ -81,12 +82,14 @@ export class SellerApiController {
 
   @RequiresScope("products:write")
   @Post("products")
+  @InvalidatesPublicCache("gallery")
   createProduct(@Body() dto: UpsertGalleryProductDto, @CurrentApiKey() key: AuthedApiKey) {
     return this.gallery.createMyProduct(key.sellerId!, dto);
   }
 
   @RequiresScope("products:write")
   @Patch("products/:id")
+  @InvalidatesPublicCache("gallery")
   updateProduct(
     @Param("id") id: string,
     @Body() dto: Partial<UpsertGalleryProductDto>,
@@ -98,6 +101,7 @@ export class SellerApiController {
   @RequiresScope("products:write")
   @HttpCode(204)
   @Delete("products/:id")
+  @InvalidatesPublicCache("gallery")
   deleteProduct(@Param("id") id: string, @CurrentApiKey() key: AuthedApiKey) {
     return this.gallery.deleteMyProduct(key.sellerId!, id);
   }
@@ -112,12 +116,14 @@ export class SellerApiController {
 
   @RequiresScope("products:write")
   @Post("storefronts")
+  @InvalidatesPublicCache("gallery")
   createStorefront(@Body() dto: UpsertStorefrontDto, @CurrentApiKey() key: AuthedApiKey) {
     return this.gallery.createMyStorefront(key.sellerId!, dto);
   }
 
   @RequiresScope("products:write")
   @Patch("storefronts/:id")
+  @InvalidatesPublicCache("gallery")
   updateStorefront(
     @Param("id") id: string,
     @Body() dto: Partial<UpsertStorefrontDto>,
@@ -128,6 +134,7 @@ export class SellerApiController {
 
   @RequiresScope("products:write")
   @Delete("storefronts/:id")
+  @InvalidatesPublicCache("gallery")
   deleteStorefront(@Param("id") id: string, @CurrentApiKey() key: AuthedApiKey) {
     return this.gallery.deleteMyStorefront(key.sellerId!, id);
   }

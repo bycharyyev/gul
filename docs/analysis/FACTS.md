@@ -8,19 +8,19 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 24534 | 351 |
-| Web (Next.js) | 10759 | 89 |
-| Admin (Vite) | 14057 | 73 |
+| API (NestJS) | 25630 | 366 |
+| Web (Next.js) | 10799 | 89 |
+| Admin (Vite) | 14337 | 74 |
 | Mobile (Flutter) | 26024 | 130 |
-| packages/types | 2356 | 13 |
-| packages/api-client | 2243 | 6 |
-| packages/i18n | 5190 | 11 |
+| packages/types | 2424 | 14 |
+| packages/api-client | 2277 | 6 |
+| packages/i18n | 5193 | 11 |
 
 ## Automated tests
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 79 | 11650 |
+| API (jest) | 84 | 12234 |
 | Mobile (flutter test) | 53 | 7509 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
@@ -29,12 +29,12 @@
 
 | Metric | Value |
 | --- | --- |
-| Feature modules (directories under apps/api/src) | 43 |
-| Controllers | 43 |
-| HTTP route handlers | 350 |
-|   of which under /admin/* | 89 |
+| Feature modules (directories under apps/api/src) | 44 |
+| Controllers | 45 |
+| HTTP route handlers | 353 |
+|   of which under /admin/* | 91 |
 
-Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, marketplace-settings, metrics, notifications, orders, partner, payments, platform-settings, prisma, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
+Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, audit-log, auth, avatar, cargo, catalog, chat, common, content-pages, documents, email, gallery, health, home-slides, managed-links, marketplace-settings, metrics, notifications, orders, partner, payments, platform-settings, prisma, public-cache, queue, referrals, seller-api, seller-ledger, sellers, sentry-alerts, social-feed, social-links, storage, stories, subdomains, support, telegram-bot, uploads, users, withdrawals.
 
 ## Database (Prisma)
 
@@ -66,21 +66,21 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 | Client | Value |
 | --- | --- |
 | Web pages (Next.js app router) | 38 |
-| Admin pages | 45 |
+| Admin pages | 46 |
 | Mobile locales | ru, en, tkm |
 
 ## Infrastructure as code
 
 | Metric | Value |
 | --- | --- |
-| GitHub Actions workflows | 42 |
-|   of which run on a schedule | 5 |
+| GitHub Actions workflows | 43 |
+|   of which run on a schedule | 6 |
 | nginx vhosts (infra/nginx) | 5 |
 | Docker compose files | 3 |
 
-Workflows: audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
+Workflows: audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
 
-Scheduled: audit-servers.yml, check-exposed-ports.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml.
+Scheduled: audit-servers.yml, check-exposed-ports.yml, edge-latency.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml.
 
 ## Direct dependencies
 
@@ -99,4 +99,4 @@ Mobile (pubspec) direct dependencies: 29. App version: 1.0.6+7.
 
 ## Documentation
 
-Markdown documents under docs/: 41.
+Markdown documents under docs/: 43.

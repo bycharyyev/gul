@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PaymentsService } from "./payments.service";
+import { runsBackgroundWork } from "../common/app-role";
 
 const STARTUP_DELAY_MS = 30_000;
 const INTERVAL_MS = 60_000;
@@ -15,6 +16,8 @@ export class PaymentWebhookProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(private payments: PaymentsService) {}
 
   onModuleInit() {
+    // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
+    if (!runsBackgroundWork()) return;
     this.startupTimer = setTimeout(() => {
       this.timer = setInterval(() => void this.runOnce(), INTERVAL_MS);
       this.timer.unref();
