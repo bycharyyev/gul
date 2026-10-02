@@ -25,6 +25,7 @@ import TeamPage from "@/pages/team";
 import UsersPage from "@/pages/users";
 import DatabasePage from "@/pages/database";
 import MonitoringPage from "@/pages/monitoring";
+import PerformancePage from "@/pages/performance";
 import ReferralsPage from "@/pages/referrals";
 import CargoPage from "@/pages/cargo";
 import CargoShipmentDetailPage from "@/pages/cargo-shipment-detail";
@@ -272,6 +273,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DatabasePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/performance"
+        element={
+          <ProtectedRoute>
+            <PerformancePage />
           </ProtectedRoute>
         }
       />
