@@ -35,7 +35,7 @@ plus rotating opaque refresh tokens. All channels reuse the same application ser
 | `apps/admin` | Staff operations console | API |
 | `apps/mobile` | Flutter customer client | API |
 | PostgreSQL 16 | Business and financial source of truth | Primary DB |
-| Redis 7/BullMQ | Work delivery, quotas and short-lived counters | Reconstructable state |
+| Redis 7/BullMQ | Work delivery, quotas, short-lived counters and the public read cache (`PERFORMANCE.md`) | Reconstructable state |
 | S3 | Public media and private documents | Object store |
 | Firebase (project `gulyaly-push-20260920`, Spark plan) | Push delivery (FCM), crash reports, analytics, performance, Remote Config | Google |
 | Host nginx | TLS termination and hostname routing | Versioned config in `infra/nginx` |

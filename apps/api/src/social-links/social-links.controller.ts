@@ -5,17 +5,22 @@ import { UpsertSocialLinkDto } from "./dto/upsert-social-link.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
+import { PublicCacheService } from "../public-cache/public-cache.service";
+import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 
 @ApiTags("social-links")
 @Controller("social-links")
 export class SocialLinksController {
-  constructor(private socialLinks: SocialLinksService) {}
+  constructor(
+    private socialLinks: SocialLinksService,
+    private cache: PublicCacheService,
+  ) {}
 
   // ---- Public ----
 
   @Get()
   listActive() {
-    return this.socialLinks.listActive();
+    return this.cache.wrap("content", "social-links", {}, 300, () => this.socialLinks.listActive());
   }
 
   // ---- Admin ----
@@ -32,6 +37,7 @@ export class SocialLinksController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Post("admin")
+  @InvalidatesPublicCache("content")
   create(@Body() dto: UpsertSocialLinkDto) {
     return this.socialLinks.createLink(dto);
   }
@@ -40,6 +46,7 @@ export class SocialLinksController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN", "MANAGER")
   @Patch("admin/:id")
+  @InvalidatesPublicCache("content")
   update(@Param("id") id: string, @Body() dto: Partial<UpsertSocialLinkDto>) {
     return this.socialLinks.updateLink(id, dto);
   }
@@ -49,6 +56,7 @@ export class SocialLinksController {
   @Roles("ADMIN")
   @HttpCode(204)
   @Delete("admin/:id")
+  @InvalidatesPublicCache("content")
   remove(@Param("id") id: string) {
     return this.socialLinks.deleteLink(id);
   }
