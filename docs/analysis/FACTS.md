@@ -9,19 +9,19 @@
 | Area | Source lines | Files |
 | --- | --- | --- |
 | API (NestJS) | 25989 | 370 |
-| Web (Next.js) | 10552 | 89 |
+| Web (Next.js) | 11431 | 94 |
 | Admin (Vite) | 14411 | 74 |
-| Mobile (Flutter) | 26341 | 131 |
+| Mobile (Flutter) | 27495 | 132 |
 | packages/types | 2427 | 14 |
 | packages/api-client | 2291 | 6 |
-| packages/i18n | 5207 | 11 |
+| packages/i18n | 5392 | 12 |
 
 ## Automated tests
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
 | API (jest) | 86 | 12460 |
-| Mobile (flutter test) | 53 | 7636 |
+| Mobile (flutter test) | 54 | 7735 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
 
@@ -49,7 +49,7 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Mobile feature | Screens | Test files |
 | --- | --- | --- |
-| auth | 4 | 5 |
+| auth | 5 | 6 |
 | cargo | 4 | 1 |
 | chat | 6 | 1 |
 | gallery | 4 | 4 |
