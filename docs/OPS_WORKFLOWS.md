@@ -50,6 +50,7 @@ recoverable by re-running or reverting · *disruptive* — restarts or recreates
 |---|---|---|
 | `set-topup-gateway.yml` | Switch top-up fulfilment (`mock` / `http` / empty = fail closed). **Remove `mock` at launch.** Recreates api on both. | disruptive |
 | `set-firebase-credentials.yml` | New Firebase push credentials. Recreates api on both. | disruptive |
+| `set-freekassa-credentials.yml` | Writes the four `FREEKASSA_*` repository secrets into both hosts' `.env` and recreates the API processes; checks the provider is registered. | writes |
 | `rotate-unsubscribe-secret.yml` | First set, or after a leak (`rotate=true` breaks unsubscribe links in mail already sent). | disruptive |
 | `rotate-netdata-gate.yml` | Rotate the Netdata dashboard login. | writes |
 | `wire-s3-env.yml` | S3 credentials / buckets changed: rewrites `S3_*` on both hosts, recreates api. | disruptive |

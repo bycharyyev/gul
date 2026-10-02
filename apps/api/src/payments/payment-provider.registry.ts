@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { ManualPaymentProvider } from "./providers/manual-payment.provider";
+import { FreeKassaPaymentProvider } from "./providers/freekassa-payment.provider";
 import type { PaymentProvider } from "./providers/payment-provider.interface";
 
 /**
@@ -17,8 +18,16 @@ import type { PaymentProvider } from "./providers/payment-provider.interface";
 export class PaymentProviderRegistry {
   private providers = new Map<string, PaymentProvider>();
 
-  constructor(manual: ManualPaymentProvider) {
+  constructor(manual: ManualPaymentProvider, freekassa: FreeKassaPaymentProvider) {
     this.register(manual);
+    // Only with credentials in .env: an unconfigured deployment does not expose it at all
+    // (its webhook URL then answers "Unknown payment provider").
+    if (freekassa.isConfigured()) this.register(freekassa);
+  }
+
+  /** The provider's required plain-text webhook answer, if it has one. */
+  webhookAck(key: string): string | undefined {
+    return this.providers.get(key)?.webhookAck;
   }
 
   register(provider: PaymentProvider) {

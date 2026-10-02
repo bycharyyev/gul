@@ -3,6 +3,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { configureBodyParsing } from "../common/body-parsing";
 import { PaymentsController } from "./payments.controller";
+import { PaymentProviderRegistry } from "./payment-provider.registry";
 import { PaymentsService } from "./payments.service";
 
 describe("payment webhook HTTP boundary", () => {
@@ -13,7 +14,10 @@ describe("payment webhook HTTP boundary", () => {
     receiveWebhook.mockClear();
     const moduleRef = await Test.createTestingModule({
       controllers: [PaymentsController],
-      providers: [{ provide: PaymentsService, useValue: { receiveWebhook } }],
+      providers: [
+        { provide: PaymentsService, useValue: { receiveWebhook } },
+        { provide: PaymentProviderRegistry, useValue: { webhookAck: (k: string) => (k === "freekassa" ? "YES" : undefined) } },
+      ],
     }).compile();
     app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
     configureBodyParsing(app);
@@ -46,5 +50,18 @@ describe("payment webhook HTTP boundary", () => {
       .expect(413);
 
     expect(receiveWebhook).not.toHaveBeenCalled();
+  });
+
+  it("answers a FreeKassa notification with the exact plain-text YES it requires, form body intact", async () => {
+    const form = "MERCHANT_ID=7012&AMOUNT=100.11&intid=999&MERCHANT_ORDER_ID=idem-1&SIGN=abc";
+    const res = await request(app.getHttpServer())
+      .post("/api/payments/webhooks/freekassa")
+      .set("content-type", "application/x-www-form-urlencoded")
+      .send(form)
+      .expect(200);
+
+    expect(res.text).toBe("YES");
+    expect(res.headers["content-type"]).toMatch(/^text\/plain/);
+    expect(receiveWebhook.mock.calls[0][1]).toEqual(Buffer.from(form));
   });
 });
