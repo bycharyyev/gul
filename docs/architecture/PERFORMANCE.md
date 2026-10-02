@@ -190,3 +190,25 @@ What it says:
   average reaches about 6 on 6 cores during the test, and the API is one event loop. That is the
   ceiling ADR 0008 phase B addresses (two HTTP processes per node).
 - **API memory:** primary 308 → 280 MiB, secondary 277 → 264 MiB.
+
+## Results after stage 3b — 2026-10-02
+
+Two HTTP processes and one worker per node (PR #76). Same test; `throughput.sh` now spreads load
+over both HTTP processes (4000, 4002), the way the nginx upstream does. Requests per second / p95:
+
+| Concurrency | Primary: baseline → after 1–5 → after 3b | Secondary: baseline → after 1–5 → after 3b |
+|---|---|---|
+| 1 | 53 / 36 ms → 63–79 / 22–30 ms → 66 / 31 ms | 111 / 14 ms → 124 / 14 ms → 129 / 13 ms |
+| 4 | 83 / 91 ms → 83–116 / 61–84 ms → **157 / 47 ms** | 197 / 33 ms → 248 / 24 ms → **354 / 21 ms** |
+| 16 | 104 / 250 ms → 102–132 / 172–211 ms → **215 / 143 ms** | 223 / 125 ms → 265 / 89 ms → **475 / 49 ms** |
+| 64 | 111 / 899 ms → 127–159 / 1251–1316 ms → **191 / 498 ms** | 263 / 383 ms → 281 / 655 ms → **507 / 195 ms** |
+
+Against the 2026-10-02 baseline, at 64 concurrent: the primary went from 111 to 191 req/s (+72 %)
+with p95 899 → 498 ms, and the secondary from 263 to 507 req/s (+93 %) with p95 383 → 195 ms. A
+single request (concurrency 1) is unchanged by design: it only ever uses one process.
+
+Resources after the change (`capacity.sh`):
+
+- **API memory per node:** about 110 MB per process at idle (330 MB for three). Under the load
+  test, about 220 MB per HTTP process.
+- **PostgreSQL connections in use on the primary:** 15 of 100.
