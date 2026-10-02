@@ -34,9 +34,9 @@ void main() {
   tearDown(() => controller.dispose());
 
   test('the first load fills the thread and clears the loading flag', () async {
-    when(
-      () => repository.loadThread(),
-    ).thenAnswer((_) async => _thread(['Здравствуйте']));
+    when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer(
+      (_) async => (thread: _thread(['Здравствуйте']), incremental: false),
+    );
 
     await controller.load();
 
@@ -47,7 +47,7 @@ void main() {
 
   test('a failed first load is an error the user can retry', () async {
     when(
-      () => repository.loadThread(),
+      () => repository.loadThread(after: any(named: 'after')),
     ).thenThrow(const AppException(kind: AppErrorKind.network));
 
     await controller.load();
@@ -58,13 +58,13 @@ void main() {
 
   test('a failed poll leaves a readable conversation alone', () async {
     // A dropped packet fifteen seconds in must not replace what is on screen with an error page.
-    when(
-      () => repository.loadThread(),
-    ).thenAnswer((_) async => _thread(['Здравствуйте']));
+    when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer(
+      (_) async => (thread: _thread(['Здравствуйте']), incremental: false),
+    );
     await controller.load();
 
     when(
-      () => repository.loadThread(),
+      () => repository.loadThread(after: any(named: 'after')),
     ).thenThrow(const AppException(kind: AppErrorKind.network));
     controller.startPolling();
     await Future<void>.delayed(Duration.zero);
@@ -77,14 +77,14 @@ void main() {
 
   test('a successful poll clears an earlier error', () async {
     when(
-      () => repository.loadThread(),
+      () => repository.loadThread(after: any(named: 'after')),
     ).thenThrow(const AppException(kind: AppErrorKind.server));
     await controller.load();
     expect(controller.state.error, isNotNull);
 
     when(
-      () => repository.loadThread(),
-    ).thenAnswer((_) async => _thread(['Ответ']));
+      () => repository.loadThread(after: any(named: 'after')),
+    ).thenAnswer((_) async => (thread: _thread(['Ответ']), incremental: false));
     await controller.load();
 
     expect(controller.state.error, isNull);
@@ -93,15 +93,17 @@ void main() {
 
   test('overlapping fetches collapse into one request', () async {
     // The 15s timer must not stack requests behind a slow one.
-    final gate = Completer<SupportThread>();
-    when(() => repository.loadThread()).thenAnswer((_) => gate.future);
+    final gate = Completer<({SupportThread thread, bool incremental})>();
+    when(
+      () => repository.loadThread(after: any(named: 'after')),
+    ).thenAnswer((_) => gate.future);
 
     final first = controller.load();
     final second = controller.load();
-    gate.complete(_thread(['ok']));
+    gate.complete((thread: _thread(['ok']), incremental: false));
     await Future.wait([first, second]);
 
-    verify(() => repository.loadThread()).called(1);
+    verify(() => repository.loadThread(after: any(named: 'after'))).called(1);
   });
 
   group('sending', () {
@@ -116,14 +118,14 @@ void main() {
           createdAt: DateTime(2026, 9, 1),
         ),
       );
-      when(
-        () => repository.loadThread(),
-      ).thenAnswer((_) async => _thread(['Вопрос']));
+      when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer(
+        (_) async => (thread: _thread(['Вопрос']), incremental: false),
+      );
 
       expect(await controller.send('Вопрос'), isTrue);
 
       verify(() => repository.send('Вопрос')).called(1);
-      verify(() => repository.loadThread()).called(1);
+      verify(() => repository.loadThread(after: any(named: 'after'))).called(1);
       expect(controller.state.sending, isFalse);
     });
 
@@ -139,18 +141,18 @@ void main() {
           createdAt: DateTime(2026, 9, 1),
         ),
       );
-      when(
-        () => repository.loadThread(),
-      ).thenAnswer((_) async => _thread(['Вопрос']));
+      when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer(
+        (_) async => (thread: _thread(['Вопрос']), incremental: false),
+      );
 
       await controller.send('  Вопрос  ');
       verify(() => repository.send('Вопрос')).called(1);
     });
 
     test('a send failure is separate from a load failure', () async {
-      when(
-        () => repository.loadThread(),
-      ).thenAnswer((_) async => _thread(['Здравствуйте']));
+      when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer(
+        (_) async => (thread: _thread(['Здравствуйте']), incremental: false),
+      );
       await controller.load();
 
       when(
@@ -169,14 +171,69 @@ void main() {
     'stopPolling ends the timer, so a disposed screen fetches nothing',
     () async {
       when(
-        () => repository.loadThread(),
-      ).thenAnswer((_) async => _thread(['ok']));
+        () => repository.loadThread(after: any(named: 'after')),
+      ).thenAnswer((_) async => (thread: _thread(['ok']), incremental: false));
       controller.startPolling();
       controller.stopPolling();
 
       await Future<void>.delayed(Duration.zero);
 
-      verifyNever(() => repository.loadThread());
+      verifyNever(() => repository.loadThread(after: any(named: 'after')));
+    },
+  );
+
+  test(
+    'a poll adds only new messages and keeps every earlier one on screen',
+    () async {
+      final afters = <String?>[];
+      var call = 0;
+      when(() => repository.loadThread(after: any(named: 'after'))).thenAnswer((
+        inv,
+      ) async {
+        afters.add(inv.namedArguments[#after] as String?);
+        call++;
+        if (call == 1) {
+          return (
+            thread: _thread(['Здравствуйте', 'Чем помочь?']),
+            incremental: false,
+          );
+        }
+        if (call == 2) {
+          return (
+            thread: SupportThread(
+              status: 'OPEN',
+              messages: [
+                SupportMessage(
+                  id: 'm9',
+                  sender: SupportSender.staff,
+                  body: 'Новое',
+                  createdAt: DateTime(2026, 9, 1, 11),
+                ),
+              ],
+            ),
+            incremental: true,
+          );
+        }
+        return (
+          thread: const SupportThread(status: 'OPEN', messages: []),
+          incremental: true,
+        );
+      });
+
+      await controller.load();
+      await controller.poll();
+      await controller.poll();
+
+      expect(afters, [
+        null,
+        'm1',
+        'm9',
+      ]); // full first, then after the last id the server sent
+      expect(controller.state.thread?.messages.map((m) => m.body), [
+        'Здравствуйте',
+        'Чем помочь?',
+        'Новое',
+      ]);
     },
   );
 }

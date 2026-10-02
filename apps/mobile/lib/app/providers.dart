@@ -257,9 +257,12 @@ final myShopProvider = FutureProvider<MyShop>((ref) {
   return ref.watch(sellerRepositoryProvider).getMyProfile();
 });
 
-final chatRepositoryProvider = Provider<ChatRepository>(
-  (ref) => ChatRepository(ref.watch(apiClientProvider)),
-);
+// Session-bound: the repository holds loaded conversations (incremental chat reads), which must
+// not survive into another account's session.
+final chatRepositoryProvider = Provider<ChatRepository>((ref) {
+  _sessionKey(ref);
+  return ChatRepository(ref.watch(apiClientProvider));
+});
 
 final chatInboxProvider = FutureProvider<List<ChatConversation>>((ref) {
   _sessionKey(ref);
