@@ -86,4 +86,13 @@ async function bootstrap() {
   );
 }
 
-bootstrap();
+// A failed boot must end the process. Left to the default, the rejection is reported (Sentry
+// keeps unhandled rejections from killing the process) and the process stays up with no HTTP
+// server: on 2026-10-02 all three API processes on the primary booted while Postgres and Redis
+// were briefly unreachable, kept running with nothing listening, and Docker saw no reason to
+// restart them. Exiting lets `restart: unless-stopped` retry until the database is back.
+bootstrap().catch((error: unknown) => {
+  // eslint-disable-next-line no-console
+  console.error("API failed to start; exiting so it is restarted", error);
+  process.exit(1);
+});
