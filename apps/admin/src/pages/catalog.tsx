@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminServiceInput, CurrencyCode, OrderDetailDto, RateDto, ServiceDto } from "@topup-hub/types";
+import type { AdminPaymentMethodDto, AdminServiceInput, CurrencyCode, OrderDetailDto, RateDto, ServiceDto } from "@topup-hub/types";
 import { CURRENCY_CODES } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
 import { useTranslation, translateError, LOCALE_BCP47 } from "@topup-hub/i18n";
@@ -132,6 +132,8 @@ export default function CatalogPage() {
       </Card>
       <Card className="p-5"><p className="text-xs font-bold uppercase tracking-wider text-brand-600">Продвижение</p><h2 className="mt-1 text-lg font-bold">Создать размещение</h2><p className="mt-1 text-sm text-slate-500">Запускайте продвижение выбранного сервиса в нужном месте.</p><div className="mt-4 grid grid-cols-2 gap-2">{([["/home-slides", "Баннер на главной"], ["/stories", "История"], ["/feed/moderation", "Лента"], ["/gallery", "Галерея"]] as const).map(([path, label]) => <button key={path} onClick={() => navigate(path)} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-left text-xs font-semibold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50">{label}<span className="mt-1 block text-[10px] font-normal text-slate-400">Открыть раздел →</span></button>)}</div></Card>
       </div>
+
+      <PaymentMethodsCard />
 
       <div className="grid grid-cols-[240px_1fr] gap-6">
       <Card className="p-2">
@@ -404,5 +406,77 @@ function RateRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Payment methods customers can pick at checkout. A new acquirer's method arrives switched off
+ * (ADR-0005) and is switched on here after a sandbox payment went through. The API refuses to
+ * enable a method whose adapter is not configured, and only ADMIN may change one.
+ */
+function PaymentMethodsCard() {
+  const [methods, setMethods] = useState<AdminPaymentMethodDto[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    api.listAllPaymentMethods().then(setMethods).catch(() => setError("Не удалось загрузить способы оплаты"));
+  }
+  useEffect(load, []);
+
+  async function toggle(m: AdminPaymentMethodDto) {
+    const next = !m.isEnabled;
+    if (next && !(await confirmAction(`Включить «${m.name}» для всех клиентов?`))) return;
+    setBusyId(m.id);
+    setError(null);
+    try {
+      await api.setPaymentMethodEnabled(m.id, next);
+      load();
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.message === "PAYMENT_PROVIDER_NOT_CONFIGURED"
+          ? "Провайдер не настроен на сервере (нет ключей) — включить нельзя"
+          : "Не удалось изменить (нужна роль ADMIN)",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="font-semibold">Способы оплаты</h2>
+      <p className="mb-3 text-xs text-slate-500">
+        Что видят клиенты при оплате. Новый способ включайте только после успешного тестового платежа.
+      </p>
+      {error && <p className="mb-2 text-sm text-rose-600">{error}</p>}
+      {!methods ? (
+        <p className="text-sm text-slate-400">Загрузка…</p>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {methods.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{m.name}</div>
+                <div className="text-xs text-slate-400">
+                  {m.code} · провайдер {m.provider}
+                  {!m.providerConfigured && <span className="ml-1 text-amber-600">· не настроен</span>}
+                </div>
+              </div>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  m.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {m.isEnabled ? "Включён" : "Выключен"}
+              </span>
+              <Button size="sm" variant="secondary" disabled={busyId === m.id} onClick={() => toggle(m)}>
+                {m.isEnabled ? "Выключить" : "Включить"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

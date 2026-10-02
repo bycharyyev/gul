@@ -24,6 +24,6 @@ import { PaymentWebhookProcessor } from "./payment-webhook.processor";
     PaymentReconciliationProcessor,
     PaymentWebhookProcessor,
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, PaymentProviderRegistry],
 })
 export class PaymentsModule {}

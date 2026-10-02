@@ -94,6 +94,7 @@ import type {
   ManagedLinkDto,
   ManagedSubdomainDto,
   PaymentMethodDto,
+  AdminPaymentMethodDto,
   PaymentInitiationDto,
   PaymentReconciliationDto,
   RateDto,
@@ -373,6 +374,19 @@ export class ApiClient {
   listRates(serviceId: string) {
     return this.request<RateDto[]>(`/catalog/services/${serviceId}/rates`, {
       auth: false,
+    });
+  }
+
+  /** Admin: every payment method, enabled or not, with whether its adapter is configured. */
+  listAllPaymentMethods() {
+    return this.request<AdminPaymentMethodDto[]>("/catalog/admin/payment-methods");
+  }
+
+  /** Admin (ADMIN role): turn a payment method on or off for customers. */
+  setPaymentMethodEnabled(id: string, isEnabled: boolean) {
+    return this.request<PaymentMethodDto>(`/catalog/admin/payment-methods/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isEnabled }),
     });
   }
 
