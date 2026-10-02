@@ -8,6 +8,9 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+/** Public objects are content-addressed (uuid keys), hence immutable. */
+export const PUBLIC_OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -92,7 +95,16 @@ export class StorageService {
       throw new Error("S3 public storage is not configured");
     }
     await this.client.send(
-      new PutObjectCommand({ Bucket: this.publicBucket, Key: key, Body: body, ContentType: contentType }),
+      new PutObjectCommand({
+        Bucket: this.publicBucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        // Every public key is a fresh uuid (avatars, uploads), so the bytes behind a URL never
+        // change: browsers and any CDN may keep it for a year without asking again. Without this
+        // header every view of an image was a conditional request back to the bucket.
+        CacheControl: PUBLIC_OBJECT_CACHE_CONTROL,
+      }),
     );
     return `${this.publicBaseUrl}/${key}`;
   }
