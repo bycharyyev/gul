@@ -109,3 +109,29 @@ When polling stops being enough, the plan is:
 - Fallback to 15 s incremental polling when the stream drops.
 
 WebSocket brings nothing that SSE lacks for this traffic and needs more nginx and auth plumbing.
+
+## Stage 3 — process roles (ADR 0008)
+
+Phase A, merged 2026-10-02: `APP_ROLE` (`all` | `http` | `worker`) gates every BullMQ worker,
+sweeper, cron and Telegram poller. `GET /api/health/role` reports it. Production keeps `all`, so
+there is no runtime change.
+
+Phase B (2 http processes + 1 worker per node, connection limits, nginx upstream, rolling deploy)
+is designed in ADR 0008 and awaits owner approval.
+
+## Stage 4 — front-end and media
+
+**Audited on production (secondary), 2026-10-02:**
+
+| What | Header / behaviour | Verdict |
+|---|---|---|
+| `/_next/static/*` JS and CSS | `public, max-age=31536000, immutable` | already right |
+| `/_next/image` | AVIF/WebP negotiated, `srcset` 16–3840 px with `sizes`, `max-age=2592000` (30 d) | already right (earlier PRs #39–#45) |
+| HTML | `s-maxage=60, stale-while-revalidate`, gzip/br (home page 7.7 KB compressed) | already right |
+| S3 public objects (avatars, uploads) | **no `Cache-Control`**, only an ETag | every view was a conditional request to the bucket |
+
+**Changed.** Public uploads are now written with `Cache-Control: public, max-age=31536000,
+immutable`. That is safe because every public key is a fresh uuid, so the bytes behind a URL never
+change. Private documents are untouched. Objects uploaded before this change keep having no header
+until they are re-uploaded; a one-off copy-in-place could backfill them if it is ever worth it. No
+CDN is involved, and `S3_PUBLIC_BASE_URL` remains the hook for one later.

@@ -1,4 +1,5 @@
-import { StorageService } from "./storage.service";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PUBLIC_OBJECT_CACHE_CONTROL, StorageService } from "./storage.service";
 
 function makeConfig(values: Record<string, string | undefined>) {
   return { get: (key: string) => values[key] } as never;
@@ -65,6 +66,29 @@ describe("StorageService", () => {
       const service = new StorageService(makeConfig(S3_ENV));
       expect(service.mode).toBe("s3");
       expect(service.enabled).toBe(true);
+    });
+  });
+
+  describe("cache headers", () => {
+    it("public uploads are marked immutable for a year (their keys are uuids)", async () => {
+      const service = new StorageService(makeConfig(S3_ENV));
+      const send = jest.fn().mockResolvedValue({});
+      (service as unknown as { client: { send: typeof send } }).client = { send };
+
+      await service.uploadPublic("uploads/0b6f.png", Buffer.from("x"), "image/png");
+
+      const command = send.mock.calls[0][0] as PutObjectCommand;
+      expect(command.input).toMatchObject({ Key: "uploads/0b6f.png", ContentType: "image/png", CacheControl: PUBLIC_OBJECT_CACHE_CONTROL });
+    });
+
+    it("private documents get no public caching header", async () => {
+      const service = new StorageService(makeConfig(S3_ENV));
+      const send = jest.fn().mockResolvedValue({});
+      (service as unknown as { client: { send: typeof send } }).client = { send };
+
+      await service.uploadPrivate("documents/a.pdf", Buffer.from("x"), "application/pdf");
+
+      expect((send.mock.calls[0][0] as PutObjectCommand).input.CacheControl).toBeUndefined();
     });
   });
 });
