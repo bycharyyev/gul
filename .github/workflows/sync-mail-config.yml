@@ -65,7 +65,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$SECONDARY" '
             cd /opt/gul-secondary
             for attempt in 1 2 3; do
-              docker compose up -d --force-recreate --no-deps api && break
+              docker compose up -d --force-recreate --no-deps api api-2 api-worker && break
               sleep $((attempt * 10))
             done
             for i in $(seq 1 30); do

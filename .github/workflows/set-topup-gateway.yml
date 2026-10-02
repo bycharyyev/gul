@@ -68,7 +68,7 @@ jobs:
           # It clears itself within seconds, so it is a wait, not an error. deploy.yml learned
           # this the same way; this workflow had to learn it too.
           for attempt in 1 2 3; do
-            docker compose up -d --force-recreate --no-deps api && break
+            docker compose up -d --force-recreate --no-deps api api-2 api-worker && break
             echo "up attempt $attempt failed; retrying in $((attempt * 10))s" >&2
             sleep $((attempt * 10))
           done

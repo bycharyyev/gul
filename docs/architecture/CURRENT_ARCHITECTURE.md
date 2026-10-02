@@ -145,7 +145,7 @@ support report can be correlated without copying sensitive request data.
   exact raw body, normalize the event, and supply verified amount/currency for every success before
   PostgreSQL accepts it; mismatches are quarantined instead of settled. A background worker replays
   verified events left unfinished by a crash. A concrete signed adapter awaits the gateway choice.
-- HTTP handling, workers and Telegram bot share one API process/image in production (`APP_ROLE` unset = `all`). The code can split them (`APP_ROLE=http|worker`, ADR 0008); the topology change is pending.
+- Each node runs three processes from the one API image (ADR 0008): `api` and `api-2` (`APP_ROLE=http`, ports 4000/4002, behind the nginx `least_conn` upstream `gul_api`) and `api-worker` (`APP_ROLE=worker`, port 4001 for health only: BullMQ, sweepers, crons, Telegram polling). `PRISMA_CONNECTION_LIMIT=6` each. Deploys replace them one at a time (worker, api, api-2). Ops workflows that change `.env` recreate all three.
 - Top-up fulfillment resolves an `OperatorGateway` through DI. With no real adapter configured it
   fails closed, and mock fulfillment is rejected in production. Ambiguous provider outcomes remain
   `SENT`/`PROCESSING` for reconciliation instead of becoming retryable failures.

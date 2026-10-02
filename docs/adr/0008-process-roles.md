@@ -1,6 +1,6 @@
 # ADR 0008: Process roles — HTTP and background work in separate processes
 
-**Status:** accepted for phase A (code, no production change); phase B (topology) awaits owner approval.
+**Status:** accepted. Phase A (code) shipped 2026-10-02 (#71); phase B (topology) approved by the owner and shipped 2026-10-02.
 **Date:** 2026-10-02
 
 ## Context
