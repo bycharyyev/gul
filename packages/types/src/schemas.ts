@@ -55,6 +55,9 @@ export const paymentMethodSchema = z.object({
 });
 export type PaymentMethodDto = z.infer<typeof paymentMethodSchema>;
 
+/** Admin view: also whether the method's adapter is registered (configured) on the API. */
+export type AdminPaymentMethodDto = PaymentMethodDto & { providerConfigured: boolean };
+
 export const createOrderSchema = z.object({
   serviceId: z.string(),
   paymentMethodId: z.string(),

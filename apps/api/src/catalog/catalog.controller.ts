@@ -10,6 +10,8 @@ import { Roles } from "../auth/decorators/roles.decorator";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { PublicCacheService } from "../public-cache/public-cache.service";
 import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
+import { PaymentProviderRegistry } from "../payments/payment-provider.registry";
+import { SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
 
 @ApiTags("catalog")
 @Controller("catalog")
@@ -17,6 +19,7 @@ export class CatalogController {
   constructor(
     private catalog: CatalogService,
     private cache: PublicCacheService,
+    private payments: PaymentProviderRegistry,
   ) {}
 
   // ---- Public ----
@@ -40,6 +43,29 @@ export class CatalogController {
   }
 
   // ---- Admin ----
+
+  /** Every payment method, enabled or not, with whether its adapter is registered on this node. */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Get("admin/payment-methods")
+  async listAllPaymentMethods() {
+    const methods = await this.catalog.listPaymentMethods(true);
+    return methods.map((m) => ({ ...m, providerConfigured: this.payments.has(m.provider) }));
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @Patch("admin/payment-methods/:id")
+  @InvalidatesPublicCache("catalog")
+  setPaymentMethodEnabled(
+    @Param("id") id: string,
+    @Body() dto: SetPaymentMethodEnabledDto,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.catalog.setPaymentMethodEnabled(id, dto.isEnabled, user.userId, (key) => this.payments.has(key));
+  }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)

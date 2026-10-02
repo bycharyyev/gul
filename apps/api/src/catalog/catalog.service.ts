@@ -37,6 +37,23 @@ export class CatalogService {
     });
   }
 
+  /**
+   * Turns a payment method on or off for customers. ADR-0005: a new acquirer's method ships
+   * disabled and is enabled only after a sandbox payment went through. Refuses a method whose
+   * provider is not registered on this node (e.g. FreeKassa without its credentials), because
+   * customers would then get "Unknown payment provider" at checkout.
+   */
+  async setPaymentMethodEnabled(id: string, isEnabled: boolean, adminId: string, providerKnown: (key: string) => boolean) {
+    const method = await this.prisma.paymentMethod.findUnique({ where: { id } });
+    if (!method) throw new NotFoundException("Payment method not found");
+    if (isEnabled && !providerKnown(method.provider)) {
+      throw new BadRequestException("PAYMENT_PROVIDER_NOT_CONFIGURED");
+    }
+    const updated = await this.prisma.paymentMethod.update({ where: { id }, data: { isEnabled } });
+    this.auditLog.record(adminId, "payment-method.set-enabled", "PaymentMethod", id, { isEnabled, provider: method.provider });
+    return updated;
+  }
+
   // ---- Admin mutations ----
 
   createService(dto: UpsertServiceDto) {

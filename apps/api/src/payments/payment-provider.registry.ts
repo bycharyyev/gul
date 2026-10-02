@@ -25,6 +25,11 @@ export class PaymentProviderRegistry {
     if (freekassa.isConfigured()) this.register(freekassa);
   }
 
+  /** Whether an adapter with this key is registered (configured) on this node. */
+  has(key: string): boolean {
+    return this.providers.has(key);
+  }
+
   /** The provider's required plain-text webhook answer, if it has one. */
   webhookAck(key: string): string | undefined {
     return this.providers.get(key)?.webhookAck;
