@@ -158,3 +158,32 @@ CDN is involved, and `S3_PUBLIC_BASE_URL` remains the hook for one later.
 Storage: Redis hashes `perf:m:<minute>` (kept 2 h) and `perf:h:<hour>` (kept 8 d), with HLL
 `perf:um:*` / `perf:uh:*`, on a dedicated fail-fast connection. Writes never delay a request, and
 with Redis down the samples are simply lost.
+
+### Stage 5 regression and fix
+
+The measurement right after stage 5 showed a drop: at 64 concurrent, the primary went 156 → 107
+req/s with p95 819 → 1430 ms, and the secondary went 284 → 232 req/s. The new metrics wrote about
+14 Redis commands per request, and the stage 1 cache statistics wrote 3 per hit. PR #74 batches
+both in memory and flushes once every 5 s.
+
+## Results after stages 1–5 — 2026-10-02
+
+Requests per second / p95, same test as the baseline. The primary was measured three times
+(the load generator shares its 6 cores with PostgreSQL, so its figures vary run to run); the range
+is shown.
+
+| Concurrency | Primary baseline → now | Secondary baseline → now |
+|---|---|---|
+| 1 | 53 / 36 ms → 63–79 / 22–30 ms | 111 / 14 ms → 124 / 14 ms |
+| 4 | 83 / 91 ms → 83–116 / 61–84 ms | 197 / 33 ms → 248 / 24 ms |
+| 16 | 104 / 250 ms → 102–132 / 172–211 ms | 223 / 125 ms → 265 / 89 ms |
+| 64 | 111 / 899 ms → 127–159 / 1251–1316 ms | 263 / 383 ms → 281 / 655 ms |
+
+What it says:
+
+- **Up to 64 concurrent requests:** the secondary is faster at every level (+12–26 % throughput,
+  p95 down 29 % at 16 concurrent).
+- **At 64 concurrent:** throughput is flat or up, but p95 is worse on both nodes. The box's load
+  average reaches about 6 on 6 cores during the test, and the API is one event loop. That is the
+  ceiling ADR 0008 phase B addresses (two HTTP processes per node).
+- **API memory:** primary 308 → 280 MiB, secondary 277 → 264 MiB.
