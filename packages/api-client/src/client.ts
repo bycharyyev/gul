@@ -237,6 +237,32 @@ export interface ApiClientOptions {
  * admin (Vite/React) and the future React Native app — only the TokenStore
  * implementation differs per platform.
  */
+
+/** `?after=<id>` for incremental message reads; nothing when there is no cursor yet. */
+function afterQuery(after?: string): string {
+  return after ? `?after=${encodeURIComponent(after)}` : "";
+}
+
+/**
+ * Applies a message read to what a client already holds: an incremental answer is appended (an
+ * id already present is skipped, so a message sent by this client and then polled back is not
+ * shown twice); a full answer replaces everything.
+ */
+export function mergeMessages<T extends { id: string; createdAt?: string | Date }>(
+  held: T[],
+  incoming: T[],
+  incremental?: boolean,
+): T[] {
+  if (!incremental) return incoming;
+  if (incoming.length === 0) return held;
+  const seen = new Set(held.map((m) => m.id));
+  const merged = [...held, ...incoming.filter((m) => !seen.has(m.id))];
+  // Re-ordered by time: a message we sent was appended locally, and one from the other side that
+  // the server stored just before it arrives only now -- it belongs above ours, not below.
+  const time = (m: T) => (m.createdAt ? new Date(m.createdAt).getTime() : 0);
+  return merged.sort((a, b) => time(a) - time(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 export class ApiClient {
   private baseUrl: string;
   private tokenStore: TokenStore;
@@ -1061,8 +1087,9 @@ export class ApiClient {
   }
 
   // ---- Support chat (customer) ----
-  getMySupportThread() {
-    return this.request<SupportThreadWithMessagesDto>("/support/thread");
+  /** `after`: id of the last message held; only newer ones come back (`incremental: true`). */
+  getMySupportThread(after?: string) {
+    return this.request<SupportThreadWithMessagesDto>(`/support/thread${afterQuery(after)}`);
   }
 
   sendSupportMessage(input: SendSupportMessageInput) {
@@ -1077,9 +1104,9 @@ export class ApiClient {
     return this.request<SupportThreadWithUnreadDto[]>("/support/admin/threads");
   }
 
-  getSupportThread(id: string) {
+  getSupportThread(id: string, after?: string) {
     return this.request<SupportThreadWithMessagesDto>(
-      `/support/admin/threads/${id}`,
+      `/support/admin/threads/${id}${afterQuery(after)}`,
     );
   }
 
@@ -1562,9 +1589,9 @@ export class ApiClient {
   }
 
   // ---- Support chat with a seller (customer side) ----
-  getMyThreadWithSeller(sellerId: string) {
+  getMyThreadWithSeller(sellerId: string, after?: string) {
     return this.request<SupportThreadWithMessagesDto>(
-      `/support/seller/${sellerId}/thread`,
+      `/support/seller/${sellerId}/thread${afterQuery(after)}`,
     );
   }
 
@@ -1585,9 +1612,9 @@ export class ApiClient {
     );
   }
 
-  getSellerInboxThread(id: string) {
+  getSellerInboxThread(id: string, after?: string) {
     return this.request<SupportThreadWithMessagesDto>(
-      `/support/seller-inbox/threads/${id}`,
+      `/support/seller-inbox/threads/${id}${afterQuery(after)}`,
     );
   }
 
@@ -1784,9 +1811,9 @@ export class ApiClient {
       throw new Error("Invalid conversation");
     return `/chat/${kind === "room" ? "rooms" : "threads"}/${encodeURIComponent(id)}`;
   }
-  chatConversation(conversationId: string) {
+  chatConversation(conversationId: string, after?: string) {
     return this.request<ChatConversationDto>(
-      `${this.chatConversationPath(conversationId)}/messages`,
+      `${this.chatConversationPath(conversationId)}/messages${afterQuery(after)}`,
     );
   }
   sendChatMessage(conversationId: string, body: string, attachment?: ChatAttachmentInput) {

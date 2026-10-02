@@ -10,6 +10,7 @@ import type {
   ChatInboxEntryDto,
   ChatMessageDto,
 } from "@topup-hub/types";
+import { mergeMessages } from "@topup-hub/api-client";
 import { api, isAuthenticated } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ImageWithFallback } from "@/components/ui/image-with-fallback";
@@ -120,6 +121,10 @@ export default function ChatPage() {
   const panelRef = useRef(panel);
   panelRef.current = panel;
   const endRef = useRef<HTMLDivElement>(null);
+  // The last message id the server has sent us for the open conversation. Polls ask only for what
+  // came after it. Deliberately not the id of a message we just sent: one from the other side may
+  // have landed between our last poll and the send, and would then never be fetched.
+  const cursorRef = useRef<string | undefined>(undefined);
   async function refresh() {
     setInbox(await api.chatInbox());
   }
@@ -172,6 +177,7 @@ export default function ChatPage() {
     setConversation(null);
     setError("");
     setGroup(null);
+    cursorRef.current = undefined;
     if (!active) return;
     let alive = true;
     let running = false;
@@ -179,9 +185,17 @@ export default function ChatPage() {
       if (running || document.hidden || panelRef.current) return;
       running = true;
       try {
-        const data = await api.chatConversation(active);
+        const data = await api.chatConversation(active, cursorRef.current);
         if (!alive || panelRef.current || document.hidden) return;
-        setConversation(data);
+        const last = data.messages.at(-1)?.id;
+        if (last) cursorRef.current = last;
+        setConversation((old) =>
+          old && data.incremental
+            ? { ...data, messages: mergeMessages(old.messages, data.messages, true) }
+            : data,
+        );
+        // Nothing new since the last poll: nothing to mark read, so no write every 4 seconds.
+        if (data.incremental && data.messages.length === 0) return;
         await api.markChatRead(active);
         if (alive)
           setInbox((rows) =>

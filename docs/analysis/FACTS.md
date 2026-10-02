@@ -8,19 +8,19 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 24666 | 354 |
-| Web (Next.js) | 10653 | 89 |
-| Admin (Vite) | 14018 | 73 |
+| API (NestJS) | 24732 | 356 |
+| Web (Next.js) | 10693 | 89 |
+| Admin (Vite) | 14035 | 73 |
 | Mobile (Flutter) | 25746 | 130 |
-| packages/types | 2325 | 13 |
-| packages/api-client | 2231 | 6 |
+| packages/types | 2329 | 13 |
+| packages/api-client | 2258 | 6 |
 | packages/i18n | 5127 | 11 |
 
 ## Automated tests
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 79 | 11738 |
+| API (jest) | 80 | 11868 |
 | Mobile (flutter test) | 53 | 7391 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |

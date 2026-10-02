@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient, ApiError, MemoryTokenStore } from "./client.js";
+import { ApiClient, ApiError, MemoryTokenStore, mergeMessages } from "./client.js";
 
 const BASE = "https://api.test/api";
 
@@ -124,5 +124,27 @@ describe("ApiClient request pipeline", () => {
     fetchMock.mockResolvedValueOnce(new Response("", { status: 201 }));
 
     await expect(api.listServices()).resolves.toBeUndefined();
+  });
+});
+
+
+describe("mergeMessages", () => {
+  const m = (id: string, at: string) => ({ id, createdAt: at });
+
+  it("a full read replaces what is held", () => {
+    expect(mergeMessages([m("a", "2026-10-02T10:00:00Z")], [m("b", "2026-10-02T10:01:00Z")], false)).toEqual([
+      m("b", "2026-10-02T10:01:00Z"),
+    ]);
+  });
+
+  it("an incremental read appends, skipping a message already shown (our own send)", () => {
+    const held = [m("a", "2026-10-02T10:00:00Z"), m("mine", "2026-10-02T10:02:00Z")];
+    const incoming = [m("theirs", "2026-10-02T10:01:00Z"), m("mine", "2026-10-02T10:02:00Z")];
+    expect(mergeMessages(held, incoming, true).map((x) => x.id)).toEqual(["a", "theirs", "mine"]);
+  });
+
+  it("an empty incremental read keeps the same array (no re-render)", () => {
+    const held = [m("a", "2026-10-02T10:00:00Z")];
+    expect(mergeMessages(held, [], true)).toBe(held);
   });
 });
