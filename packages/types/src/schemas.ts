@@ -598,6 +598,8 @@ export interface SupportThreadWithUnreadDto extends SupportThreadDto {
 export interface SupportThreadWithMessagesDto {
   thread: SupportThreadDto;
   messages: SupportMessageDto[];
+  /** True when the read was given `after` and `messages` holds only what came later: append. */
+  incremental?: boolean;
 }
 
 export const updateThreadStatusSchema = z.object({

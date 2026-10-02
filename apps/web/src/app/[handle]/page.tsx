@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { GalleryOrderModal } from "@/components/gallery-order-modal";
 import { cn } from "@/lib/utils";
+import { mergeMessages } from "@topup-hub/api-client";
 
 const POLL_MS = 4000;
 
@@ -150,16 +151,24 @@ function SellerChatBox({ sellerId }: { sellerId: string }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // Last message id the server sent (never one we just sent -- see the web chat page).
+  const cursorRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/login");
       return;
     }
+    cursorRef.current = undefined;
     function refresh() {
+      if (document.hidden) return;
       api
-        .getMyThreadWithSeller(sellerId)
-        .then(({ messages }) => setMessages(messages))
+        .getMyThreadWithSeller(sellerId, cursorRef.current)
+        .then(({ messages, incremental }) => {
+          const last = messages.at(-1)?.id;
+          if (last) cursorRef.current = last;
+          setMessages((prev) => mergeMessages(prev, messages, incremental));
+        })
         .catch(() => {});
     }
     refresh();

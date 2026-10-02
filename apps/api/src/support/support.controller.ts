@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { SupportService } from "./support.service";
 import { SendMessageDto } from "./dto/send-message.dto";
@@ -24,8 +24,10 @@ export class SupportController {
   // ---- Customer: platform support ----
 
   @Get("thread")
-  myThread(@CurrentUser() user: AuthedUser) {
-    return this.support.getMyThread(user.userId);
+  // Every thread read takes `?after=<message id>` and then returns only newer messages
+  // (`incremental: true`), so a polling client stops re-downloading the whole conversation.
+  myThread(@CurrentUser() user: AuthedUser, @Query("after") after?: string) {
+    return this.support.getMyThread(user.userId, null, after);
   }
 
   @Post("thread/messages")
@@ -36,8 +38,12 @@ export class SupportController {
   // ---- Customer: chat with a specific seller ----
 
   @Get("seller/:sellerId/thread")
-  myThreadWithSeller(@Param("sellerId") sellerId: string, @CurrentUser() user: AuthedUser) {
-    return this.support.getMyThread(user.userId, sellerId);
+  myThreadWithSeller(
+    @Param("sellerId") sellerId: string,
+    @CurrentUser() user: AuthedUser,
+    @Query("after") after?: string,
+  ) {
+    return this.support.getMyThread(user.userId, sellerId, after);
   }
 
   @Post("seller/:sellerId/thread/messages")
@@ -61,8 +67,8 @@ export class SupportController {
   @UseGuards(RolesGuard)
   @Roles("ADMIN", "MANAGER", "SUPPORT")
   @Get("admin/threads/:id")
-  getThread(@Param("id") id: string) {
-    return this.support.getThreadForStaff(id);
+  getThread(@Param("id") id: string, @Query("after") after?: string) {
+    return this.support.getThreadForStaff(id, after);
   }
 
   @UseGuards(RolesGuard)
@@ -100,9 +106,9 @@ export class SupportController {
   @UseGuards(RolesGuard)
   @Roles("SELLER")
   @Get("seller-inbox/threads/:id")
-  async getSellerThread(@Param("id") id: string, @CurrentUser() user: AuthedUser) {
+  async getSellerThread(@Param("id") id: string, @CurrentUser() user: AuthedUser, @Query("after") after?: string) {
     const sellerId = await this.sellers.requireSellerId(user.userId);
-    return this.support.getThreadForSeller(sellerId, id);
+    return this.support.getThreadForSeller(sellerId, id, after);
   }
 
   @UseGuards(RolesGuard)
