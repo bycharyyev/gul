@@ -7,6 +7,7 @@ import { webSellerDict } from "./dict/web-seller.js";
 import { marketplacePurchaseDict } from "./dict/marketplace-purchase.js";
 import { socialCommerceDict } from "./dict/social-commerce.js";
 import { adminShellDict } from "./dict/admin-shell.js";
+import { authChatDict } from "./dict/auth-chat.js";
 
 export type Dictionary = Record<string, string>;
 
@@ -1050,6 +1051,7 @@ const coreDictionaries: Record<Locale, Dictionary> = {
 // (it has the full status set) so it's spread last to win any wording variance.
 const shardDicts: Record<Locale, Dictionary>[] = [
   webMainDict,
+  authChatDict,
   webSellerDict,
   marketplacePurchaseDict,
   socialCommerceDict,

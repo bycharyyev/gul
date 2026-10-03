@@ -8,8 +8,7 @@ import '../../../app/providers.dart';
 import '../../../core/l10n/strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/brand_mark.dart';
-import 'login_screen.dart';
-import 'register_screen.dart';
+import 'chat_auth_screen.dart';
 
 /// The first screen a signed-out visitor sees.
 ///
@@ -127,7 +126,7 @@ class WelcomeScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () => context.go(RegisterScreen.path),
+                      onPressed: () => context.go(ChatAuthScreen.registerPath),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
                         shape: const StadiumBorder(),
@@ -143,7 +142,7 @@ class WelcomeScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: TextButton(
-                      onPressed: () => context.go(LoginScreen.path),
+                      onPressed: () => context.go(ChatAuthScreen.loginPath),
                       style: TextButton.styleFrom(
                         minimumSize: const Size.fromHeight(50),
                         shape: const StadiumBorder(),

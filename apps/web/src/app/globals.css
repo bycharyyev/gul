@@ -63,3 +63,90 @@ body {
     linear-gradient(#14141f, #14141f),
     linear-gradient(135deg, #8570ff, #2dd4bf);
 }
+
+/* ---- "Crystal" chat sign-in (components/auth-chat). Static gradients and hairlines only: the
+   same no-blur, no-JS-animation rule as above; the only motion is a short CSS entrance per
+   message and the typing dots, both switched off under prefers-reduced-motion. ---- */
+.crystal-bg {
+  background-image:
+    linear-gradient(115deg, transparent 0 38%, rgba(133, 112, 255, 0.10) 38% 52%, transparent 52%),
+    linear-gradient(245deg, transparent 0 55%, rgba(45, 212, 191, 0.10) 55% 66%, transparent 66%),
+    linear-gradient(160deg, transparent 0 70%, rgba(109, 75, 255, 0.08) 70% 82%, transparent 82%),
+    radial-gradient(60% 50% at 12% 8%, rgba(109, 75, 255, 0.18), transparent 60%),
+    radial-gradient(50% 45% at 92% 18%, rgba(20, 184, 166, 0.16), transparent 60%),
+    radial-gradient(45% 40% at 70% 95%, rgba(236, 72, 153, 0.08), transparent 60%),
+    linear-gradient(180deg, #f2f1ff 0%, #f6f5fb 60%);
+}
+.dark .crystal-bg {
+  background-image:
+    linear-gradient(115deg, transparent 0 38%, rgba(133, 112, 255, 0.14) 38% 52%, transparent 52%),
+    linear-gradient(245deg, transparent 0 55%, rgba(45, 212, 191, 0.10) 55% 66%, transparent 66%),
+    linear-gradient(160deg, transparent 0 70%, rgba(109, 75, 255, 0.10) 70% 82%, transparent 82%),
+    radial-gradient(60% 50% at 12% 8%, rgba(109, 75, 255, 0.30), transparent 60%),
+    radial-gradient(50% 45% at 92% 18%, rgba(20, 184, 166, 0.18), transparent 60%),
+    linear-gradient(180deg, #12102a 0%, #0b0b16 60%);
+}
+
+/* A pane of "cut glass": near-opaque surface, an iridescent hairline, a sheen along the top. */
+.crystal-panel {
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 249, 255, 0.92)),
+    linear-gradient(135deg, #a89dff, #ffffff 35%, #2dd4bf 65%, #cbc6ff);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: 0 30px 60px -30px rgba(31, 16, 82, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.dark .crystal-panel {
+  background-image:
+    linear-gradient(180deg, rgba(24, 22, 44, 0.97), rgba(17, 16, 32, 0.96)),
+    linear-gradient(135deg, #5a2fee, rgba(255, 255, 255, 0.18) 35%, #0d9488 65%, #3c1da2);
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.crystal-bubble-bot {
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient(160deg, #ffffff, #f4f2ff),
+    linear-gradient(135deg, rgba(133, 112, 255, 0.45), rgba(45, 212, 191, 0.35));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+.dark .crystal-bubble-bot {
+  background-image:
+    linear-gradient(160deg, #221f3d, #1a1830),
+    linear-gradient(135deg, rgba(133, 112, 255, 0.5), rgba(45, 212, 191, 0.3));
+}
+.crystal-bubble-me {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #7b5cff 0%, #5a2fee 60%, #4a22c9 100%);
+}
+.crystal-bubble-error {
+  border: 1px solid rgba(225, 29, 72, 0.25);
+  background: #fff1f3;
+}
+.dark .crystal-bubble-error {
+  border-color: rgba(251, 113, 133, 0.3);
+  background: #2a1520;
+}
+.crystal-gem {
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0 30%, transparent 30%),
+    linear-gradient(225deg, rgba(255, 255, 255, 0.25) 0 40%, transparent 40%),
+    linear-gradient(135deg, #8570ff 0%, #5a2fee 50%, #14b8a6 100%);
+}
+
+@keyframes crystal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.crystal-in { animation: crystal-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes crystal-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+.crystal-dot { animation: crystal-dot 1.1s infinite ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .crystal-in, .crystal-dot { animation: none; }
+}

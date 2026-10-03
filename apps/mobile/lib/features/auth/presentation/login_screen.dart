@@ -11,7 +11,9 @@ import 'widgets/auth_form_layout.dart';
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
-  static const path = '/login';
+  /// The classic form. `/login` itself is the chat (ChatAuthScreen); this stays one tap away from
+  /// it for password managers and for anyone who prefers a form.
+  static const path = '/login/form';
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
