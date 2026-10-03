@@ -14,7 +14,7 @@ const MENU = Markup.inlineKeyboard([
   [Markup.button.url("🛍 Открыть Gulyaly", SITE_URL)],
   [Markup.button.url("🔒 Политика конфиденциальности", `${SITE_URL}/privacy`)],
   [Markup.button.url("📄 Пользовательское соглашение", `${SITE_URL}/terms`)],
-  [Markup.button.url("💬 Поддержка", `mailto:${SUPPORT_EMAIL}`)],
+  [Markup.button.callback("💬 Поддержка", "support")],
 ]);
 
 @Injectable()
@@ -58,6 +58,12 @@ export class StoreTelegramBotService implements OnModuleInit, OnModuleDestroy {
         `Поддержка Gulyaly: ${SUPPORT_EMAIL}\n\nУкажите номер заказа и кратко опишите вопрос.`,
       ),
     );
+    bot.action("support", async (ctx) => {
+      await ctx.answerCbQuery();
+      return ctx.reply(
+        `Поддержка Gulyaly: ${SUPPORT_EMAIL}\n\nУкажите номер заказа и кратко опишите вопрос.`,
+      );
+    });
     bot.command("paysupport", (ctx) =>
       ctx.reply(
         `Вопросы по платежам принимает Gulyaly: ${SUPPORT_EMAIL}\n\nTelegram и Bot Support не обрабатывают вопросы по покупкам. Укажите номер заказа и способ оплаты.`,
