@@ -35,7 +35,7 @@ export function AuthScreen({ start, classic }: { start: "ask" | "register"; clas
 
   return (
     <div className="crystal-bg min-h-[calc(100dvh-4rem)]">
-      <div className="mx-auto max-w-md px-4 py-6 sm:py-10">
+      <div className="mx-auto max-w-md px-4 pb-24 pt-6 sm:py-10">
         {view === "chat" ? <AuthChat start={start} /> : classic}
         <p className="mt-4 text-center">
           <button

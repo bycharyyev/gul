@@ -409,7 +409,7 @@ export function AuthChat({ start }: { start: "register" | "ask" }) {
             : "off";
 
   return (
-    <div className="crystal-panel flex h-[min(680px,calc(100dvh-7rem))] flex-col overflow-hidden rounded-[28px]">
+    <div className="crystal-panel flex h-[calc(100dvh_-_10.5rem_-_env(safe-area-inset-bottom))] min-h-[420px] flex-col overflow-hidden rounded-[28px] sm:h-[min(680px,calc(100dvh_-_7rem))]">
       <header className="flex items-center gap-3 border-b border-brand-100/70 px-5 py-4 dark:border-white/10">
         <div className="crystal-gem relative h-11 w-11 shrink-0 rotate-45 rounded-[12px]" aria-hidden="true">
           <span className="absolute inset-0 flex -rotate-45 items-center justify-center text-base font-bold text-white">G</span>
