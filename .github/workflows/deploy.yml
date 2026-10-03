@@ -56,6 +56,9 @@ env:
   # both nodes for the same reason as TELEGRAM_BOT_USERNAME above.
   TELEGRAM_ADMIN_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}
   TELEGRAM_ADMIN_BOT_USERNAME: ${{ vars.TELEGRAM_ADMIN_BOT_USERNAME }}
+  # Public storefront bot (@gulyalyshopbot). The token is written only to the primary;
+  # the secondary never polls, avoiding Telegram getUpdates conflicts.
+  TELEGRAM_STORE_BOT_TOKEN: ${{ secrets.TELEGRAM_STORE_BOT_TOKEN }}
 jobs:
   build-and-test:
     # Production is only ever deployed from main. workflow_dispatch can be pointed at any branch,
@@ -351,6 +354,9 @@ jobs:
             # deep link, no polling concern.
             sed -i "/^TELEGRAM_ADMIN_BOT_USERNAME=/d" .env
             echo "TELEGRAM_ADMIN_BOT_USERNAME=${{ env.TELEGRAM_ADMIN_BOT_USERNAME }}" >> .env
+            sed -i "/^TELEGRAM_STORE_BOT_TOKEN=/d" .env
+            echo "TELEGRAM_STORE_BOT_TOKEN=${{ env.TELEGRAM_STORE_BOT_TOKEN }}" >> .env
+            grep -q "^TELEGRAM_STORE_BOT_POLLING=" .env || echo "TELEGRAM_STORE_BOT_POLLING=true" >> .env
 
             set_tag() {
               sed -i "/^IMAGE_TAG=/d" .env

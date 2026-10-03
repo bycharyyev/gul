@@ -4,7 +4,10 @@ import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
-import { RequestIdMiddleware, RequestLoggingInterceptor } from "./common/request-context";
+import {
+  RequestIdMiddleware,
+  RequestLoggingInterceptor,
+} from "./common/request-context";
 import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./storage/storage.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
@@ -48,6 +51,7 @@ import { SellerLedgerModule } from "./seller-ledger/seller-ledger.module";
 import { SocialFeedModule } from "./social-feed/social-feed.module";
 import { SentryAlertsModule } from "./sentry-alerts/sentry-alerts.module";
 import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
+import { StoreTelegramBotModule } from "./store-telegram-bot/store-telegram-bot.module";
 
 @Module({
   imports: [
@@ -104,6 +108,7 @@ import { PlatformSettingsModule } from "./platform-settings/platform-settings.mo
     SocialFeedModule,
     SentryAlertsModule,
     PlatformSettingsModule,
+    StoreTelegramBotModule,
     NotificationsModule,
   ],
   providers: [
