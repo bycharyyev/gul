@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminPaymentMethodDto, AdminServiceInput, CurrencyCode, OrderDetailDto, RateDto, ServiceDto } from "@topup-hub/types";
+import type { AdminPaymentMethodDto, AdminPaymentMethodPatch, AdminServiceInput, PaymentMethodDto, PaymentProviderInfoDto, CurrencyCode, OrderDetailDto, RateDto, ServiceDto } from "@topup-hub/types";
 import { CURRENCY_CODES } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
 import { useTranslation, translateError, LOCALE_BCP47 } from "@topup-hub/i18n";
@@ -410,73 +410,295 @@ function RateRow({
 }
 
 /**
- * Payment methods customers can pick at checkout. A new acquirer's method arrives switched off
- * (ADR-0005) and is switched on here after a sandbox payment went through. The API refuses to
- * enable a method whose adapter is not configured, and only ADMIN may change one.
+ * Payment methods customers can pick at checkout, fully editable: on/off, name, which acquiring
+ * adapter serves it, fee and order, plus new methods for codes that have none. A new acquirer's
+ * method arrives switched off (ADR-0005) and is switched on here after a test payment went
+ * through. The API refuses to enable a method -- or move a live one -- onto an adapter whose keys
+ * are not on the server; only ADMIN may change anything. Keys themselves never pass through the
+ * console: they live in GitHub secrets and are written by the set-*-credentials workflows.
  */
+const PAYMENT_CODES: PaymentMethodDto["code"][] = ["CARD", "SBP", "MIR", "CRYPTO", "MANUAL"];
+
+const PAYMENT_ERRORS: Record<string, string> = {
+  PAYMENT_PROVIDER_NOT_CONFIGURED: "У этого провайдера нет ключей на сервере — включить или переключить на него нельзя",
+  PAYMENT_PROVIDER_UNKNOWN: "Такого провайдера нет в этой версии API",
+  PAYMENT_METHOD_CODE_TAKEN: "Способ с таким кодом уже есть — измените существующий",
+};
+
+function paymentError(err: unknown): string {
+  if (err instanceof ApiError) return PAYMENT_ERRORS[err.message] ?? (err.status === 403 ? "Нужна роль ADMIN" : err.message);
+  return "Не удалось сохранить";
+}
+
 function PaymentMethodsCard() {
   const [methods, setMethods] = useState<AdminPaymentMethodDto[] | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [providers, setProviders] = useState<PaymentProviderInfoDto[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
     api.listAllPaymentMethods().then(setMethods).catch(() => setError("Не удалось загрузить способы оплаты"));
+    api.listPaymentProviders().then(setProviders).catch(() => setProviders([]));
   }
   useEffect(load, []);
 
-  async function toggle(m: AdminPaymentMethodDto) {
-    const next = !m.isEnabled;
-    if (next && !(await confirmAction(`Включить «${m.name}» для всех клиентов?`))) return;
-    setBusyId(m.id);
-    setError(null);
-    try {
-      await api.setPaymentMethodEnabled(m.id, next);
-      load();
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.message === "PAYMENT_PROVIDER_NOT_CONFIGURED"
-          ? "Провайдер не настроен на сервере (нет ключей) — включить нельзя"
-          : "Не удалось изменить (нужна роль ADMIN)",
-      );
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const freeCodes = PAYMENT_CODES.filter((c) => !methods?.some((m) => m.code === c));
 
   return (
     <Card className="p-5">
       <h2 className="font-semibold">Способы оплаты</h2>
       <p className="mb-3 text-xs text-slate-500">
-        Что видят клиенты при оплате. Новый способ включайте только после успешного тестового платежа.
+        Что видят клиенты при оплате. Новый способ включайте только после успешного тестового платежа. Крипту можно
+        переключать между Heleket и CryptoCloud — если один не работает, выберите другой провайдер и сохраните.
       </p>
       {error && <p className="mb-2 text-sm text-rose-600">{error}</p>}
       {!methods ? (
         <p className="text-sm text-slate-400">Загрузка…</p>
       ) : (
-        <div className="divide-y divide-slate-100">
+        <div className="space-y-3">
           {methods.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{m.name}</div>
-                <div className="text-xs text-slate-400">
-                  {m.code} · провайдер {m.provider}
-                  {!m.providerConfigured && <span className="ml-1 text-amber-600">· не настроен</span>}
-                </div>
-              </div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  m.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {m.isEnabled ? "Включён" : "Выключен"}
-              </span>
-              <Button size="sm" variant="secondary" disabled={busyId === m.id} onClick={() => toggle(m)}>
-                {m.isEnabled ? "Выключить" : "Включить"}
-              </Button>
-            </div>
+            <PaymentMethodRow key={m.id} method={m} providers={providers} onSaved={load} />
           ))}
+          {freeCodes.length > 0 && <NewPaymentMethod codes={freeCodes} providers={providers} onCreated={load} />}
         </div>
       )}
+
+      <h3 className="mb-1 mt-5 text-sm font-semibold">Провайдеры на сервере</h3>
+      <div className="divide-y divide-slate-100 text-sm">
+        {providers.map((p) => (
+          <div key={p.key} className="flex items-center justify-between py-1.5">
+            <span>
+              {p.label} <span className="text-xs text-slate-400">({p.key})</span>
+            </span>
+            <span className={p.configured ? "text-xs font-semibold text-emerald-700" : "text-xs text-amber-600"}>
+              {p.configured ? "ключи есть" : "нет ключей"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        Ключи задаются не здесь, а в секретах GitHub и записываются на серверы workflow set-*-credentials — так они не
+        проходят через браузер.
+      </p>
     </Card>
+  );
+}
+
+function PaymentMethodRow({
+  method,
+  providers,
+  onSaved,
+}: {
+  method: AdminPaymentMethodDto;
+  providers: PaymentProviderInfoDto[];
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(method.name);
+  const [provider, setProvider] = useState(method.provider);
+  const [fee, setFee] = useState(String(Number(method.feePercent)));
+  const [order, setOrder] = useState(String(method.sortOrder));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty =
+    name.trim() !== method.name ||
+    provider !== method.provider ||
+    Number(fee.replace(",", ".")) !== Number(method.feePercent) ||
+    Number(order) !== method.sortOrder;
+
+  async function save(patch: AdminPaymentMethodPatch, confirmText?: string) {
+    if (confirmText && !(await confirmAction(confirmText))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updatePaymentMethod(method.id, patch);
+      onSaved();
+    } catch (err) {
+      setError(paymentError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function saveEdits() {
+    const feeNum = Number(fee.replace(",", "."));
+    const orderNum = Number(order);
+    if (!name.trim()) return setError("Название не может быть пустым");
+    if (!Number.isFinite(feeNum) || feeNum < 0 || feeNum > 50) return setError("Комиссия — от 0 до 50 %");
+    if (!Number.isInteger(orderNum) || orderNum < 0) return setError("Порядок — целое число от 0");
+    const patch: AdminPaymentMethodPatch = {};
+    if (name.trim() !== method.name) patch.name = name.trim();
+    if (provider !== method.provider) patch.provider = provider;
+    if (feeNum !== Number(method.feePercent)) patch.feePercent = feeNum;
+    if (orderNum !== method.sortOrder) patch.sortOrder = orderNum;
+    void save(
+      patch,
+      patch.provider && method.isEnabled
+        ? `Переключить «${method.name}» на ${patch.provider}? Новые оплаты пойдут через него сразу.`
+        : undefined,
+    );
+  }
+
+  const known = providers.some((p) => p.key === method.provider);
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">{method.code}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+            method.isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {method.isEnabled ? "Включён" : "Выключен"}
+        </span>
+        {!method.providerConfigured && <span className="text-xs text-amber-600">провайдер без ключей</span>}
+        <Button
+          size="sm"
+          variant="secondary"
+          className="ml-auto"
+          disabled={busy}
+          onClick={() =>
+            void save(
+              { isEnabled: !method.isEnabled },
+              method.isEnabled ? undefined : `Включить «${method.name}» для всех клиентов?`,
+            )
+          }
+        >
+          {method.isEnabled ? "Выключить" : "Включить"}
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[2fr_2fr_1fr_1fr]">
+        <label className="text-xs text-slate-500">
+          Название для клиентов
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+        </label>
+        <label className="text-xs text-slate-500">
+          Провайдер
+          <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
+            {!known && <option value={method.provider}>{method.provider}</option>}
+            {providers.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+                {p.configured ? "" : " — нет ключей"}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-slate-500">
+          Комиссия, %
+          <Input value={fee} onChange={(e) => setFee(e.target.value)} inputMode="decimal" />
+        </label>
+        <label className="text-xs text-slate-500">
+          Порядок
+          <Input value={order} onChange={(e) => setOrder(e.target.value)} inputMode="numeric" />
+        </label>
+      </div>
+      {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+      {dirty && (
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" disabled={busy} onClick={saveEdits}>
+            {busy ? "…" : "Сохранить"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => {
+              setName(method.name);
+              setProvider(method.provider);
+              setFee(String(Number(method.feePercent)));
+              setOrder(String(method.sortOrder));
+              setError(null);
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewPaymentMethod({
+  codes,
+  providers,
+  onCreated,
+}: {
+  codes: PaymentMethodDto["code"][];
+  providers: PaymentProviderInfoDto[];
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState(codes[0]);
+  const [name, setName] = useState("");
+  const [provider, setProvider] = useState(providers[0]?.key ?? "manual");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        + Добавить способ оплаты
+      </Button>
+    );
+  }
+
+  async function create() {
+    if (!name.trim()) return setError("Введите название");
+    setBusy(true);
+    setError(null);
+    try {
+      if (!code) return;
+      await api.createPaymentMethod({ code, name: name.trim(), provider });
+      setOpen(false);
+      setName("");
+      onCreated();
+    } catch (err) {
+      setError(paymentError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-slate-300 p-3">
+      <div className="grid gap-2 sm:grid-cols-[1fr_2fr_2fr]">
+        <label className="text-xs text-slate-500">
+          Код
+          <Select value={code} onChange={(e) => setCode(e.target.value as PaymentMethodDto["code"])}>
+            {codes.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-slate-500">
+          Название для клиентов
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Например, СБП" />
+        </label>
+        <label className="text-xs text-slate-500">
+          Провайдер
+          <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
+            {providers.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+                {p.configured ? "" : " — нет ключей"}
+              </option>
+            ))}
+          </Select>
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">Создаётся выключенным — включите после тестового платежа.</p>
+      {error && <p className="mt-1 text-sm text-rose-600">{error}</p>}
+      <div className="mt-2 flex gap-2">
+        <Button size="sm" disabled={busy} onClick={create}>
+          {busy ? "…" : "Создать"}
+        </Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => setOpen(false)}>
+          Отмена
+        </Button>
+      </div>
+    </div>
   );
 }

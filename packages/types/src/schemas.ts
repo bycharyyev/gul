@@ -58,6 +58,30 @@ export type PaymentMethodDto = z.infer<typeof paymentMethodSchema>;
 /** Admin view: also whether the method's adapter is registered (configured) on the API. */
 export type AdminPaymentMethodDto = PaymentMethodDto & { providerConfigured: boolean };
 
+/** An acquiring adapter the API build has, and whether its keys are present on the answering node. */
+export interface PaymentProviderInfoDto {
+  key: string;
+  label: string;
+  configured: boolean;
+}
+
+/** Admin edit of a payment method: any subset. */
+export interface AdminPaymentMethodPatch {
+  isEnabled?: boolean;
+  name?: string;
+  provider?: string;
+  feePercent?: number;
+  sortOrder?: number;
+}
+
+export interface AdminPaymentMethodCreate {
+  code: PaymentMethodDto["code"];
+  name: string;
+  provider: string;
+  feePercent?: number;
+  sortOrder?: number;
+}
+
 export const createOrderSchema = z.object({
   serviceId: z.string(),
   paymentMethodId: z.string(),

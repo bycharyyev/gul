@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditLogService } from "../audit-log/audit-log.service";
 import type { UpsertServiceDto } from "./dto/upsert-service.dto";
 import type { UpsertRateDto } from "./dto/upsert-rate.dto";
+import type { CreatePaymentMethodDto, SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
 
 @Injectable()
 export class CatalogService {
@@ -43,15 +44,61 @@ export class CatalogService {
    * provider is not registered on this node (e.g. FreeKassa without its credentials), because
    * customers would then get "Unknown payment provider" at checkout.
    */
-  async setPaymentMethodEnabled(id: string, isEnabled: boolean, adminId: string, providerKnown: (key: string) => boolean) {
+  /**
+   * Edits a payment method from the admin console. A method can only be switched on -- or keep
+   * running on a different adapter -- when that adapter has its keys on this node; a method whose
+   * adapter is missing would send customers to a broken checkout.
+   */
+  async updatePaymentMethod(
+    id: string,
+    dto: SetPaymentMethodEnabledDto,
+    adminId: string,
+    providers: { knows: (key: string) => boolean; has: (key: string) => boolean },
+  ) {
     const method = await this.prisma.paymentMethod.findUnique({ where: { id } });
     if (!method) throw new NotFoundException("Payment method not found");
-    if (isEnabled && !providerKnown(method.provider)) {
+    if (dto.provider !== undefined && !providers.knows(dto.provider)) {
+      throw new BadRequestException("PAYMENT_PROVIDER_UNKNOWN");
+    }
+    const provider = dto.provider ?? method.provider;
+    const enabled = dto.isEnabled ?? method.isEnabled;
+    const switchingOn = dto.isEnabled === true && !method.isEnabled;
+    const movingWhileOn = dto.provider !== undefined && dto.provider !== method.provider && enabled;
+    if ((switchingOn || movingWhileOn) && !providers.has(provider)) {
       throw new BadRequestException("PAYMENT_PROVIDER_NOT_CONFIGURED");
     }
-    const updated = await this.prisma.paymentMethod.update({ where: { id }, data: { isEnabled } });
-    this.auditLog.record(adminId, "payment-method.set-enabled", "PaymentMethod", id, { isEnabled, provider: method.provider });
+    const data = {
+      ...(dto.isEnabled !== undefined && { isEnabled: dto.isEnabled }),
+      ...(dto.name !== undefined && { name: dto.name.trim() }),
+      ...(dto.provider !== undefined && { provider: dto.provider }),
+      ...(dto.feePercent !== undefined && { feePercent: dto.feePercent }),
+      ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+    };
+    const updated = await this.prisma.paymentMethod.update({ where: { id }, data });
+    this.auditLog.record(adminId, "payment-method.update", "PaymentMethod", id, {
+      before: { isEnabled: method.isEnabled, provider: method.provider, name: method.name, feePercent: String(method.feePercent), sortOrder: method.sortOrder },
+      changes: data,
+    });
     return updated;
+  }
+
+  /** A method for a code that has none yet (the code is unique). Starts switched off. */
+  async createPaymentMethod(dto: CreatePaymentMethodDto, adminId: string, knows: (key: string) => boolean) {
+    if (!knows(dto.provider)) throw new BadRequestException("PAYMENT_PROVIDER_UNKNOWN");
+    const exists = await this.prisma.paymentMethod.findUnique({ where: { code: dto.code } });
+    if (exists) throw new ConflictException("PAYMENT_METHOD_CODE_TAKEN");
+    const created = await this.prisma.paymentMethod.create({
+      data: {
+        code: dto.code,
+        name: dto.name.trim(),
+        provider: dto.provider,
+        feePercent: dto.feePercent ?? 0,
+        sortOrder: dto.sortOrder ?? 10,
+        isEnabled: false,
+      },
+    });
+    this.auditLog.record(adminId, "payment-method.create", "PaymentMethod", created.id, { code: dto.code, provider: dto.provider });
+    return created;
   }
 
   // ---- Admin mutations ----

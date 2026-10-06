@@ -95,6 +95,9 @@ import type {
   ManagedSubdomainDto,
   PaymentMethodDto,
   AdminPaymentMethodDto,
+  AdminPaymentMethodPatch,
+  AdminPaymentMethodCreate,
+  PaymentProviderInfoDto,
   PaymentInitiationDto,
   PaymentReconciliationDto,
   RateDto,
@@ -384,10 +387,28 @@ export class ApiClient {
 
   /** Admin (ADMIN role): turn a payment method on or off for customers. */
   setPaymentMethodEnabled(id: string, isEnabled: boolean) {
+    return this.updatePaymentMethod(id, { isEnabled });
+  }
+
+  /** Admin (ADMIN role): edit a payment method -- on/off, name, adapter, fee, order. */
+  updatePaymentMethod(id: string, patch: AdminPaymentMethodPatch) {
     return this.request<PaymentMethodDto>(`/catalog/admin/payment-methods/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ isEnabled }),
+      body: JSON.stringify(patch),
     });
+  }
+
+  /** Admin (ADMIN role): a method for a code that has none yet; created switched off. */
+  createPaymentMethod(input: AdminPaymentMethodCreate) {
+    return this.request<PaymentMethodDto>("/catalog/admin/payment-methods", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Admin: acquiring adapters this API build has and whether each has its keys. */
+  listPaymentProviders() {
+    return this.request<PaymentProviderInfoDto[]>("/catalog/admin/payment-providers");
   }
 
   listPaymentMethods() {
