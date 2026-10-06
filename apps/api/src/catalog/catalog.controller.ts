@@ -11,7 +11,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { PublicCacheService } from "../public-cache/public-cache.service";
 import { InvalidatesPublicCache } from "../public-cache/invalidates-public-cache.decorator";
 import { PaymentProviderRegistry } from "../payments/payment-provider.registry";
-import { SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
+import { CreatePaymentMethodDto, SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
 
 @ApiTags("catalog")
 @Controller("catalog")
@@ -59,12 +59,33 @@ export class CatalogController {
   @Roles("ADMIN")
   @Patch("admin/payment-methods/:id")
   @InvalidatesPublicCache("catalog")
-  setPaymentMethodEnabled(
+  updatePaymentMethod(
     @Param("id") id: string,
     @Body() dto: SetPaymentMethodEnabledDto,
     @CurrentUser() user: { userId: string },
   ) {
-    return this.catalog.setPaymentMethodEnabled(id, dto.isEnabled, user.userId, (key) => this.payments.has(key));
+    return this.catalog.updatePaymentMethod(id, dto, user.userId, {
+      knows: (key) => this.payments.knows(key),
+      has: (key) => this.payments.has(key),
+    });
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @Post("admin/payment-methods")
+  @InvalidatesPublicCache("catalog")
+  createPaymentMethod(@Body() dto: CreatePaymentMethodDto, @CurrentUser() user: { userId: string }) {
+    return this.catalog.createPaymentMethod(dto, user.userId, (key) => this.payments.knows(key));
+  }
+
+  /** Every acquiring adapter this build has, and whether its keys are present on this node. */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Get("admin/payment-providers")
+  listPaymentProviders() {
+    return this.payments.catalog();
   }
 
   @ApiBearerAuth()
