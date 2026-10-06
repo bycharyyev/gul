@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { ManualPaymentProvider } from "./providers/manual-payment.provider";
 import { FreeKassaPaymentProvider } from "./providers/freekassa-payment.provider";
+import { HeleketPaymentProvider } from "./providers/heleket-payment.provider";
 import type { PaymentProvider } from "./providers/payment-provider.interface";
 
 /**
@@ -18,11 +19,12 @@ import type { PaymentProvider } from "./providers/payment-provider.interface";
 export class PaymentProviderRegistry {
   private providers = new Map<string, PaymentProvider>();
 
-  constructor(manual: ManualPaymentProvider, freekassa: FreeKassaPaymentProvider) {
+  constructor(manual: ManualPaymentProvider, freekassa: FreeKassaPaymentProvider, heleket: HeleketPaymentProvider) {
     this.register(manual);
     // Only with credentials in .env: an unconfigured deployment does not expose it at all
     // (its webhook URL then answers "Unknown payment provider").
     if (freekassa.isConfigured()) this.register(freekassa);
+    if (heleket.isConfigured()) this.register(heleket);
   }
 
   /** Whether an adapter with this key is registered (configured) on this node. */

@@ -8,7 +8,7 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 26095 | 372 |
+| API (NestJS) | 26370 | 374 |
 | Web (Next.js) | 11431 | 94 |
 | Admin (Vite) | 14411 | 74 |
 | Mobile (Flutter) | 27495 | 132 |
@@ -20,7 +20,7 @@
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 86 | 12460 |
+| API (jest) | 87 | 12587 |
 | Mobile (flutter test) | 54 | 7735 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |
@@ -42,7 +42,7 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 | --- | --- |
 | Models | 74 |
 | Enums | 42 |
-| Migrations | 61 |
+| Migrations | 62 |
 | Migrations carrying allow-destructive | 2 |
 
 ## Clients
@@ -73,12 +73,12 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Metric | Value |
 | --- | --- |
-| GitHub Actions workflows | 45 |
+| GitHub Actions workflows | 46 |
 |   of which run on a schedule | 6 |
 | nginx vhosts (infra/nginx) | 5 |
 | Docker compose files | 3 |
 
-Workflows: api-logs.yml, audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
+Workflows: api-logs.yml, audit-servers.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, failover-to-secondary.yml, fetch-latest-backup.yml, harden-ssh.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, manage-dns.yml, mobile-ci.yml, prepare-secondary-failover.yml, provision-subdomain.yml, prune-images.yml, renew-certs.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-heleket-credentials.yml, set-topup-gateway.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, wire-s3-env.yml.
 
 Scheduled: audit-servers.yml, check-exposed-ports.yml, edge-latency.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml.
 
