@@ -152,15 +152,18 @@ export class CryptoCloudPaymentProvider implements PaymentProvider {
     const info = await this.info(invoiceId);
     if (!info) throw new ServiceUnavailableException("Invoice not yet visible in the CryptoCloud API");
     const result = this.normalise(info);
+    // An invoice without our reference -- the test invoice CryptoCloud's dashboard creates to
+    // check the postback, or one made by hand in their cabinet -- is acknowledged and stored, but
+    // matches no Payment, so it settles nothing (normalise() already refuses SUCCEEDED for it).
+    // Rejecting it instead would fail CryptoCloud's postback check for the project.
     const ref = splitRef(String(info.order_id ?? ""));
-    if (!ref) throw new BadRequestException("Invoice is not one of ours");
     return {
       eventId: `${info.uuid ?? invoiceId}:${info.status ?? ""}`,
       status: result.status,
       amount: result.amount,
       currency: result.currency,
       providerTransactionId: info.uuid ?? `INV-${invoiceId}`,
-      idempotencyKey: ref.idempotencyKey,
+      idempotencyKey: ref?.idempotencyKey,
       providerStatus: result.providerStatus,
       payload: {
         notifiedStatus: typeof fields.status === "string" ? fields.status : null,

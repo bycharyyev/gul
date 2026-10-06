@@ -93,11 +93,11 @@ describe("CryptoCloudPaymentProvider.verifyAndParseWebhook", () => {
     ).resolves.toMatchObject({ status: "UNKNOWN", amount: undefined });
   });
 
-  it("does not settle an invoice that is not ours", async () => {
+  it("acknowledges the dashboard's test invoice (no reference of ours) without settling anything", async () => {
     const { provider } = setup([{ ...PAID, order_id: null }]);
-    await expect(provider.verifyAndParseWebhook(postback({ invoice_id: "ABC12345", token: fresh() }))).rejects.toThrow(
-      "Invoice is not one of ours",
-    );
+    await expect(
+      provider.verifyAndParseWebhook(postback({ invoice_id: "ABC12345", token: fresh() })),
+    ).resolves.toMatchObject({ status: "UNKNOWN", amount: undefined, idempotencyKey: undefined, providerTransactionId: "INV-ABC12345" });
   });
 });
 
