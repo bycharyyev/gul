@@ -28,6 +28,10 @@ on:
       zone:
         description: 'Availability zone, or auto to let Timeweb pick one with free capacity'
         default: 'auto'
+      server_id:
+        description: 'Resume an already-created server (skip creation); empty = create a new one'
+        required: false
+        default: ''
 
 jobs:
   provision:
@@ -66,7 +70,14 @@ jobs:
           fi
           echo "KEY_ID=$id" >> "$GITHUB_ENV"
 
+      - name: Resume an existing server
+        if: inputs.server_id != ''
+        run: |
+          echo "SID=${{ inputs.server_id }}" >> "$GITHUB_ENV"
+          echo "T_CREATED=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Create the server
+        if: inputs.server_id == ''
         run: |
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
           pub=$(cat /tmp/deploy_key.pub)
@@ -105,12 +116,20 @@ jobs:
 
       - name: Wait for the server to be on with a public IPv4
         run: |
-          api() { curl -H "Authorization: Bearer $TOKEN" "$@"; }
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          # Timeweb sells the public IPv4 separately (~200 RUB/mo, hourly) and creates a server
+          # without one unless asked -- the first run waited 20 minutes for an IP that never came.
+          ordered=0
           for i in $(seq 1 120); do
             s=$(api "https://api.timeweb.cloud/api/v1/servers/$SID")
             status=$(echo "$s" | jq -r '.server.status')
             ip=$(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // empty')
             echo "t+$(( $(date +%s) - T_CREATED ))s status=$status ip=${ip:-none}"
+            if [ "$status" = "on" ] && [ -z "$ip" ] && [ "$ordered" = 0 ]; then
+              echo "no public IPv4: ordering one"
+              api -X POST "https://api.timeweb.cloud/api/v1/servers/$SID/ips" -d '{"type":"ipv4"}' | jq -c '.server_ip // .'
+              ordered=1
+            fi
             if [ "$status" = "on" ] && [ -n "$ip" ]; then
               echo "IP=$ip" >> "$GITHUB_ENV"
               echo "T_ON=$(date +%s)" >> "$GITHUB_ENV"
