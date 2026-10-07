@@ -50,5 +50,9 @@ jobs:
           echo "===== servers in the account ====="
           api /api/v1/servers | jq -r '.servers[] | "\(.id)	\(.name)	status=\(.status)	preset=\(.preset_id)	location=\(.location)	zone=\(.availability_zone)	os=\(.os.name) \(.os.version)	ip=\([.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // "none")	created=\(.created_at)"'
 
+          # Separately billed; one can outlive its server.
+          echo "===== floating IPs in the account ====="
+          api /api/v1/floating-ips | jq -c '.ips[]? | {id, ip, resource_type, resource_id, availability_zone}' || echo "(listing failed)"
+
           echo "===== SSH keys in the account (names only) ====="
           api /api/v1/ssh-keys | jq -r '.ssh_keys[] | "\(.id)\t\(.name)"'

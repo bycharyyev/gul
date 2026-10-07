@@ -1,15 +1,21 @@
 name: Delete a Timeweb Cloud server (irreversible)
 
 # Deletes a cloud server -- its disk is gone for good -- and makes sure the separately billed IPv4
-# goes with it. Refuses to touch a server whose address is the primary, the secondary, or still in
+# goes with it. Refuses to touch a server or address that is the primary, the secondary, or still in
 # the gulyaly.com / api / www DNS records, so a wrong id cannot take down a serving node.
+# With server_id empty and ip set, only removes that leftover floating IP (one can outlive its server).
 
 on:
   workflow_dispatch:
     inputs:
       server_id:
-        description: 'Timeweb server id (timeweb-server-catalog lists them)'
-        required: true
+        description: 'Timeweb server id (timeweb-server-catalog lists them); empty = IP cleanup only'
+        required: false
+        default: ''
+      ip:
+        description: 'Also remove this floating IPv4 (needed when the server is already gone)'
+        required: false
+        default: ''
       confirm:
         description: 'Type DELETE to delete the server and its IP'
         required: true
@@ -21,6 +27,7 @@ jobs:
       CURL_HOME: ${{ github.workspace }}/.github/curl
       TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
       SID: ${{ inputs.server_id }}
+      EXTRA_IP: ${{ inputs.ip }}
       PRIMARY: ${{ secrets.DEPLOY_HOST }}
       SECONDARY: ${{ secrets.SECONDARY_HOST }}
     steps:
@@ -32,14 +39,17 @@ jobs:
 
       - uses: actions/checkout@v7
 
-      - name: Check the server is not serving anything
+      - name: Check nothing here is serving
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
-          s=$(api "https://api.timeweb.cloud/api/v1/servers/$SID")
-          echo "$s" | jq -r '.server | "\(.id) \(.name) status=\(.status) location=\(.location)"'
-          ips=$(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip] | join(" ")')
-          echo "ipv4: ${ips:-none}"
+          ips="$EXTRA_IP"
+          if [ -n "$SID" ]; then
+            s=$(api "https://api.timeweb.cloud/api/v1/servers/$SID")
+            echo "$s" | jq -r '.server | "\(.id) \(.name) status=\(.status) location=\(.location)"'
+            ips="$ips $(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip] | join(" ")')"
+          fi
+          echo "ipv4: $ips"
           for ip in $ips; do
             if [ "$ip" = "$PRIMARY" ] || [ "$ip" = "$SECONDARY" ]; then
               echo "refusing: $ip is DEPLOY_HOST or SECONDARY_HOST" >&2; exit 1
@@ -54,12 +64,14 @@ jobs:
           echo "IPS=$ips" >> "$GITHUB_ENV"
 
       - name: Delete the server
+        if: inputs.server_id != ''
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
           api -X DELETE "https://api.timeweb.cloud/api/v1/servers/$SID" | jq -c . || true
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/servers/$SID")
+            # -q: skip .curlrc, whose fail-with-body would turn the 404 we are waiting for into an exit.
+            code=$(curl -q -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/servers/$SID" || true)
             [ "$code" = 404 ] && { echo "server $SID deleted"; break; }
             sleep 10
           done
@@ -69,12 +81,13 @@ jobs:
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
-          left=$( (api https://api.timeweb.cloud/api/v1/floating-ips || echo '{}') | jq -c --arg ips " $IPS " \
-            '[.ips[]? | select(.ip as $x | $ips | contains(" " + $x + " "))]')
-          echo "floating IPs still in the account with this server's addresses: $left"
-          for id in $(echo "$left" | jq -r '.[].id'); do
+          all=$(api https://api.timeweb.cloud/api/v1/floating-ips || echo '{}')
+          echo "floating IPs in the account: $(echo "$all" | jq -c '[.ips[]? | {id, ip, resource_type, resource_id}]')"
+          for id in $(echo "$all" | jq -r --arg ips " $IPS " '.ips[]? | select(.ip as $x | $ips | contains(" " + $x + " ")) | .id'); do
             api -X DELETE "https://api.timeweb.cloud/api/v1/floating-ips/$id" | jq -c . || true
             echo "deleted floating IP $id"
           done
-          echo "--- servers left in the account ---"
-          api https://api.timeweb.cloud/api/v1/servers | jq -r '.servers[] | "\(.id) \(.name) \(.status)"'
+          echo "--- after ---"
+          api https://api.timeweb.cloud/api/v1/floating-ips | jq -c '[.ips[]? | {id, ip}]' || true
+          api https://api.timeweb.cloud/api/v1/servers | jq -r '.servers[] | "server \(.id) \(.name) \(.status)"'
+          api https://api.timeweb.cloud/api/v1/account/finances | jq -c '.finances | {balance, hours_left}' || true
