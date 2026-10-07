@@ -94,7 +94,8 @@ jobs:
             --argjson key "$KEY_ID" \
             --rawfile ci /tmp/cloud-init.yml \
             '{name: $name, preset_id: $preset, os_id: $os, availability_zone: $zone, ssh_keys_ids: [$key], is_ddos_guard: false, cloud_init: $ci}')
-          resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload")
+          # fail-with-body still prints the error JSON; show it instead of dying silently.
+          resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload") || { echo "Timeweb refused:" >&2; echo "$resp" | jq . >&2 || echo "$resp" >&2; exit 1; }
           sid=$(echo "$resp" | jq -r '.server.id')
           [ -n "$sid" ] && [ "$sid" != null ] || { echo "$resp" | jq . >&2; exit 1; }
           echo "server id: $sid"
