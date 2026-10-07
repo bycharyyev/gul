@@ -1,0 +1,35 @@
+name: Host keys (read-only)
+
+# Prints the ed25519 host key of the primary and of an extra host (e.g. a freshly provisioned
+# secondary) as seen from a GitHub runner, and says whether each key is already pinned in
+# SSH_KNOWN_HOSTS. Used to rebuild SSH_KNOWN_HOSTS when the secondary is replaced: the primary's
+# line is only trusted if it matches the pinned one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_host:
+        description: 'Additional host/IP to scan (e.g. the new secondary)'
+        required: false
+        default: ''
+
+jobs:
+  keys:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan and compare
+        env:
+          PINNED: ${{ secrets.SSH_KNOWN_HOSTS }}
+          PRIMARY: ${{ secrets.DEPLOY_HOST }}
+          EXTRA: ${{ inputs.extra_host }}
+        run: |
+          printf '%s\n' "$PINNED" > /tmp/pinned
+          for h in "$PRIMARY" $EXTRA; do
+            line=$(ssh-keyscan -t ed25519 "$h" 2>/dev/null | head -1)
+            key=$(echo "$line" | awk '{print $2" "$3}')
+            if [ -z "$key" ]; then echo "$h: no answer"; continue; fi
+            if grep -qF "$key" /tmp/pinned; then state="MATCHES pinned"; else state="NOT pinned"; fi
+            # The host part of the primary is masked by Actions; the key itself is public.
+            echo "$state :: $line"
+          done
+          rm -f /tmp/pinned
