@@ -58,6 +58,11 @@ on:
         description: 'add-txt-record only: the record value (e.g. a google-site-verification token)'
         required: false
         type: string
+      target_ip:
+        description: 'remove-secondary-a-records only: remove A records pointing at THIS address instead of SECONDARY_HOST (e.g. a replaced secondary)'
+        required: false
+        type: string
+        default: ''
       dry_run:
         description: 'remove-secondary-a-records only: true lists what would be deleted without deleting anything'
         required: false
@@ -189,9 +194,12 @@ jobs:
         if: inputs.step == 'remove-secondary-a-records'
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          TARGET_IP: ${{ inputs.target_ip }}
         run: |
           set -e
-          SEC="${{ secrets.SECONDARY_HOST }}"
+          # After the secondary is replaced, SECONDARY_HOST already names the NEW node; the dead
+          # node's records are removed by passing its address as target_ip.
+          SEC="${TARGET_IP:-${{ secrets.SECONDARY_HOST }}}"
           TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
 
           # GitHub masks $SEC/$PRI wherever they'd print in the log, identically, so a raw record
@@ -533,6 +541,7 @@ jobs:
         env:
           PRIMARY: ${{ secrets.DEPLOY_HOST }}
           SECONDARY: ${{ secrets.SECONDARY_HOST }}
+          TARGET_IP: ${{ inputs.target_ip }}
         run: |
           set -euo pipefail
           has_a() { dig +short A "$1" @ns1.timeweb.ru | grep -qx "$2"; }
@@ -562,7 +571,7 @@ jobs:
             remove-secondary-a-records)
               for name in gulyaly.com api.gulyaly.com www.gulyaly.com; do
                 wait_a "$name" "$PRIMARY" present
-                wait_a "$name" "$SECONDARY" absent
+                wait_a "$name" "${TARGET_IP:-$SECONDARY}" absent
               done
               ;;
           esac
