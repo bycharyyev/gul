@@ -35,7 +35,10 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Pinned host keys, like every other workflow: ssh-keyscan on each run both trusts whatever
+          # answers and fails outright when the host is briefly slow to answer it (2026-10-07).
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Ship vhosts to a scratch dir (deploy user has no write access under /etc)
         run: |
