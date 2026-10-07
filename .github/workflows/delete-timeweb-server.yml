@@ -69,8 +69,8 @@ jobs:
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
-          left=$(api https://api.timeweb.cloud/api/v1/floating-ips | jq -c --arg ips " $IPS " \
-            '[.ips[]? | select(($ips | contains(" " + .ip + " ")))]')
+          left=$( (api https://api.timeweb.cloud/api/v1/floating-ips || echo '{}') | jq -c --arg ips " $IPS " \
+            '[.ips[]? | select(.ip as $x | $ips | contains(" " + $x + " "))]')
           echo "floating IPs still in the account with this server's addresses: $left"
           for id in $(echo "$left" | jq -r '.[].id'); do
             api -X DELETE "https://api.timeweb.cloud/api/v1/floating-ips/$id" | jq -c . || true
