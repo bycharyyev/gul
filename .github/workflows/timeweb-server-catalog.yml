@@ -36,6 +36,14 @@ jobs:
             | .[]
             | "\(.id)\t\(.location)\t\(.cpu) vCPU\t\(.ram/1024) GB RAM\t\(.disk/1024) GB \(.disk_type)\t\(.bandwidth) Mbit\t\(.price) RUB/mo\t\(.description_short // "")"'
 
+          echo "===== smallest presets (witness-sized: up to 2 GB RAM, cheapest first) ====="
+          api /api/v1/presets/servers | jq -r '
+            .server_presets
+            | map(select(.ram <= 2048))
+            | sort_by(.price)
+            | .[:20][]
+            | "\(.id)	\(.location)	\(.cpu) vCPU	\(.ram) MB RAM	\(.disk/1024) GB \(.disk_type)	\(.price) RUB/mo	\(.description_short // "")"'
+
           echo "===== Ubuntu images ====="
           api /api/v1/os/servers | jq -r '.servers_os[] | select(.name == "ubuntu") | "\(.id)\t\(.name) \(.version)\t\(.version_codename // "")"'
 
