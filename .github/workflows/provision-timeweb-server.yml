@@ -26,8 +26,8 @@ on:
         description: 'OS image (99 = Ubuntu 24.04)'
         default: '99'
       zone:
-        description: 'Availability zone'
-        default: 'msk-1'
+        description: 'Availability zone, or auto to let Timeweb pick one with free capacity'
+        default: 'auto'
 
 jobs:
   provision:
@@ -93,7 +93,8 @@ jobs:
             --arg zone "${{ inputs.zone }}" \
             --argjson key "$KEY_ID" \
             --rawfile ci /tmp/cloud-init.yml \
-            '{name: $name, preset_id: $preset, os_id: $os, availability_zone: $zone, ssh_keys_ids: [$key], is_ddos_guard: false, cloud_init: $ci}')
+            '{name: $name, preset_id: $preset, os_id: $os, ssh_keys_ids: [$key], is_ddos_guard: false, cloud_init: $ci}
+             + (if $zone == "" or $zone == "auto" then {} else {availability_zone: $zone} end)')
           # fail-with-body still prints the error JSON; show it instead of dying silently.
           resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload") || { echo "Timeweb refused:" >&2; echo "$resp" | jq . >&2 || echo "$resp" >&2; exit 1; }
           sid=$(echo "$resp" | jq -r '.server.id')
