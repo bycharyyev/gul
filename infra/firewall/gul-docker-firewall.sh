@@ -32,11 +32,15 @@ fi
 apply() {
   cmd=$1
   for port in $PORTS; do
-    # Drop any copy already present before inserting, so running this repeatedly -- which the
-    # timer does -- keeps exactly one rule per port instead of a growing stack of identical ones.
-    while $cmd -C DOCKER-USER -i "$IFACE" -p tcp --dport "$port" ! -s "$SECONDARY" -j DROP 2>/dev/null; do
-      $cmd -D DOCKER-USER -i "$IFACE" -p tcp --dport "$port" ! -s "$SECONDARY" -j DROP
-    done
+    # Remove EVERY DROP rule of ours for this port before inserting, whatever source it names: the
+    # timer re-runs this (one rule per port, not a growing stack), and when the secondary is
+    # replaced the previous one's "! -s OLD -j DROP" must go too -- left in place on 2026-10-07,
+    # it and the new rule together dropped everyone, the new secondary included.
+    $cmd -S DOCKER-USER | grep -- "--dport $port " | grep -- "-j DROP" | sed 's/^-A /-D /' |
+      while read -r rule; do
+        # Word splitting is intended: $rule is an iptables argument list.
+        $cmd $rule
+      done
     # Position 1: DOCKER-USER ends in RETURN, and a rule after that never runs.
     $cmd -I DOCKER-USER 1 -i "$IFACE" -p tcp --dport "$port" ! -s "$SECONDARY" -j DROP
     echo "  $cmd: $port open to $SECONDARY only, on $IFACE"
