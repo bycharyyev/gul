@@ -58,7 +58,10 @@ jobs:
               echo "cp /tmp/gul-docker-firewall.service /etc/systemd/system/"
               echo "cp /tmp/gul-docker-firewall.timer /etc/systemd/system/"
               echo "systemctl daemon-reload"
-              echo "systemctl enable --now gul-docker-firewall.service"
+              echo "systemctl enable gul-docker-firewall.service"
+              # restart, not enable --now: on an already-active unit --now runs nothing, so a new
+              # secondary IP never reached the rules (2026-10-07).
+              echo "systemctl restart gul-docker-firewall.service"
               echo "systemctl enable --now gul-docker-firewall.timer"
               echo "echo --- rules now in DOCKER-USER ---"
               echo "iptables -S DOCKER-USER"
