@@ -92,13 +92,20 @@ jobs:
               echo "set -e"
               echo "command -v nginx >/dev/null 2>&1 || (apt-get update -y && apt-get install -y nginx certbot)"
               # The vhosts use the standalone 'http2 on;' directive (nginx >= 1.25.1). Ubuntu 24.04
-              # ships 1.24, which rejects it; the ondrej/nginx PPA keeps Debian's sites-enabled
-              # layout with a current nginx. A no-op where nginx is already new enough.
+              # ships 1.24, which rejects it. Launchpad PPAs were unreachable from the Timeweb host,
+              # so nginx.org's own repo; its layout lacks Debian's sites-enabled include and runs as
+              # 'nginx', so both are put back to match the primary. A no-op where nginx is new enough.
               echo "if ! nginx -v 2>&1 | awk -F/ '{split(\$2,v,\".\"); exit !(v[1]>1 || (v[1]==1 && v[2]>25) || (v[1]==1 && v[2]==25 && v[3]>=1))}'; then"
-              echo "  DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common"
-              echo "  add-apt-repository -y ppa:ondrej/nginx"
+              echo "  curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor --yes -o /usr/share/keyrings/nginx-archive-keyring.gpg"
+              echo "  echo \"deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/mainline/ubuntu \$(lsb_release -cs) nginx\" > /etc/apt/sources.list.d/nginx.list"
               echo "  apt-get update -y"
-              echo "  DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold nginx"
+              echo "  DEBIAN_FRONTEND=noninteractive apt-get remove -y nginx nginx-common || true"
+              echo "  DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confnew nginx"
+              echo "  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
+              echo "  echo 'include /etc/nginx/sites-enabled/*;' > /etc/nginx/conf.d/00-sites-enabled.conf"
+              echo "  rm -f /etc/nginx/conf.d/default.conf"
+              echo "  sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf"
+              echo "  systemctl enable nginx"
               echo "fi"
               echo "nginx -v"
               echo "tar xzf /tmp/le.tar.gz -C /etc"
