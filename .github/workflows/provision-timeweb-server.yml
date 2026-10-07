@@ -1,0 +1,144 @@
+name: Provision a Timeweb Cloud server (paid)
+
+# Creates a cloud server on Timeweb Cloud and brings it to "deploy can SSH in and run docker":
+# registers the deploy key's PUBLIC half in the account, creates the server with a cloud-init that
+# makes the `deploy` user (key-only, docker group) and installs Docker, waits for the public IP and
+# for cloud-init to finish, and prints the IP and the host key line for SSH_KNOWN_HOSTS. Every
+# stage is timed, so this doubles as the "how fast can we stand up a replacement node" test.
+#
+# COSTS MONEY: Timeweb bills hourly until the server is DELETED (stopping it does not stop
+# billing). It is the app-level workflows (setup-replication, enable-active-active,
+# prepare-secondary-failover) that turn this into a secondary; this one only creates the machine.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type BUY to create a paid server'
+        required: true
+      name:
+        description: 'Server name'
+        default: 'gul-secondary-tw'
+      preset_id:
+        description: 'Preset (4801 = Cloud MSK 50: 2 vCPU / 4 GB / 50 GB, 1000 RUB/mo)'
+        default: '4801'
+      os_id:
+        description: 'OS image (99 = Ubuntu 24.04)'
+        default: '99'
+      zone:
+        description: 'Availability zone'
+        default: 'msk-1'
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    env:
+      CURL_HOME: ${{ github.workspace }}/.github/curl
+      TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
+    steps:
+      - name: Refuse without confirmation
+        if: inputs.confirm != 'BUY'
+        run: |
+          echo "confirm must be BUY" >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Public half of the deploy key
+        run: |
+          umask 077
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > /tmp/deploy_key
+          ssh-keygen -y -f /tmp/deploy_key > /tmp/deploy_key.pub
+          echo "public key: $(cut -d' ' -f1,3 /tmp/deploy_key.pub)"
+          echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Register the key in the Timeweb account (once)
+        run: |
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          body=$(cut -d' ' -f1,2 /tmp/deploy_key.pub)
+          id=$(api https://api.timeweb.cloud/api/v1/ssh-keys | jq -r --arg b "$body" '.ssh_keys[] | select((.body | split(" ")[0:2] | join(" ")) == $b) | .id' | head -1)
+          if [ -z "$id" ]; then
+            id=$(api -X POST https://api.timeweb.cloud/api/v1/ssh-keys \
+              -d "$(jq -n --arg b "$(cat /tmp/deploy_key.pub)" '{name: "gul-deploy", body: $b, is_default: false}')" | jq -r '.ssh_key.id')
+            echo "registered key id $id"
+          else
+            echo "key already registered: id $id"
+          fi
+          echo "KEY_ID=$id" >> "$GITHUB_ENV"
+
+      - name: Create the server
+        run: |
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          pub=$(cat /tmp/deploy_key.pub)
+          # Written with printf, not a heredoc: heredocs inside run blocks have bitten this repo.
+          printf '%s\n' \
+            '#cloud-config' \
+            'package_update: true' \
+            'users:' \
+            '  - default' \
+            '  - name: deploy' \
+            '    shell: /bin/bash' \
+            '    ssh_authorized_keys:' \
+            "      - $pub" \
+            'runcmd:' \
+            '  - [sh, -c, "curl -fsSL https://get.docker.com | sh"]' \
+            '  - [usermod, -aG, docker, deploy]' \
+            '  - [mkdir, -p, /opt/gul-secondary]' \
+            '  - [chown, deploy:deploy, /opt/gul-secondary]' \
+            > /tmp/cloud-init.yml
+          payload=$(jq -n \
+            --arg name "${{ inputs.name }}" \
+            --argjson preset "${{ inputs.preset_id }}" \
+            --argjson os "${{ inputs.os_id }}" \
+            --arg zone "${{ inputs.zone }}" \
+            --argjson key "$KEY_ID" \
+            --rawfile ci /tmp/cloud-init.yml \
+            '{name: $name, preset_id: $preset, os_id: $os, availability_zone: $zone, ssh_keys_ids: [$key], is_ddos_guard: false, cloud_init: $ci}')
+          resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload")
+          sid=$(echo "$resp" | jq -r '.server.id')
+          [ -n "$sid" ] && [ "$sid" != null ] || { echo "$resp" | jq . >&2; exit 1; }
+          echo "server id: $sid"
+          echo "SID=$sid" >> "$GITHUB_ENV"
+          echo "T_CREATED=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Wait for the server to be on with a public IPv4
+        run: |
+          api() { curl -H "Authorization: Bearer $TOKEN" "$@"; }
+          for i in $(seq 1 120); do
+            s=$(api "https://api.timeweb.cloud/api/v1/servers/$SID")
+            status=$(echo "$s" | jq -r '.server.status')
+            ip=$(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // empty')
+            echo "t+$(( $(date +%s) - T_CREATED ))s status=$status ip=${ip:-none}"
+            if [ "$status" = "on" ] && [ -n "$ip" ]; then
+              echo "IP=$ip" >> "$GITHUB_ENV"
+              echo "T_ON=$(date +%s)" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "server did not come up within 20 minutes" >&2
+          exit 1
+
+      - name: Wait for SSH as deploy and for cloud-init (Docker) to finish
+        run: |
+          for i in $(seq 1 90); do
+            if ssh -i /tmp/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes "deploy@$IP" true 2>/dev/null; then
+              echo "T_SSH=$(date +%s)" >> "$GITHUB_ENV"; break
+            fi
+            sleep 10
+          done
+          ssh -i /tmp/deploy_key -o BatchMode=yes "deploy@$IP" 'cloud-init status --wait > /dev/null; cloud-init status; docker --version; docker compose version' < /dev/null
+          echo "T_READY=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Summary (IP, host key, timings)
+        run: |
+          echo "IP: $IP"
+          echo "Timeweb server id: $SID"
+          echo "--- SSH_KNOWN_HOSTS line(s) for this host ---"
+          ssh-keyscan -t ed25519 "$IP" 2>/dev/null
+          echo "--- timings ---"
+          echo "API create -> powered on with IP : $(( T_ON - T_CREATED ))s"
+          echo "powered on -> SSH as deploy      : $(( ${T_SSH:-$T_READY} - T_ON ))s"
+          echo "SSH -> Docker ready (cloud-init) : $(( T_READY - ${T_SSH:-$T_READY} ))s"
+          echo "TOTAL from workflow start        : $(( T_READY - T0 ))s"
+          rm -f /tmp/deploy_key
