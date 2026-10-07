@@ -22,6 +22,10 @@ on:
         description: 'Report what would change without touching DNS or sending Telegram'
         type: boolean
         default: false
+      test_alert:
+        description: 'Also send one test message to Telegram (proves alerts reach you)'
+        type: boolean
+        default: false
 
 concurrency:
   group: dns-changes
@@ -38,6 +42,7 @@ jobs:
       TG_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}
       TG_CHAT: ${{ vars.ADMIN_TELEGRAM_CHAT_ID }}
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      TEST_ALERT: ${{ inputs.test_alert || 'false' }}
     steps:
       - name: Probe, decide, act
         run: |
@@ -108,6 +113,7 @@ jobs:
           wait
           P=$(cat /tmp/p); S=$(cat /tmp/s)
           echo "primary=$P secondary=$S"
+          [ "$TEST_ALERT" = "true" ] && tg "🔔 Gulyaly сторож: тестовое сообщение. Сейчас основной: $P, запасной: $S."
 
           check_node() { # check_node <ip> <label> <state> <other_state> [note]
             local ip=$1 label=$2 state=$3 other=$4 note=${5:-}
