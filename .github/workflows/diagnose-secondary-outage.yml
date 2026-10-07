@@ -1,0 +1,59 @@
+name: Diagnose secondary outage (read-only)
+
+# One-off, read-only. Answers "when exactly did the secondary go away, and who noticed": the
+# primary's view of the streaming replica, the primary Postgres/Redis logs around the outage, and
+# the last time the secondary's app containers talked to the primary. Changes nothing anywhere.
+# Delete after the incident (see the devops skill: one-off workflows are removed once used).
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Log window start (UTC, docker --since format)'
+        required: false
+        default: '2026-10-06T22:30:00'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Primary's view of the replica and of the secondary's connections
+        env:
+          PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+          SINCE: ${{ inputs.since }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$PRIMARY" "SECONDARY_IP='$SECONDARY_IP' SINCE='$SINCE' bash -s" <<'EOF'
+          cd /opt/gul
+          echo "===== now (UTC) ====="; date -u
+          echo "===== pg_stat_replication (empty = replica disconnected) ====="
+          docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT client_addr, state, sync_state, reply_time FROM pg_stat_replication;"' < /dev/null
+          echo "===== replication slots ====="
+          docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT slot_name, active, restart_lsn FROM pg_replication_slots;"' < /dev/null
+          echo "===== current DB sessions from the secondary ====="
+          docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"SELECT count(*), max(backend_start) FROM pg_stat_activity WHERE client_addr = '$SECONDARY_IP';\"" < /dev/null
+          echo "===== postgres log lines about replication / disconnects since $SINCE ====="
+          docker compose logs --no-color --timestamps --since "$SINCE" postgres 2>&1 \
+            | grep -iE "walsender|replica|terminat|could not|timeout|unexpected EOF|connection reset|$SECONDARY_IP" | tail -60
+          echo "===== redis clients from the secondary ====="
+          docker compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning client list 2>/dev/null || redis-cli client list' < /dev/null | grep -c "addr=$SECONDARY_IP" || true
+          echo "===== host kernel/network messages since $SINCE (dmesg tail) ====="
+          dmesg -T 2>/dev/null | tail -20 || echo "dmesg not readable as deploy"
+          EOF
+
+      - name: External reachability of the secondary right now
+        env:
+          SECONDARY_IP: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          for p in 22 80 443; do
+            if timeout 6 bash -c "</dev/tcp/$SECONDARY_IP/$p" 2>/dev/null; then echo "port $p OPEN"; else echo "port $p closed/timeout"; fi
+          done
+          ping -c 3 -W 2 "$SECONDARY_IP" > /dev/null 2>&1 && echo "ICMP: answers" || echo "ICMP: no answer"
