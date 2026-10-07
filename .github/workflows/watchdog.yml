@@ -1,0 +1,134 @@
+name: Watchdog (node health -> DNS + Telegram)
+
+# Every 5 minutes (the shortest GitHub schedule; runs can start a few minutes late), probe each
+# node's /api/health/ready over real HTTPS with certificate verification -- the same request a
+# visitor's browser makes, pinned to that node's address. ready = the app AND its database answer.
+#
+# Decisions, all stateless (the DNS zone itself is the state, so a missed or late run is harmless):
+#   one node down, the other up   -> remove the dead node's A records (apex, api, www) + alert
+#   a removed node healthy again  -> put its A records back                            + alert
+#   both nodes down               -> touch nothing (removing records would only make it worse) + alert
+# The last live address is never removed. admin.gulyaly.com is single-node by design and only alerted on.
+#
+# Interim: GitHub's 5-minute schedule is the floor. The planned witness node (HA plan, step 2) will
+# run the same logic every 30 s; this workflow then stays as the outside, independent second check.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report what would change without touching DNS or sending Telegram'
+        type: boolean
+        default: false
+
+concurrency:
+  group: dns-changes
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_HOST }}
+      SECONDARY: ${{ secrets.SECONDARY_HOST }}
+      TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
+      TG_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN }}
+      TG_CHAT: ${{ vars.ADMIN_TELEGRAM_CHAT_ID }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+    steps:
+      - name: Probe, decide, act
+        run: |
+          set -u
+
+          # healthy <ip>: 3 probes ~20 s apart; healthy if ANY succeeds (one lost packet is not an
+          # outage), down only if all three fail.
+          healthy() {
+            for i in 1 2 3; do
+              code=$(curl -s -o /dev/null -m 10 --resolve "api.gulyaly.com:443:$1" -w '%{http_code}:%{ssl_verify_result}' \
+                https://api.gulyaly.com/api/health/ready || true)
+              [ "$code" = "200:0" ] && return 0
+              [ "$i" -lt 3 ] && sleep 20
+            done
+            return 1
+          }
+
+          tg() { # tg <text>
+            echo "TELEGRAM: $1"
+            [ "$DRY_RUN" = "true" ] && return 0
+            [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] || { echo "  (no Telegram configured)"; return 0; }
+            curl -s -o /dev/null -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              --data-urlencode "chat_id=$TG_CHAT" --data-urlencode "text=$1" || true
+          }
+
+          # ids of A records with value <ip> under <fqdn>, via the Timeweb API listing.
+          a_ids() {
+            curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$1/dns-records" \
+              | IP="$2" python3 -c '
+          import json, os, sys
+          try: recs = json.load(sys.stdin)["dns_records"]
+          except Exception: recs = []
+          for r in recs:
+              if r.get("type") == "A" and r.get("data", {}).get("value") == os.environ["IP"]:
+                  print(r["id"])'
+          }
+
+          remove_node() { # remove_node <ip>
+            for fqdn in gulyaly.com api.gulyaly.com www.gulyaly.com; do
+              for id in $(a_ids "$fqdn" "$1"); do
+                [ "$DRY_RUN" = "true" ] && { echo "  would delete $fqdn record $id"; continue; }
+                # Apex records delete by the apex path, subdomain ones by their own fqdn; try both.
+                curl -s -o /dev/null -X DELETE "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records/$id" -H "Authorization: Bearer $TOKEN"
+                [ "$fqdn" != gulyaly.com ] && curl -s -o /dev/null -X DELETE "https://api.timeweb.cloud/api/v2/domains/$fqdn/dns-records/$id" -H "Authorization: Bearer $TOKEN"
+                echo "  deleted $fqdn record $id"
+              done
+            done
+          }
+
+          add_node() { # add_node <ip>
+            for fqdn in gulyaly.com api.gulyaly.com www.gulyaly.com; do
+              [ -n "$(a_ids "$fqdn" "$1")" ] && continue
+              [ "$DRY_RUN" = "true" ] && { echo "  would add $fqdn"; continue; }
+              curl -s -o /dev/null -X POST "https://api.timeweb.cloud/api/v2/domains/$fqdn/dns-records" \
+                -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+                -d "{\"type\": \"A\", \"value\": \"$1\", \"ttl\": 300}"
+              echo "  added $fqdn"
+            done
+          }
+
+          # The Timeweb API, not a nameserver: the served zone lags a change by minutes, and a run
+          # that still "saw" a just-deleted record would announce the same removal again.
+          in_dns() { [ -n "$(a_ids gulyaly.com "$1")$(a_ids api.gulyaly.com "$1")$(a_ids www.gulyaly.com "$1")" ]; }
+
+          # Probe both nodes in parallel so one run stays ~1 minute.
+          (healthy "$PRIMARY" && echo up || echo down) > /tmp/p &
+          (healthy "$SECONDARY" && echo up || echo down) > /tmp/s &
+          wait
+          P=$(cat /tmp/p); S=$(cat /tmp/s)
+          echo "primary=$P secondary=$S"
+
+          check_node() { # check_node <ip> <label> <state> <other_state> [note]
+            local ip=$1 label=$2 state=$3 other=$4 note=${5:-}
+            if [ "$state" = down ] && [ "$other" = up ]; then
+              if in_dns "$ip"; then
+                remove_node "$ip"
+                tg "⚠️ Gulyaly: $label сервер не отвечает — убран из DNS, посетители идут на второй сервер.$note"
+              else
+                echo "$label: down and already out of DNS"
+              fi
+            elif [ "$state" = up ]; then
+              if ! in_dns "$ip"; then
+                add_node "$ip"
+                tg "✅ Gulyaly: $label сервер снова отвечает — возвращён в DNS."
+              fi
+            fi
+          }
+
+          if [ "$P" = down ] && [ "$S" = down ]; then
+            tg "🚨 Gulyaly: НЕ ОТВЕЧАЮТ ОБА сервера. Сайт недоступен. DNS не трогаю. Вероятно, упала база на основном сервере — может понадобиться failover-to-secondary."
+          else
+            check_node "$PRIMARY" "основной" "$P" "$S" " База жива (запасной отвечает). Админка admin.gulyaly.com есть только на основном — пока недоступна."
+            check_node "$SECONDARY" "запасной" "$S" "$P"
+          fi
