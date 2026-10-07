@@ -1,7 +1,12 @@
 name: Set up Postgres streaming replication to secondary
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      rebase:
+        description: 'Re-take the standby from scratch (its WAL position is gone from the primary). The old data is MOVED to a dated volume, not deleted.'
+        type: boolean
+        default: false
 
 jobs:
   primary:
@@ -91,11 +96,23 @@ jobs:
         env:
           REPL_PASS: ${{ secrets.REPLICATOR_PASSWORD }}
           PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+          REBASE: ${{ inputs.rebase || 'false' }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
-            "REPL_PASS='$REPL_PASS' PRIMARY_IP='$PRIMARY_IP' bash -s" <<'REMOTE'
+            "REPL_PASS='$REPL_PASS' PRIMARY_IP='$PRIMARY_IP' REBASE='$REBASE' bash -s" <<'REMOTE'
             set -e
             docker volume create pg-standby-data >/dev/null
+
+            # rebase: a standby that was offline too long asks for WAL the primary already recycled
+            # ("requested WAL segment ... has already been removed") and can never catch up. Move
+            # its data aside (kept, not deleted) so the basebackup below starts from empty.
+            if [ "$REBASE" = "true" ]; then
+              docker rm -f pg-standby >/dev/null 2>&1 || true
+              keep="pg-standby-data-stale-$(date +%Y%m%d%H%M%S)"
+              docker volume create "$keep" >/dev/null
+              docker run --rm -v pg-standby-data:/from -v "$keep":/to alpine sh -c 'cp -a /from/. /to/ && find /from -mindepth 1 -delete'
+              echo "old standby data kept in volume $keep"
+            fi
 
             # Idempotent: skip the basebackup if the volume already has data in it (a rerun of
             # this workflow shouldn't blow away an already-streaming replica).
