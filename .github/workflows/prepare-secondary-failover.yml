@@ -91,6 +91,16 @@ jobs:
               echo "#!/bin/sh"
               echo "set -e"
               echo "command -v nginx >/dev/null 2>&1 || (apt-get update -y && apt-get install -y nginx certbot)"
+              # The vhosts use the standalone 'http2 on;' directive (nginx >= 1.25.1). Ubuntu 24.04
+              # ships 1.24, which rejects it; the ondrej/nginx PPA keeps Debian's sites-enabled
+              # layout with a current nginx. A no-op where nginx is already new enough.
+              echo "if ! nginx -v 2>&1 | awk -F/ '{split(\$2,v,\".\"); exit !(v[1]>1 || (v[1]==1 && v[2]>25) || (v[1]==1 && v[2]==25 && v[3]>=1))}'; then"
+              echo "  DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common"
+              echo "  add-apt-repository -y ppa:ondrej/nginx"
+              echo "  apt-get update -y"
+              echo "  DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::=--force-confold nginx"
+              echo "fi"
+              echo "nginx -v"
               echo "tar xzf /tmp/le.tar.gz -C /etc"
               echo "rm -f /tmp/le.tar.gz"
               echo "mkdir -p /var/www/certbot"
