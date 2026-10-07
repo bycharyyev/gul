@@ -39,5 +39,8 @@ jobs:
           echo "===== Ubuntu images ====="
           api /api/v1/os/servers | jq -r '.servers_os[] | select(.name == "ubuntu") | "\(.id)\t\(.name) \(.version)\t\(.version_codename // "")"'
 
+          echo "===== servers in the account ====="
+          api /api/v1/servers | jq -r '.servers[] | "\(.id)	\(.name)	status=\(.status)	preset=\(.preset_id)	location=\(.location)	zone=\(.availability_zone)	os=\(.os.name) \(.os.version)	ip=\([.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // "none")	created=\(.created_at)"'
+
           echo "===== SSH keys in the account (names only) ====="
           api /api/v1/ssh-keys | jq -r '.ssh_keys[] | "\(.id)\t\(.name)"'
