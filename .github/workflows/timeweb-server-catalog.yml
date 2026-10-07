@@ -1,0 +1,43 @@
+name: Timeweb server catalog (read-only)
+
+# Read-only. Lists what a new secondary VPS on Timeweb Cloud could be: server presets with price,
+# CPU/RAM/disk and location, the available locations, Ubuntu images, the SSH keys already in the
+# account and the account balance. Buys nothing -- creating a server is a separate, explicitly
+# approved workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    env:
+      CURL_HOME: ${{ github.workspace }}/.github/curl
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Query the Timeweb Cloud API
+        env:
+          TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
+        run: |
+          api() { curl -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud$1"; }
+
+          echo "===== account balance ====="
+          api /api/v1/account/finances | jq '.finances | {balance, currency, hours_left, autopay_card_info: (.autopay_card_info != null)}'
+
+          echo "===== locations ====="
+          api /api/v2/locations | jq -r '.locations[] | "\(.location)\t\(.location_code // "")\tzones=\(.availability_zones // [] | join(","))"'
+
+          echo "===== server presets (4+ GB RAM, cheapest first per location) ====="
+          api /api/v1/presets/servers | jq -r '
+            .server_presets
+            | map(select(.ram >= 4096))
+            | sort_by(.location, .price)
+            | .[]
+            | "\(.id)\t\(.location)\t\(.cpu) vCPU\t\(.ram/1024) GB RAM\t\(.disk/1024) GB \(.disk_type)\t\(.bandwidth) Mbit\t\(.price) RUB/mo\t\(.description_short // "")"'
+
+          echo "===== Ubuntu images ====="
+          api /api/v1/os/servers | jq -r '.servers_os[] | select(.name == "ubuntu") | "\(.id)\t\(.name) \(.version)\t\(.version_codename // "")"'
+
+          echo "===== SSH keys in the account (names only) ====="
+          api /api/v1/ssh-keys | jq -r '.ssh_keys[] | "\(.id)\t\(.name)"'
