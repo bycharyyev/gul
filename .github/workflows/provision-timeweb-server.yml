@@ -148,7 +148,15 @@ jobs:
             fi
             sleep 10
           done
-          ssh -i /tmp/deploy_key -o BatchMode=yes "deploy@$IP" 'cloud-init status --wait > /dev/null; cloud-init status; docker --version; docker compose version' < /dev/null
+          ssh -i /tmp/deploy_key -o BatchMode=yes "deploy@$IP" 'cloud-init status --wait > /dev/null; cloud-init status' < /dev/null
+          # cloud-init runs at first boot -- before a separately ordered IPv4 exists, so its Docker
+          # download can fail for lack of internet. Catch up as root (Timeweb installs the same key
+          # for root via ssh_keys_ids); idempotent when Docker is already there.
+          if ! ssh -i /tmp/deploy_key -o BatchMode=yes "deploy@$IP" 'command -v docker' < /dev/null > /dev/null; then
+            echo "Docker missing after cloud-init: installing as root"
+            ssh -i /tmp/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new "root@$IP"               'curl -fsSL https://get.docker.com | sh > /tmp/docker-install.log 2>&1 || { tail -20 /tmp/docker-install.log; exit 1; }; usermod -aG docker deploy; mkdir -p /opt/gul-secondary; chown deploy:deploy /opt/gul-secondary' < /dev/null
+          fi
+          ssh -i /tmp/deploy_key -o BatchMode=yes "deploy@$IP" 'docker --version; docker compose version' < /dev/null
           echo "T_READY=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Summary (IP, host key, timings)
