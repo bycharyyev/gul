@@ -1,0 +1,35 @@
+name: Secondary network check (read-only)
+
+# Read-only: what address the secondary leaves the internet from (it must equal SECONDARY_HOST,
+# since the primary's firewall and pg_hba allow exactly that), its interfaces and routes, and
+# whether it reaches the primary's 5432 / 6379 / 443.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inspect from the secondary
+        env:
+          SECONDARY: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+          PRIMARY_IP: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SECONDARY" "
+            echo '--- egress address as seen by the internet ---'
+            curl -s --max-time 10 https://api.ipify.org; echo
+            echo '--- addresses ---'; ip -4 -brief addr
+            echo '--- routes ---'; ip -4 route
+            for p in 443 5432 6379; do
+              if timeout 5 bash -c \"exec 3<>/dev/tcp/$PRIMARY_IP/\$p\" 2>/dev/null; then echo \"primary:\$p reachable\"; else echo \"primary:\$p BLOCKED\"; fi
+            done
+          " < /dev/null
