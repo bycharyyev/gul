@@ -112,6 +112,9 @@ jobs:
               echo "echo prepared"
             } > /tmp/prep.sh
             chmod +x /tmp/prep.sh
-            docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/prep.sh
+            # --network=host: apt-get inside the chroot resolves through the host's systemd-resolved
+            # stub (127.0.0.53), which only exists in the host network namespace. Without it a fresh
+            # host (nginx not yet installed) failed every download with "Temporary failure resolving".
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/prep.sh
             rm -f /tmp/prep.sh
           REMOTE
