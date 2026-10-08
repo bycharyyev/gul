@@ -347,7 +347,7 @@ jobs:
           # Certificates from the survivor (the same wildcard pair both nodes serve).
           # The archive holds the private key: owned by deploy, mode 600, and removed by a container
           # too (a root-owned file in sticky /tmp cannot be deleted by deploy -- first drill).
-          ssh "$PS" "docker run --rm -e U=\$(id -u) -e G=\$(id -g) -v /etc/ssl/gulyaly:/c:ro -v /tmp:/o alpine sh -c 'umask 077 && tar czf /o/gulcert.tgz -C /c . && chown \$U:\$G /o/gulcert.tgz'" < /dev/null
+          ssh "$PS" "docker run --rm -e U=\$(id -u) -e G=\$(id -g) -v /etc/ssl/gulyaly:/c:ro -v /tmp:/o -v /etc/letsencrypt:/le:ro alpine sh -c 'umask 077 && mkdir -p /tmp/b/le && cp -a /c/. /tmp/b/ && cp /le/options-ssl-nginx.conf /le/ssl-dhparams.pem /tmp/b/le/ && tar czf /o/gulcert.tgz -C /tmp/b . && chown \$U:\$G /o/gulcert.tgz'" < /dev/null
           scp -q "$PS:/tmp/gulcert.tgz" gulcert.tgz
           ssh "$PS" "docker run --rm -v /tmp:/o alpine rm -f /o/gulcert.tgz" < /dev/null
           ssh "deploy@$H" "mkdir -p /tmp/nginx-sync" < /dev/null
@@ -364,7 +364,8 @@ jobs:
             echo 'rm -f /etc/nginx/conf.d/default.conf'
             echo "sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf"
             echo 'chown -R www-data:www-data /var/cache/nginx'
-            echo 'tar xzf /tmp/gulcert.tgz -C /etc/ssl/gulyaly && chmod 600 /etc/ssl/gulyaly/privkey.pem && rm -f /tmp/gulcert.tgz'
+            # The vhosts also include certbot's shared TLS options and dhparams from /etc/letsencrypt.
+            echo 'mkdir -p /tmp/gc /etc/letsencrypt && tar xzf /tmp/gulcert.tgz -C /tmp/gc && mv /tmp/gc/le/* /etc/letsencrypt/ && rmdir /tmp/gc/le && cp -a /tmp/gc/. /etc/ssl/gulyaly/ && rm -rf /tmp/gc /tmp/gulcert.tgz && chmod 600 /etc/ssl/gulyaly/privkey.pem'
             echo 'cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/ && rm -rf /tmp/nginx-sync'
             echo 'for f in /etc/nginx/sites-available/*.conf; do ln -sf "$f" "/etc/nginx/sites-enabled/$(basename "$f")"; done'
             echo 'nginx -t && systemctl enable --now nginx && systemctl reload nginx'
