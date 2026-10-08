@@ -1,0 +1,91 @@
+name: Patroni failover drill / switchover
+
+# drill:      stops the leader's gul-pg (as if the node lost its database), proves the other node
+#             takes over on its own and the site answers on BOTH nodes through HAProxy, then starts
+#             the stopped member again and proves it rejoins as a replica. Measures the gap.
+# switchover: planned, clean move of the leader to `candidate` (e.g. back to gul-a after a drill).
+# status:     patronictl list, read-only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [status, drill, switchover]
+        default: status
+      candidate:
+        description: 'switchover only: gul-a or gul-b'
+        default: 'gul-a'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' > ~/.ssh/config
+
+      - name: Status
+        run: ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+
+      - name: Switchover
+        if: inputs.action == 'switchover'
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          set -e
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml switchover gul --candidate '$CANDIDATE' --force" < /dev/null
+          sleep 15
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+
+      - name: Drill -- kill the leader's database, measure, bring it back
+        if: inputs.action == 'drill'
+        run: |
+          set -e
+          site() { # site <ip> -> http code of /api/health/ready (app + database) on that node
+            curl -s -o /dev/null -m 8 --resolve "api.gulyaly.com:443:$1" -w '%{http_code}' https://api.gulyaly.com/api/health/ready || true
+          }
+          # The runner cannot reach :8008 (firewalled), so ask the nodes themselves.
+          if ssh "$PA" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary" < /dev/null | grep -qx 200; then
+            LEAD="$PA"; OTHER="$PB"
+          else
+            LEAD="$PB"; OTHER="$PA"
+          fi
+          echo "stopping gul-pg on the current leader"
+          t0=$(date +%s)
+          ssh "$LEAD" "docker stop -t 30 gul-pg >/dev/null" < /dev/null
+          for i in $(seq 1 60); do
+            code=$(ssh "$OTHER" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary" < /dev/null || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          [ "$code" = 200 ] || { echo "the other node did NOT take over" >&2; exit 1; }
+          echo "new leader after $(( $(date +%s) - t0 )) s"
+          for i in $(seq 1 30); do
+            a=$(site "$A"); b=$(site "$B")
+            [ "$a" = 200 ] && [ "$b" = 200 ] && break
+            sleep 2
+          done
+          echo "site through both nodes: $a / $b, $(( $(date +%s) - t0 )) s after the stop"
+          [ "$a" = 200 ] && [ "$b" = 200 ]
+          echo "starting the old leader again"
+          ssh "$LEAD" "docker start gul-pg >/dev/null" < /dev/null
+          for i in $(seq 1 60); do
+            code=$(ssh "$LEAD" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/replica" < /dev/null || true)
+            [ "$code" = 200 ] && break
+            sleep 3
+          done
+          [ "$code" = 200 ] || { echo "the old leader did not rejoin as a replica" >&2; exit 1; }
+          echo "old leader rejoined as a replica"
+          sleep 10
+          ssh "$OTHER" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
