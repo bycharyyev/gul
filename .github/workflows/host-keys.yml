@@ -33,3 +33,12 @@ jobs:
             echo "$state :: $line"
           done
           rm -f /tmp/pinned
+
+      - name: Deploy key, public half (paste into a new host's authorized_keys)
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$KEY" > /tmp/k
+          echo "DEPLOY_PUBKEY: $(ssh-keygen -y -f /tmp/k)"
+          rm -f /tmp/k
