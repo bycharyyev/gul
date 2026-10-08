@@ -89,7 +89,7 @@ jobs:
           curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 300}'
+            -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 60}'
           echo
           echo "Registering wildcard subdomain *"
           curl -s -X POST "https://api.timeweb.cloud/api/v1/domains/gulyaly.com/subdomains/*"  \
@@ -99,7 +99,7 @@ jobs:
           curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/*.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 300}'
+            -d '{"type": "A", "value": "${{ secrets.DEPLOY_HOST }}", "ttl": 60}'
           echo
 
       - name: Add mail.gulyaly.com A record -> secondary (overrides the wildcard for this name)
@@ -112,7 +112,7 @@ jobs:
           curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/mail.gulyaly.com/dns-records" \
             -H "Authorization: Bearer ${{ secrets.TIMEWEB_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"type": "A", "value": "${{ secrets.SECONDARY_HOST }}", "ttl": 300}'
+            -d '{"type": "A", "value": "${{ secrets.SECONDARY_HOST }}", "ttl": 60}'
           echo
 
       - name: Add second A records so both servers receive traffic
