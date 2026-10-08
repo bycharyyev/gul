@@ -79,7 +79,15 @@ URL="$S3_ENDPOINT/$S3_BUCKET/$PREFIX/$NAME"
 # here, so this cannot drift out of step with however the postgres service is configured.
 # AES-256-GCM (AuthEnvelopedData): a flipped or truncated byte fails decryption instead of
 # producing a quietly damaged dump.
-if ! docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' < /dev/null \
+# Since Patroni (migrate-to-patroni.yml) the database is the gul-pg container and compose's
+# "postgres" is only HAProxy. pg_dump runs inside gul-pg over its local socket -- on a replica as
+# well as on the leader, so this works whichever role this node holds right now.
+if docker ps --format '{{.Names}}' | grep -qx gul-pg; then
+  dump() { docker exec gul-pg sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' < /dev/null; }
+else
+  dump() { docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' < /dev/null; }
+fi
+if ! dump \
     | gzip \
     | openssl cms -encrypt -binary -aes-256-gcm -outform DER -out "$TMP" "$RECIPIENT"; then
   echo "dump or encryption failed -- nothing uploaded" >&2

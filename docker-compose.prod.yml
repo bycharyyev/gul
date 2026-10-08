@@ -22,26 +22,17 @@ x-logging: &default-logging
     tag: "{{.Name}}"
 
 services:
+  # Not the database itself any more: HAProxy, which hands every connection to whichever node
+  # Patroni reports as leader (GET :8008/primary on each). The database is the gul-pg container
+  # (Patroni + Postgres, host network, outside this file) on both nodes -- see
+  # migrate-to-patroni.yml and infra/patroni/. Keeping the service name "postgres" is what lets
+  # DATABASE_URL stay @postgres:5432 on both nodes through any failover. haproxy-pg.cfg is
+  # written by migrate-to-patroni.yml (it holds only the two node addresses).
   postgres:
-    image: postgres:16-alpine
+    image: haproxy:3.0-alpine
     restart: unless-stopped
-    env_file: .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    # Needed so the secondary VPS's standby replica can stream WAL from here. Not open to the
-    # internet at large -- the host firewall (ufw) only allows this port from the secondary's
-    # own IP, everything else is dropped before it ever reaches Postgres's own auth.
-    ports:
-      - "5432:5432"
+      - ./haproxy-pg.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     logging: *default-logging
 
   redis:
@@ -92,7 +83,7 @@ services:
       PRISMA_CONNECTION_LIMIT: "6"
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
     ports:
@@ -139,6 +130,8 @@ services:
     logging: *default-logging
 
 volumes:
+  # Still the primary's data: gul-pg mounts it by name (gul_postgres-data). Nothing here uses it
+  # any more, and it must never be removed (`docker compose down -v`).
   postgres-data:
   redis-data:
   uploads-data:

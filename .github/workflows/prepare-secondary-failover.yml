@@ -30,7 +30,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" '
             docker network create gul-net >/dev/null 2>&1 || true
-            docker network connect gul-net pg-standby --alias postgres >/dev/null 2>&1 || true
+            # Pre-Patroni only: the bare replica answered as "postgres" on gul-net.
+            docker ps --format '{{.Names}}' | grep -qx pg-standby && docker network connect gul-net pg-standby --alias postgres >/dev/null 2>&1 || true
             docker network inspect gul-net --format "{{range .Containers}}{{.Name}} {{end}}"
           ' < /dev/null
 
@@ -74,7 +75,11 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" \
             "PRIMARY_IP='${{ secrets.DEPLOY_HOST }}' bash -s" <<'REMOTE'
             set -e
-            sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" /opt/gul-secondary/.env
+            # Since Patroni, DATABASE_URL stays @postgres:5432 -- the local HAProxy finds the
+            # leader. The rewrite to the primary's address only applies on a pre-Patroni node.
+            if ! docker ps --format '{{.Names}}' | grep -qx gul-pg; then
+              sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" /opt/gul-secondary/.env
+            fi
             if grep -q '^PRIMARY_REDIS_HOST=' /opt/gul-secondary/.env; then
               sed -i "s/^PRIMARY_REDIS_HOST=.*/PRIMARY_REDIS_HOST=$PRIMARY_IP/" /opt/gul-secondary/.env
             else
