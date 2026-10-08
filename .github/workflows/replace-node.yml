@@ -74,12 +74,22 @@ jobs:
 
       - uses: actions/checkout@v7
 
+      - name: Telegram helper
+        run: |
+          mkdir -p ~/bin
+          printf '%s\n' '#!/bin/sh' '[ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] || exit 0' \
+            'curl -q -s -o /dev/null -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" --data-urlencode "chat_id=$TG_CHAT" --data-urlencode "text=$1" || true' > ~/bin/tg
+          chmod 755 ~/bin/tg
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
       - name: Roles, SSH, guards
         env:
           ADMIN_GH_TOKEN: ${{ secrets.ADMIN_GH_TOKEN }}
         run: |
           set -e
           [ -n "$ADMIN_GH_TOKEN" ] || { echo "secret ADMIN_GH_TOKEN is missing -- the new host could not be recorded; refusing before buying anything" >&2; exit 1; }
+          # Prove it can actually write secrets now, not at the end (it could not, in the first drill).
+          GH_TOKEN="$ADMIN_GH_TOKEN" gh api "repos/${{ github.repository }}/actions/secrets/public-key" --jq .key_id >/dev/null             || { echo "ADMIN_GH_TOKEN cannot manage this repository's secrets (needs Secrets: read and write)" >&2; tg "⛔ Gulyaly: автозамена не может начаться — у токена ADMIN_GH_TOKEN нет права Secrets." 2>/dev/null; exit 1; }
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -96,14 +106,6 @@ jobs:
           if [ -n "$USE_HOST" ]; then
             case " $A $B $W " in *" $USE_HOST "*) echo "use_host is a current member -- refusing to wipe it" >&2; exit 1;; esac
           fi
-
-      - name: Telegram helper
-        run: |
-          mkdir -p ~/bin
-          printf '%s\n' '#!/bin/sh' '[ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] || exit 0' \
-            'curl -q -s -o /dev/null -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" --data-urlencode "chat_id=$TG_CHAT" --data-urlencode "text=$1" || true' > ~/bin/tg
-          chmod 755 ~/bin/tg
-          echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Prove the node is dead (mode=auto)
         if: inputs.mode == 'auto'
@@ -182,7 +184,7 @@ jobs:
           H=$USE_HOST
           [ -n "$H" ] || { echo "no host" >&2; exit 1; }
           echo "H=$H" >> "$GITHUB_ENV"
-          line=$(ssh-keyscan -t ed25519 "$H" 2>/dev/null | head -1)
+          line=$(ssh-keyscan -t ed25519 "$H" 2>/dev/null | grep -v '^#' | head -1)
           [ -n "$line" ] || { echo "no host key from the new host" >&2; exit 1; }
           echo "$line" >> ~/.ssh/known_hosts
           echo "HOSTKEY_LINE=$line" >> "$GITHUB_ENV"
