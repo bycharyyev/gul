@@ -44,7 +44,8 @@ jobs:
           CANDIDATE: ${{ inputs.candidate }}
         run: |
           set -e
-          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml switchover gul --candidate '$CANDIDATE' --force" < /dev/null
+          # Unsafe REST calls need the API password (entrypoint.sh: user patroni, REPLICATOR_PASSWORD).
+          ssh "$PA" "docker exec -e CANDIDATE='$CANDIDATE' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$CANDIDATE\" --force'" < /dev/null
           sleep 15
           ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
 
