@@ -17,6 +17,7 @@ jobs:
     env:
       PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
       PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
     steps:
       - name: Set up SSH (pinned host keys)
         run: |
@@ -59,3 +60,7 @@ jobs:
             fi
           REMOTE
           done
+
+      - name: Witness watcher
+        run: |
+          ssh "$PW" "docker ps --format '{{.Names}}	{{.Status}}' | sort; echo '--- gul-witness-watch log ---'; docker logs --tail 40 gul-witness-watch 2>&1" < /dev/null
