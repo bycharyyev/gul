@@ -1,0 +1,257 @@
+name: Redis HA -- replica + Sentinel quorum (one-time cutover)
+
+# HA step 4, the Redis half of what migrate-to-patroni.yml did for Postgres:
+#
+#   gul-redis    (redis:7-alpine, host network, :6379) on both nodes. The primary's adopts the
+#                existing compose volume (gul_redis-data), so the queue survives; the secondary's
+#                starts empty as its replica.
+#   gul-sentinel (host network, :26379) on primary, secondary AND witness. Two of three agree a
+#                master is down -> they promote the replica and re-point the old master when it
+#                returns.
+#   compose service "redis" on both nodes is now HAProxy: it sends connections to whichever node
+#                answers INFO replication with role:master, so REDIS_URL is @redis:6379 on both
+#                and never changes on a failover.
+#
+# The Redis password never leaves the nodes: each node builds its own HAProxy config from its own
+# .env. Downtime: the queue is unreachable for a few seconds on the primary while its redis moves.
+# Safe to re-run: a node already running gul-redis / gul-sentinel skips that part.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type MIGRATE'
+        required: true
+
+concurrency:
+  group: etcd
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      W: ${{ secrets.WITNESS_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
+      IMAGE: redis:7-alpine
+    steps:
+      - name: Refuse without confirmation
+        if: inputs.confirm != 'MIGRATE'
+        run: |
+          echo "confirm must be MIGRATE" >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' > ~/.ssh/config
+
+      - name: Firewall -- 6379 between the data nodes, 26379 between all three Sentinels
+        run: |
+          fw() { # fw <user@host> <self-ip> <data-node:yes|no>
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              for peer in "$A" "$B" "$W"; do
+                [ "$peer" = "$2" ] && continue
+                echo "ufw allow from $peer to any port 26379 proto tcp comment 'sentinel peer'"
+                if [ "$3" = yes ] && [ "$peer" != "$W" ]; then
+                  echo "ufw allow from $peer to any port 6379 proto tcp comment 'redis peer'"
+                fi
+              done
+              # Sentinels on the data nodes reach their own redis; HAProxy reaches it from the
+              # docker subnet; the witness's Sentinel reaches both from its own address (above).
+              if [ "$3" = yes ]; then
+                echo "ufw allow from 172.16.0.0/12 to any port 6379 proto tcp comment 'redis from local containers'"
+              fi
+              echo "ufw status | grep -E '6379|26379'"
+            } > /tmp/fw.sh
+            scp -q /tmp/fw.sh "$1:/tmp/fw.sh"
+            ssh "$1" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rc=\$?; rm -f /tmp/fw.sh; exit \$rc" < /dev/null
+          }
+          fw "$PA" "$A" yes
+          fw "$PB" "$B" yes
+          # The witness's Sentinel must reach 6379 on both data nodes: allow it there too.
+          for t in "$PA" "$PB"; do
+            printf '%s\n' '#!/bin/sh' "ufw allow from $W to any port 6379 proto tcp comment 'witness sentinel'" > /tmp/fw.sh
+            scp -q /tmp/fw.sh "$t:/tmp/fw.sh"
+            ssh "$t" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rm -f /tmp/fw.sh" < /dev/null
+          done
+          fw "$PW" "$W" no
+
+      - name: Node files -- HAProxy config for redis, built on each node from its own .env
+        run: |
+          set -e
+          for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
+            host=${t%%:*}; dir=${t#*:}
+            ssh "$host" "A='$A' B='$B' DIR='$dir' bash -s" <<'REMOTE'
+            set -e
+            P=$(grep -E '^REDIS_PASSWORD=' "$DIR/.env" | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/")
+            [ -n "$P" ] || { echo "REDIS_PASSWORD missing in $DIR/.env" >&2; exit 1; }
+            # It goes into an HAProxy check string: refuse anything that would need escaping.
+            echo "$P" | grep -Eq '^[A-Za-z0-9+/=_.-]+$' || { echo "REDIS_PASSWORD has characters HAProxy would need escaped" >&2; exit 1; }
+            umask 022
+            printf '%s\n' \
+              "global" "  maxconn 2000" \
+              "defaults" "  mode tcp" "  timeout connect 4s" "  timeout client 1h" "  timeout server 1h" "  timeout check 3s" \
+              "# Every connection goes to the node whose redis says role:master." \
+              "listen redis" "  bind *:6379" \
+              "  option tcp-check" "  tcp-check connect" \
+              "  tcp-check send AUTH\\ $P\\r\\n" "  tcp-check expect string +OK" \
+              "  tcp-check send PING\\r\\n" "  tcp-check expect string +PONG" \
+              "  tcp-check send info\\ replication\\r\\n" "  tcp-check expect string role:master" \
+              "  tcp-check send QUIT\\r\\n" "  tcp-check expect string +OK" \
+              "  default-server inter 1s fall 2 rise 2 on-marked-down shutdown-sessions" \
+              "  server gul-a $A:6379 check" \
+              "  server gul-b $B:6379 check" > "$DIR/haproxy-redis.cfg"
+            echo "$DIR/haproxy-redis.cfg written ($(wc -l < "$DIR/haproxy-redis.cfg") lines)"
+          REMOTE
+          done
+
+      - name: Primary -- move redis out of compose onto the same volume (queue kept)
+        run: |
+          set -e
+          ssh "$PA" "A='$A' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul
+            if docker ps --format '{{.Names}}' | grep -qx gul-redis; then echo "gul-redis already running here"; exit 0; fi
+            P=$(grep -E '^REDIS_PASSWORD=' .env | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/")
+            cid=$(docker compose ps -q redis)
+            [ -n "$cid" ] || { echo "compose redis is not running -- refusing to guess the volume" >&2; exit 1; }
+            img=$(docker inspect -f '{{.Config.Image}}' "$cid")
+            case "$img" in redis:*) ;; *) echo "compose redis runs $img -- already cut over?" >&2; exit 1;; esac
+            vol=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$cid")
+            [ -n "$vol" ] || { echo "no data volume found" >&2; exit 1; }
+            echo "redis volume: $vol"
+            # SHUTDOWN via stop: redis writes its AOF on a clean exit, so nothing queued is lost.
+            docker compose stop -t 30 redis
+            docker compose rm -f redis
+            docker run -d --name gul-redis --restart unless-stopped --network host \
+              --log-driver journald --log-opt tag=gul-redis \
+              -v "$vol":/data "$IMAGE" \
+              --port 6379 --requirepass "$P" --masterauth "$P" --appendonly yes \
+              --replica-announce-ip "$A" >/dev/null
+            for i in $(seq 1 20); do
+              docker exec gul-redis redis-cli --no-auth-warning -a "$P" ping 2>/dev/null | grep -q PONG && break
+              sleep 1
+            done
+            echo "keys kept: $(docker exec gul-redis redis-cli --no-auth-warning -a "$P" dbsize)"
+          REMOTE
+
+      - name: Primary -- compose with HAProxy as "redis", app healthy
+        run: |
+          set -e
+          scp -q docker-compose.prod.yml "$PA:/opt/gul/docker-compose.yml"
+          ssh "$PA" bash -s <<'REMOTE'
+            set -e
+            cd /opt/gul
+            docker compose up -d
+            for p in 4000 4002 4001; do
+              for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null && break; sleep 3; done
+              curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null || { docker compose logs --tail 40 api redis; exit 1; }
+            done
+            echo "primary app healthy through the redis router"
+          REMOTE
+
+      - name: Secondary -- gul-redis as a replica of the primary
+        run: |
+          set -e
+          ssh "$PB" "A='$A' B='$B' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul-secondary
+            P=$(grep -E '^REDIS_PASSWORD=' .env | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/")
+            if ! docker ps --format '{{.Names}}' | grep -qx gul-redis; then
+              # The old local "emergency" redis of this compose project holds nothing in use.
+              docker compose stop redis >/dev/null 2>&1 || true
+              docker compose rm -f redis >/dev/null 2>&1 || true
+              docker volume create gul-redis-data >/dev/null
+              docker run -d --name gul-redis --restart unless-stopped --network host \
+                --log-driver journald --log-opt tag=gul-redis \
+                -v gul-redis-data:/data "$IMAGE" \
+                --port 6379 --requirepass "$P" --masterauth "$P" --appendonly yes \
+                --replica-announce-ip "$B" --replicaof "$A" 6379 >/dev/null
+            fi
+            for i in $(seq 1 60); do
+              docker exec gul-redis redis-cli --no-auth-warning -a "$P" info replication 2>/dev/null | grep -q 'master_link_status:up' && { echo "replica in sync with the primary"; exit 0; }
+              sleep 2
+            done
+            docker logs --tail 30 gul-redis
+            exit 1
+          REMOTE
+
+      - name: Sentinels on all three nodes
+        run: |
+          set -e
+          P=""
+          sentinel() { # sentinel <user@host> <self-ip> <dir-with-.env or "-">
+            ssh "$1" "A='$A' SELF='$2' DIR='$3' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            if docker ps --format '{{.Names}}' | grep -qx gul-sentinel; then echo "gul-sentinel already running"; exit 0; fi
+            if [ "$DIR" != "-" ]; then
+              P=$(grep -E '^REDIS_PASSWORD=' "$DIR/.env" | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/")
+            else
+              P=$(cat /tmp/redis-pass); rm -f /tmp/redis-pass
+            fi
+            docker volume create gul-sentinel >/dev/null
+            # Sentinel rewrites its own config file as the cluster changes, so it lives in a volume
+            # and is only written here the first time.
+            docker run --rm -v gul-sentinel:/conf -e A="$A" -e SELF="$SELF" -e P="$P" "$IMAGE" sh -c '
+              [ -f /conf/sentinel.conf ] && exit 0
+              printf "%s\n" "port 26379" "sentinel announce-ip $SELF" \
+                "sentinel monitor gul $A 6379 2" "sentinel auth-pass gul $P" \
+                "sentinel down-after-milliseconds gul 5000" "sentinel failover-timeout gul 30000" \
+                "sentinel parallel-syncs gul 1" > /conf/sentinel.conf'
+            docker run -d --name gul-sentinel --restart unless-stopped --network host \
+              --log-driver journald --log-opt tag=gul-sentinel \
+              -v gul-sentinel:/conf "$IMAGE" redis-sentinel /conf/sentinel.conf >/dev/null
+            echo "gul-sentinel started"
+          REMOTE
+          }
+          sentinel "$PA" "$A" /opt/gul
+          sentinel "$PB" "$B" /opt/gul-secondary
+          # The witness has no .env: hand it the password through a 600 file, never the log.
+          umask 077
+          ssh "$PA" bash -s > /tmp/rp <<'REMOTE'
+          grep -E '^REDIS_PASSWORD=' /opt/gul/.env | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/"
+          REMOTE
+          [ -s /tmp/rp ] || { echo "could not read REDIS_PASSWORD from the primary" >&2; exit 1; }
+          scp -q /tmp/rp "$PW:/tmp/redis-pass"
+          rm -f /tmp/rp
+          ssh "$PW" "chmod 600 /tmp/redis-pass" < /dev/null
+          sentinel "$PW" "$W" -
+          sleep 10
+          ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel ckquorum gul; docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1 | sed 's/.*/master: (address hidden)/'; docker exec gul-sentinel redis-cli -p 26379 sentinel replicas gul | grep -c flags | sed 's/^/replicas known: /'" < /dev/null
+
+      - name: Secondary -- REDIS_URL through the local router, compose up
+        run: |
+          set -e
+          scp -q docker-compose.secondary.yml "$PB:/opt/gul-secondary/docker-compose.yml"
+          ssh "$PB" bash -s <<'REMOTE'
+            set -e
+            cd /opt/gul-secondary
+            docker compose up -d --remove-orphans
+            for p in 4000 4002 4001; do
+              for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null && break; sleep 3; done
+              curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null || { docker compose logs --tail 40 api redis; exit 1; }
+            done
+            echo "secondary app healthy through the redis router"
+          REMOTE
+
+      - name: Verify -- both nodes over HTTPS
+        run: |
+          set -e
+          for ip in "$A" "$B"; do
+            code=$(curl -s -o /dev/null -m 15 --resolve "api.gulyaly.com:443:$ip" -w '%{http_code}' https://api.gulyaly.com/api/health/ready)
+            echo "node -> $code"
+            [ "$code" = 200 ]
+          done

@@ -35,31 +35,16 @@ services:
       - ./haproxy-pg.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     logging: *default-logging
 
+  # Not Redis itself any more: HAProxy to whichever node's redis reports role:master. Redis is the
+  # gul-redis container on both nodes (host network, outside this file), replicated, with three
+  # Sentinels (primary, secondary, witness) deciding the master -- see migrate-redis-ha.yml.
+  # The name stays "redis" so REDIS_URL is @redis:6379 through any failover. haproxy-redis.cfg is
+  # built on the node from its own .env (it carries the password for the health check).
   redis:
-    image: redis:7-alpine
+    image: haproxy:3.0-alpine
     restart: unless-stopped
-    env_file: .env
-    # A password, because this port is no longer only on the docker network. Redis ships with no
-    # authentication and answers whoever connects, so publishing it unprotected would hand anyone
-    # who reached the port the whole job queue and the ability to empty it.
-    #
-    # appendonly: the queue is now shared, so a restart losing whatever was in flight would strand
-    # orders on both nodes rather than one. The stuck-order sweeper would find them, but taking
-    # ten minutes to recover something that did not need losing is not a good trade for a file.
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
     volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    # Published for the same reason as postgres above, and protected the same way: ufw allows this
-    # port from the secondary's IP alone. Both nodes need one queue -- with a queue each, an order
-    # accepted on one node is invisible to the other's worker and to the admin console's view of
-    # the backlog, and the alert dedup that already assumes a shared Redis fires twice.
-    ports:
-      - "6379:6379"
+      - ./haproxy-redis.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     logging: *default-logging
 
   # ADR 0008: two HTTP processes (api, api-2) behind nginx's least_conn upstream, plus one
@@ -85,7 +70,7 @@ services:
       postgres:
         condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
@@ -133,5 +118,6 @@ volumes:
   # Still the primary's data: gul-pg mounts it by name (gul_postgres-data). Nothing here uses it
   # any more, and it must never be removed (`docker compose down -v`).
   postgres-data:
+  # Still the primary's queue data: gul-redis mounts it by name (gul_redis-data). Never remove it.
   redis-data:
   uploads-data:
