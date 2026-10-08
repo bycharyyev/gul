@@ -1,0 +1,235 @@
+name: Migrate the database to Patroni (one-time cutover)
+
+# HA step 3: from "compose postgres on the primary + a bare pg-standby replica on the secondary"
+# to a Patroni cluster (scope gul) voting through the etcd quorum from setup-etcd.yml:
+#
+#   gul-pg (Patroni + Postgres 16, host network) on both nodes, :5432 and REST :8008
+#     primary   -> adopts the EXISTING data volume as is (no copy, no dump/restore), becomes leader
+#     secondary -> fresh volume gul-pg-data, cloned from the leader by Patroni itself
+#   compose service "postgres" on both nodes is now HAProxy: it sends every connection to whichever
+#     node Patroni reports as leader (GET :8008/primary), so DATABASE_URL is @postgres:5432 on both
+#     and never has to change on a failover.
+#
+# Downtime: from stopping the old postgres to the API answering again, a minute or two on the
+# primary. A fresh encrypted backup is taken first and the run stops if it fails.
+#
+# Kept, not deleted: the secondary's old pg-standby volume (stale replica). The primary's volume
+# is the one gul-pg runs on.
+#
+# Safe to re-run: a node already running gul-pg skips its cutover.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type MIGRATE'
+        required: true
+
+concurrency:
+  group: etcd
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      W: ${{ secrets.WITNESS_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/gul-patroni:16
+    steps:
+      - name: Refuse without confirmation
+        if: inputs.confirm != 'MIGRATE'
+        run: |
+          echo "confirm must be MIGRATE" >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'CFG'
+          Host *
+            IdentityFile ~/.ssh/deploy_key
+            ServerAliveInterval 15
+          CFG
+
+      - name: Preflight -- etcd quorum healthy, image pullable on both nodes
+        run: |
+          set -e
+          ssh "$PW" "docker exec gul-etcd etcdctl --endpoints=http://$A:2379,http://$B:2379,http://$W:2379 endpoint health" < /dev/null
+          for t in "$PA" "$PB"; do
+            ssh "$t" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && docker pull -q '$IMAGE'" < /dev/null
+          done
+
+      - name: Fresh encrypted backup before touching anything
+        run: |
+          set -e
+          ssh "$PA" bash -s <<'REMOTE'
+            set -e
+            if docker ps --format '{{.Names}}' | grep -qx gul-pg; then echo "already migrated, backup step skipped"; exit 0; fi
+            printf '%s\n' '#!/bin/sh' 'systemctl start gul-db-backup.service' 'systemctl is-failed --quiet gul-db-backup.service && exit 1; journalctl -u gul-db-backup.service -n 5 --no-pager' > /tmp/bk.sh
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/bk.sh
+            rm -f /tmp/bk.sh
+          REMOTE
+
+      - name: Firewall -- 5432 and 8008 between the database nodes and their own containers
+        run: |
+          fw() { # fw <user@host> <other-node-ip>
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "ufw allow from $2 to any port 5432,8008 proto tcp comment 'patroni peer'"
+              # HAProxy runs in a compose container; reaching this host's own address arrives
+              # from the docker subnet.
+              echo "ufw allow from 172.16.0.0/12 to any port 5432,8008 proto tcp comment 'patroni from local containers'"
+              echo "ufw status | grep -E '5432|8008'"
+            } > /tmp/fw.sh
+            scp -q /tmp/fw.sh "$1:/tmp/fw.sh"
+            ssh "$1" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rc=\$?; rm -f /tmp/fw.sh; exit \$rc" < /dev/null
+          }
+          fw "$PA" "$B"
+          fw "$PB" "$A"
+
+      - name: Node files -- patroni.env (from the node's own .env) and the HAProxy config
+        env:
+          REPL_PASS: ${{ secrets.REPLICATOR_PASSWORD }}
+        run: |
+          set -e
+          printf '%s\n' \
+            "global" "  maxconn 500" \
+            "defaults" "  mode tcp" "  timeout connect 4s" "  timeout client 30m" "  timeout server 30m" "  timeout check 3s" \
+            "# Every connection goes to the node Patroni reports as leader; the other answers 503." \
+            "listen postgres" "  bind *:5432" \
+            "  option httpchk GET /primary" "  http-check expect status 200" \
+            "  default-server inter 2s fall 2 rise 2 on-marked-down shutdown-sessions" \
+            "  server gul-a $A:5432 check port 8008" \
+            "  server gul-b $B:5432 check port 8008" > haproxy-pg.cfg
+          scp -q haproxy-pg.cfg "$PA:/opt/gul/haproxy-pg.cfg"
+          scp -q haproxy-pg.cfg "$PB:/opt/gul-secondary/haproxy-pg.cfg"
+          for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
+            host=${t%%:*}; dir=${t#*:}
+            # docker --env-file takes values literally, so strip the quotes compose would strip.
+            ssh "$host" "REPL_PASS='$REPL_PASS' DIR='$dir' bash -s" <<'REMOTE'
+            set -e
+            umask 077
+            {
+              grep -E '^POSTGRES_(USER|PASSWORD|DB)=' "$DIR/.env" | sed -E "s/^([A-Z_]+)=[\"'](.*)[\"']\$/\1=\2/"
+              echo "REPLICATOR_PASSWORD=$REPL_PASS"
+            } > "$DIR/patroni.env"
+            echo "$DIR/patroni.env: $(cut -d= -f1 "$DIR/patroni.env" | tr '\n' ' ')"
+            [ "$(grep -c '' "$DIR/patroni.env")" = 4 ] || { echo "expected 4 lines" >&2; exit 1; }
+          REMOTE
+          done
+
+      - name: Primary -- stop compose postgres, start gul-pg on the same data volume
+        run: |
+          set -e
+          ssh "$PA" "A='$A' B='$B' W='$W' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul
+            if docker ps --format '{{.Names}}' | grep -qx gul-pg; then echo "gul-pg already running here"; exit 0; fi
+            cid=$(docker compose ps -q postgres)
+            [ -n "$cid" ] || { echo "compose postgres is not running -- refusing to guess the volume" >&2; exit 1; }
+            img=$(docker inspect -f '{{.Config.Image}}' "$cid")
+            case "$img" in postgres:*) ;; *) echo "compose postgres runs $img, not postgres -- already cut over?" >&2; exit 1;; esac
+            vol=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' "$cid")
+            [ -n "$vol" ] || { echo "no data volume found" >&2; exit 1; }
+            echo "data volume: $vol"
+            # A clean shutdown (checkpoint) so Patroni starts from a consistent cluster.
+            docker compose stop -t 120 postgres
+            docker compose rm -f postgres
+            docker run -d --name gul-pg --restart unless-stopped --network host --stop-timeout 120 \
+              --log-driver journald --log-opt tag=gul-pg \
+              -v "$vol":/var/lib/postgresql/data --env-file patroni.env \
+              -e NODE_NAME=gul-a -e NODE_IP="$A" -e ETCD_HOSTS="$A:2379,$B:2379,$W:2379" \
+              "$IMAGE" >/dev/null
+            for i in $(seq 1 60); do
+              [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary)" = 200 ] && { echo "gul-a is leader"; exit 0; }
+              sleep 3
+            done
+            docker logs --tail 60 gul-pg
+            echo "gul-a did not become leader" >&2
+            exit 1
+          REMOTE
+
+      - name: Primary -- compose with HAProxy as "postgres", app back up
+        run: |
+          set -e
+          scp -q docker-compose.prod.yml "$PA:/opt/gul/docker-compose.yml"
+          ssh "$PA" bash -s <<'REMOTE'
+            set -e
+            cd /opt/gul
+            docker compose pull -q postgres
+            docker compose up -d
+            for p in 4000 4002 4001; do
+              for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null && break; sleep 3; done
+              curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null || { docker compose logs --tail 40 api; exit 1; }
+            done
+            echo "primary app healthy through HAProxy"
+          REMOTE
+
+      - name: Secondary -- replace pg-standby with gul-pg (cloned from the leader)
+        run: |
+          set -e
+          ssh "$PB" "A='$A' B='$B' W='$W' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul-secondary
+            if ! docker ps --format '{{.Names}}' | grep -qx gul-pg; then
+              docker rm -f pg-standby >/dev/null 2>&1 || true
+              docker volume create gul-pg-data >/dev/null
+              docker run -d --name gul-pg --restart unless-stopped --network host --stop-timeout 120 \
+                --log-driver journald --log-opt tag=gul-pg \
+                -v gul-pg-data:/var/lib/postgresql/data --env-file patroni.env \
+                -e NODE_NAME=gul-b -e NODE_IP="$B" -e ETCD_HOSTS="$A:2379,$B:2379,$W:2379" \
+                "$IMAGE" >/dev/null
+            fi
+            for i in $(seq 1 100); do
+              [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/replica)" = 200 ] && { echo "gul-b is a streaming replica"; exit 0; }
+              sleep 3
+            done
+            docker logs --tail 60 gul-pg
+            echo "gul-b did not become a replica" >&2
+            exit 1
+          REMOTE
+
+      - name: Secondary -- DATABASE_URL through local HAProxy, compose up
+        run: |
+          set -e
+          scp -q docker-compose.secondary.yml "$PB:/opt/gul-secondary/docker-compose.yml"
+          ssh "$PB" "A='$A' bash -s" <<'REMOTE'
+            set -e
+            cd /opt/gul-secondary
+            sed -i "s#@$A:5432#@postgres:5432#" .env
+            grep -q '@postgres:5432' .env || { echo "DATABASE_URL does not point at @postgres:5432" >&2; exit 1; }
+            docker network create gul-net >/dev/null 2>&1 || true
+            docker compose pull -q postgres
+            docker compose up -d --remove-orphans
+            for p in 4000 4002 4001; do
+              for i in $(seq 1 40); do curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null && break; sleep 3; done
+              curl -fsS "http://127.0.0.1:$p/api/health/ready" >/dev/null || { docker compose logs --tail 40 api; exit 1; }
+            done
+            echo "secondary app healthy through HAProxy"
+          REMOTE
+
+      - name: Verify -- cluster state, synchronous replica, both nodes over HTTPS
+        run: |
+          set -e
+          sleep 10
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list; docker exec gul-pg patronictl -c /tmp/patroni.yml show-config" < /dev/null
+          for ip in "$A" "$B"; do
+            code=$(curl -s -o /dev/null -m 15 --resolve "api.gulyaly.com:443:$ip" -w '%{http_code}' https://api.gulyaly.com/api/health/ready)
+            echo "node -> $code"
+            [ "$code" = 200 ]
+          done

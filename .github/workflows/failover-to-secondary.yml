@@ -25,6 +25,12 @@ jobs:
   failover:
     runs-on: ubuntu-latest
     steps:
+      - name: Superseded by Patroni
+        run: |
+          echo "Since 2026-10-08 the database runs under Patroni (migrate-to-patroni.yml): failover is" >&2
+          echo "automatic and a replica is (re)built by Patroni itself. This pre-Patroni workflow would" >&2
+          echo "fight it (a second postmaster, a promote behind Patroni's back), so it refuses to run." >&2
+          exit 1
       - name: Refuse to proceed without explicit confirmation
         run: |
           if [ "${{ inputs.confirm }}" != "FAILOVER" ]; then

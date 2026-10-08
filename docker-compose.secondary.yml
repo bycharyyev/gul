@@ -1,7 +1,7 @@
-# Failover compose for the secondary VPS. Only the app containers -- the database is the
-# pg-standby container managed separately by setup-replication.yml / failover-to-secondary.yml,
-# reachable here as host "postgres" via the shared "gul-net" external network (an alias, so
-# DATABASE_URL in .env can stay byte-identical to the primary's). The queue lives on the primary
+# Compose for the secondary VPS: the app containers plus HAProxy as "postgres". The database is
+# the gul-pg container (Patroni, host network, outside this file) -- see migrate-to-patroni.yml.
+# HAProxy routes to whichever node is the Patroni leader, so DATABASE_URL is @postgres:5432 here
+# exactly as on the primary. The queue lives on the primary
 # and is shared -- see the note above the api service for why this node no longer runs its own.
 #
 # Same log cap as docker-compose.prod.yml (10MB x 5 files/service) -- see that file for why.
@@ -34,6 +34,15 @@ services:
     networks: [gul-net]
     logging: *default-logging
 
+  # HAProxy to the current Patroni leader -- same as docker-compose.prod.yml's postgres service.
+  postgres:
+    image: haproxy:3.0-alpine
+    restart: unless-stopped
+    volumes:
+      - ./haproxy-pg.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks: [gul-net]
+    logging: *default-logging
+
   # ADR 0008: two HTTP processes (api, api-2) behind nginx's least_conn upstream, plus one
   # background worker (api-worker: BullMQ, sweepers, crons, Telegram polling). One Node process is
   # one event loop, and these boxes have 6 cores. Each process opens at most 6 database connections
@@ -52,6 +61,8 @@ services:
       NODE_LABEL: "secondary-http-1"
       APP_ROLE: "http"
       PRISMA_CONNECTION_LIMIT: "6"
+    depends_on:
+      - postgres
     ports:
       - "127.0.0.1:4000:4000"
     volumes:

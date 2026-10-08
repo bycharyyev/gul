@@ -31,6 +31,8 @@ jobs:
             "SECONDARY_IP='$SECONDARY_IP' bash -s" <<'REMOTE'
             set -e
             cd /opt/gul
+            # Patroni manages pg_hba itself (infra/patroni/entrypoint.sh); nothing to add there.
+            docker ps --format '{{.Names}}' | grep -qx gul-pg && { echo "Patroni node: pg_hba is Patroni's"; exit 0; }
             USER_LINE="host all all $SECONDARY_IP/32 scram-sha-256"
             docker compose exec -T postgres sh -c "grep -qxF \"$USER_LINE\" /var/lib/postgresql/data/pg_hba.conf || echo \"$USER_LINE\" >> /var/lib/postgresql/data/pg_hba.conf" < /dev/null
             docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -c \"SELECT pg_reload_conf();\"" < /dev/null
@@ -63,7 +65,7 @@ jobs:
             # ("postgres") today -- swap it for the primary's real IP so this node's app talks to
             # the one authoritative (writable) database over the network instead of its own
             # local, read-only standby. Idempotent: a rerun with the same IP is a no-op.
-            sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" .env
+            docker ps --format '{{.Names}}' | grep -qx gul-pg || sed -i "s#@postgres:5432#@$PRIMARY_IP:5432#" .env
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             docker compose pull
             docker compose up -d
