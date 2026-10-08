@@ -177,6 +177,19 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 
 ### Secondary VPS: active/active app tier + streaming replica
 
+> **Database is a Patroni cluster since 2026-10-08** (`migrate-to-patroni.yml`). `gul-pg`
+> (Patroni 4 + Postgres 16 alpine, `infra/patroni/`, host network, :5432 and REST :8008) runs on
+> both nodes; the leader is elected through a three-member etcd quorum (`setup-etcd.yml`: primary,
+> secondary and the witness `WITNESS_HOST`, container `gul-etcd`). Synchronous replication, not
+> strict. Compose's `postgres` service on both nodes is **HAProxy** to whichever node answers
+> `GET :8008/primary`, so `DATABASE_URL` is `@postgres:5432` everywhere and never changes on a
+> failover. Measured drill (`patroni-drill.yml action=drill`): new leader in 6 s, site healthy on
+> both nodes in 11 s, old leader rejoins as replica by itself; `action=switchover candidate=gul-a`
+> moves it back. The primary's data volume is still `gul_postgres-data`. `setup-replication.yml`
+> and `failover-to-secondary.yml` now refuse to run. Everything below about `pg-standby`,
+> `pg_promote()` and manual failover is pre-Patroni history. Still single-node: Redis (on the
+> primary) and the backup timer (primary only).
+
 A second, dedicated VPS (`SECONDARY_HOST`/`SECONDARY_USER` secrets; bootstrapped the same way as
 primary — `deploy` user, docker, SSH key, key-only since 2026-10-01 via `harden-ssh.yml`; password login had been
 enabled on request until then) runs:
