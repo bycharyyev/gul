@@ -102,7 +102,7 @@ jobs:
               [ "$DRY_RUN" = "true" ] && { echo "  would add $fqdn"; continue; }
               curl -s -o /dev/null -X POST "https://api.timeweb.cloud/api/v2/domains/$fqdn/dns-records" \
                 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-                -d "{\"type\": \"A\", \"value\": \"$1\", \"ttl\": 300}"
+                -d "{\"type\": \"A\", \"value\": \"$1\", \"ttl\": 60}"
               echo "  added $fqdn"
             done
           }
