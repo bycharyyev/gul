@@ -1,0 +1,52 @@
+name: Point the API at the Redis Sentinels
+
+# Writes REDIS_SENTINELS=<primary>:26379,<secondary>:26379,<witness>:26379 into both nodes' .env,
+# which makes every Redis client in the API ask the Sentinels for the master
+# (apps/api/src/queue/redis-connection.ts) instead of trusting the HAProxy router. Also lets the
+# node's own containers reach its Sentinel (ufw). Takes effect when the API containers are next
+# recreated (any deploy). Idempotent.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      W: ${{ secrets.WITNESS_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' > ~/.ssh/config
+
+      - name: Firewall and .env on both nodes
+        run: |
+          set -e
+          S="$A:26379,$B:26379,$W:26379"
+          for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
+            host=${t%%:*}; dir=${t#*:}
+            printf '%s\n' '#!/bin/sh' "ufw allow from 172.16.0.0/12 to any port 26379 proto tcp comment 'sentinel from local containers'" > /tmp/fw.sh
+            scp -q /tmp/fw.sh "$host:/tmp/fw.sh"
+            ssh "$host" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rm -f /tmp/fw.sh" < /dev/null
+            ssh "$host" "S='$S' DIR='$dir' bash -s" <<'REMOTE'
+            set -e
+            sed -i '/^REDIS_SENTINELS=/d' "$DIR/.env"
+            echo "REDIS_SENTINELS=$S" >> "$DIR/.env"
+            echo "$DIR/.env: REDIS_SENTINELS set ($(echo "$S" | tr ',' '\n' | wc -l) sentinels)"
+            # Prove a container on this node can ask its Sentinels for the master.
+            n=0
+            for hp in $(echo "$S" | tr ',' ' '); do
+              docker run --rm redis:7-alpine redis-cli -h "${hp%:*}" -p "${hp#*:}" sentinel get-master-addr-by-name gul >/dev/null 2>&1 && n=$((n+1))
+            done
+            echo "sentinels answering from a container: $n of 3"
+            [ "$n" -ge 2 ]
+          REMOTE
+          done
