@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import IORedis from "ioredis";
+import type IORedis from "ioredis";
+import { createRedis } from "../queue/redis-connection";
 import * as os from "node:os";
 import { appRole } from "../common/app-role";
 
@@ -72,7 +73,7 @@ export class PerfMetricsService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly redis: IORedis) {}
 
   static connect(): IORedis {
-    const client = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+    const client = createRedis({
       enableOfflineQueue: false,
       maxRetriesPerRequest: 0,
       commandTimeout: 200,

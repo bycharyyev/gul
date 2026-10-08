@@ -1,6 +1,6 @@
 import { Global, Module } from "@nestjs/common";
 import { Queue } from "bullmq";
-import IORedis from "ioredis";
+import { createRedis } from "./redis-connection";
 
 export const TOPUP_QUEUE = "topup-queue";
 
@@ -25,9 +25,7 @@ export const EMAIL_QUEUE_NAMES = [
 ] as const;
 
 export function redisConnection() {
-  return new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-    maxRetriesPerRequest: null,
-  });
+  return createRedis({ maxRetriesPerRequest: null });
 }
 
 function queueProvider(token: string, queueName: string) {

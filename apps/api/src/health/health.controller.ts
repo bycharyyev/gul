@@ -41,12 +41,28 @@ export class HealthController {
   async ready() {
     // BullMQ's own client type doesn't surface ioredis's `.ping`, though the object has one --
     // narrow, local cast rather than widening the whole method's types.
+    // Bounded: a client stuck waiting for a Redis master (a failover in progress) queues the ping
+    // forever, and a readiness check that never answers looks to nginx and the watchdog like a
+    // dead server rather than an honest 503 (2026-10-08 drill).
     const [db, redis] = await Promise.allSettled([
-      this.prisma.$queryRaw`SELECT 1`,
-      this.topupQueue.client.then((c) => (c as unknown as { ping(): Promise<string> }).ping()),
+      withTimeout(this.prisma.$queryRaw`SELECT 1`, READY_TIMEOUT_MS),
+      withTimeout(
+        this.topupQueue.client.then((c) => (c as unknown as { ping(): Promise<string> }).ping()),
+        READY_TIMEOUT_MS,
+      ),
     ]);
     if (db.status === "rejected") throw new ServiceUnavailableException("Database unreachable");
     if (redis.status === "rejected") throw new ServiceUnavailableException("Redis unreachable");
     return { status: "ok" };
   }
+}
+
+const READY_TIMEOUT_MS = 3000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
