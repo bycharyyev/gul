@@ -66,6 +66,23 @@ while :; do
     fi
   done
 
+  # Failback. FENCED ("role:ip", from replace-node via FENCED_HOST) is a machine that was cut off
+  # and replaced. When it answers SSH again for 10 minutes straight, replace-node rebuilds that role
+  # onto it from scratch -- a fresh copy of the database, nothing of its old state kept -- and
+  # deletes the auto-bought stand-in.
+  case "${FENCED:-none}" in
+    *:*)
+      fip=${FENCED#*:}; frole=${FENCED%%:*}
+      banner=$(nc -w 5 "$fip" 22 < /dev/null 2>/dev/null | head -c 4 || true)
+      [ -n "$banner" ] || banner=$(curl -s -m 5 "telnet://$fip:22" < /dev/null 2>/dev/null | head -c 4 || true)
+      if [ "$banner" = "SSH-" ]; then fb_up=$(( ${fb_up:-0} + 1 )); else fb_up=0; fi
+      if [ "$fb_up" -ge 20 ] && [ "${fb_asked:-0}" = 0 ] && [ "$state_a" = up ] && [ "$state_b" = up ]; then
+        dispatch replace-node.yml "fenced $frole host is back" "{\"node\":\"$frole\",\"mode\":\"drill\",\"use_host\":\"$fip\",\"confirm\":\"REPLACE\"}"
+        fb_asked=1
+      fi
+      ;;
+  esac
+
   now=$(date +%s)
   # Heartbeat every 10 min, and every probe while anything is not plainly up, so the log shows
   # what this watcher actually saw.

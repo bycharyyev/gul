@@ -40,7 +40,7 @@ jobs:
         run: |
           set -e
           umask 077
-          printf '%s\n' "A=$A" "B=$B" "GH_TOKEN=$T" "REPO=${{ github.repository }}" > witness.env
+          printf '%s\n' "A=$A" "B=$B" "FENCED=${{ secrets.FENCED_HOST }}" "GH_TOKEN=$T" "REPO=${{ github.repository }}" > witness.env
           scp -q witness.env "$PW:/tmp/gul-witness.env"
           rm -f witness.env
           scp -q infra/witness/watch.sh "$PW:/tmp/gul-witness-watch.sh"

@@ -210,6 +210,24 @@ jobs:
           REMOTE
           tg "🔧 Gulyaly: новый сервер для роли $ROLE получен, настраиваю."
 
+      - name: A live node being replaced (drill, failback) hands over its leaderships first
+        if: inputs.mode == 'drill'
+        run: |
+          set -e
+          if [ "$(ssh "$PS" "curl -s -o /dev/null -w '%{http_code}' http://$DEAD:8008/primary" < /dev/null || true)" = 200 ]; then
+            echo "the node being replaced leads Postgres: switching over to $SURV_NAME"
+            ssh "$PS" "docker exec -e C='$SURV_NAME' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$C\" --force'" < /dev/null
+            for i in $(seq 1 40); do [ "$(ssh "$PS" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary" < /dev/null)" = 200 ] && break; sleep 3; done
+          fi
+          M=$(ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1" < /dev/null)
+          if [ "$M" = "$DEAD" ]; then
+            echo "the node being replaced is the Redis master: failing over"
+            ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel failover gul" < /dev/null
+            for i in $(seq 1 30); do
+              [ "$(ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1" < /dev/null)" != "$DEAD" ] && break; sleep 2
+            done
+          fi
+
       - name: Fence the dead address; open the survivor and witness to the new host
         run: |
           set -e
@@ -370,7 +388,15 @@ jobs:
           gh secret set SSH_KNOWN_HOSTS --repo "${{ github.repository }}" < kh
           printf '%s' "$H" | gh secret set "$HOST_SECRET" --repo "${{ github.repository }}"
           rm -f kh
-          echo "$HOST_SECRET and SSH_KNOWN_HOSTS updated"
+          # FENCED_HOST tells the witness which cut-off machine to watch for: when it answers again it
+          # is rebuilt in place (fresh copy of the database, nothing stale kept) and the auto-bought
+          # stand-in goes. A rebuild onto a given host (use_host) closes that loop.
+          if [ -z "${{ inputs.use_host }}" ]; then
+            printf '%s' "$ROLE:$DEAD" | gh secret set FENCED_HOST --repo "${{ github.repository }}"
+          else
+            printf '%s' "none" | gh secret set FENCED_HOST --repo "${{ github.repository }}"
+          fi
+          echo "$HOST_SECRET, SSH_KNOWN_HOSTS and FENCED_HOST updated"
 
       - name: DNS -- dead address out, new host in
         run: |
@@ -399,11 +425,34 @@ jobs:
             gh workflow run "$w" --repo "${{ github.repository }}" && echo "dispatched $w"
           done
 
+      - name: Retire the auto-bought stand-in this run replaced (failback)
+        if: inputs.use_host != ''
+        run: |
+          set -e
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          sid=$(api https://api.timeweb.cloud/api/v1/servers | jq -r --arg ip "$DEAD" '.servers[]
+            | select(.name | startswith("gul-auto-"))
+            | select([.networks[]? | select(.type == "public") | .ips[]? | .ip] | index($ip))
+            | .id' | head -1)
+          if [ -z "$sid" ]; then echo "the replaced host is not an auto-bought Timeweb server -- nothing to delete"; exit 0; fi
+          api -X DELETE "https://api.timeweb.cloud/api/v1/servers/$sid" >/dev/null || true
+          for i in $(seq 1 30); do
+            [ "$(curl -q -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/servers/$sid")" = 404 ] && break; sleep 10
+          done
+          # Timeweb keeps the separately billed IPv4 after the server is gone.
+          for id in $( (api https://api.timeweb.cloud/api/v1/floating-ips || echo '{}') | jq -r --arg ip "$DEAD" '.ips[]? | select(.ip == $ip) | .id'); do
+            api -X DELETE "https://api.timeweb.cloud/api/v1/floating-ips/$id" >/dev/null || true
+          done
+          echo "RETIRED=1" >> "$GITHUB_ENV"
+          echo "auto-bought server $sid and its IPv4 deleted"
+
       - name: Report
         if: always()
         run: |
-          if [ "${{ job.status }}" = success ]; then
-            tg "✅ Gulyaly: замена готова. Роль $ROLE теперь на новом сервере, база и Redis скопированы, DNS обновлён. Старый сервер отрезан файрволом — удалите его у провайдера. Новый сервер назван gul-auto-*; переименуйте его в панели Timeweb, чтобы разрешить следующую автозамену."
+          if [ "${{ job.status }}" = success ] && [ -n "${{ inputs.use_host }}" ]; then
+            tg "✅ Gulyaly: старый сервер (роль $ROLE) снова в работе со свежей копией базы.$( [ -n "${RETIRED:-}" ] && echo ' Временный сервер Timeweb удалён вместе с IP.')"
+          elif [ "${{ job.status }}" = success ]; then
+            tg "✅ Gulyaly: замена готова. Роль $ROLE теперь на новом сервере (gul-auto-*), база и Redis скопированы, DNS обновлён. Старый сервер отрезан файрволом; когда он оживёт, его автоматически вернут со свежей копией базы, а временный удалят."
           else
             tg "❌ Gulyaly: автозамена роли $ROLE не завершилась — сайт работает на оставшемся сервере. Подробности: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
