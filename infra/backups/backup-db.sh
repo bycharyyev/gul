@@ -187,3 +187,22 @@ echo "$LISTING" \
         fi
       fi
     done
+
+# Point-in-time recovery (Patroni nodes only): the daily physical base backup, and a check that the
+# continuous WAL archive (gul-wal-archive, archive_timeout 60) is keeping up. Both live in gul-pg;
+# see infra/patroni/. A failure here fails the unit, which is what gets noticed.
+if docker ps --format '{{.Names}}' | grep -qx gul-pg; then
+  docker exec gul-pg gul-base-backup || { echo "daily base backup failed" >&2; exit 1; }
+  ARCHIVER=$(docker exec -i gul-pg sh -c 'psql -U "$POSTGRES_USER" -d postgres -At' <<'SQL'
+select case
+  when current_setting('archive_mode') <> 'on' then 'off'
+  when last_failed_time is not null
+       and last_failed_time > coalesce(last_archived_time, 'epoch')
+       and now() - last_failed_time < interval '15 minutes' then 'FAILING since ' || last_failed_time
+  else 'ok, last ' || coalesce(last_archived_wal, '-') || ' at ' || coalesce(last_archived_time::text, '-')
+end from pg_stat_archiver;
+SQL
+)
+  echo "WAL archive: $ARCHIVER"
+  case "$ARCHIVER" in FAILING*|"") exit 1 ;; esac
+fi
