@@ -156,8 +156,8 @@ jobs:
           in_dns() { dig +short @ns1.timeweb.ru api.gulyaly.com A | grep -qx "$B"; }
           in_dns || { echo "the secondary is not in DNS to begin with" >&2; exit 1; }
           t0=$(date +%s)
-          ssh "$PB" "cd /opt/gul-secondary && docker compose stop api api-2 >/dev/null 2>&1" < /dev/null
-          echo "secondary API stopped"
+          ssh "$PB" "cd /opt/gul-secondary && docker compose stop api api-2 && docker compose ps --format '{{.Service}} {{.State}}' | grep -E '^api'" < /dev/null
+          echo "secondary API stopped; as a visitor sees it now: $(curl -s -o /dev/null -m 8 --resolve "api.gulyaly.com:443:$B" -w '%{http_code}' https://api.gulyaly.com/api/health/ready)"
           for i in $(seq 1 60); do in_dns || break; sleep 10; done
           in_dns && { echo "still in DNS after 10 min" >&2; ssh "$PB" "cd /opt/gul-secondary && docker compose start api api-2" < /dev/null; exit 1; }
           echo "removed from DNS $(( $(date +%s) - t0 )) s after the stop"

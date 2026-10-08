@@ -48,6 +48,12 @@ while :; do
   done
 
   now=$(date +%s)
+  # Heartbeat every 10 min, and every probe while anything is not plainly up, so the log shows
+  # what this watcher actually saw.
+  if [ $((now - ${hb:-0})) -ge 600 ] || [ "$miss_a$miss_b" != "00" ]; then
+    echo "$(date -u +%FT%TZ) a=$state_a(miss $miss_a) b=$state_b(miss $miss_b)"
+    hb=$now
+  fi
   if [ -n "$pending" ] && [ $((now - last)) -ge "$MIN_GAP" ]; then
     dispatch watchdog.yml "$pending"
     last=$now; pending=""
