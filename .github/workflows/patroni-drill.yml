@@ -1,17 +1,21 @@
-name: Patroni failover drill / switchover
+name: HA drills (Patroni, Redis, whole data tier) / switchover
 
 # drill:      stops the leader's gul-pg (as if the node lost its database), proves the other node
 #             takes over on its own and the site answers on BOTH nodes through HAProxy, then starts
 #             the stopped member again and proves it rejoins as a replica. Measures the gap.
 # switchover: planned, clean move of the leader to `candidate` (e.g. back to gul-a after a drill).
-# status:     patronictl list, read-only.
+# redis-drill: stops the redis master, proves the Sentinels promote the replica and the site answers
+#             on both nodes, starts it again (it rejoins as a replica), then fails back to the primary.
+# node-drill: stops BOTH gul-pg and gul-redis on the primary at once (its whole data tier), proves
+#             the secondary carries the site alone, then restores and moves both leaders back.
+# status:     patronictl list + redis roles, read-only.
 
 on:
   workflow_dispatch:
     inputs:
       action:
         type: choice
-        options: [status, drill, switchover]
+        options: [status, drill, switchover, redis-drill, node-drill]
         default: status
       candidate:
         description: 'switchover only: gul-a or gul-b'
@@ -26,6 +30,7 @@ jobs:
       B: ${{ secrets.SECONDARY_HOST }}
       PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
       PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
     steps:
       - name: Set up SSH (pinned host keys)
         run: |
@@ -36,7 +41,10 @@ jobs:
           printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' > ~/.ssh/config
 
       - name: Status
-        run: ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+        run: |
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+          m=$(ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul 2>/dev/null | head -1" < /dev/null || true)
+          if [ "$m" = "$A" ]; then echo "redis master: primary"; elif [ "$m" = "$B" ]; then echo "redis master: secondary"; else echo "redis master: unknown (no Sentinel yet?)"; fi
 
       - name: Switchover
         if: inputs.action == 'switchover'
@@ -90,3 +98,48 @@ jobs:
           echo "old leader rejoined as a replica"
           sleep 10
           ssh "$OTHER" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+
+      - name: Redis / node drill
+        if: inputs.action == 'redis-drill' || inputs.action == 'node-drill'
+        env:
+          MODE: ${{ inputs.action }}
+        run: |
+          set -e
+          site() { curl -s -o /dev/null -m 8 --resolve "api.gulyaly.com:443:$1" -w '%{http_code}' https://api.gulyaly.com/api/health/ready || true; }
+          sen() { ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 $*" < /dev/null; }
+          master() { sen sentinel get-master-addr-by-name gul | head -1; }
+          if [ "$(master)" = "$A" ]; then LEAD="$PA"; OTHER="$PB"; NEWIP="$B"; else LEAD="$PB"; OTHER="$PA"; NEWIP="$A"; fi
+          t0=$(date +%s)
+          if [ "$MODE" = node-drill ]; then
+            echo "stopping the data tier (gul-pg + gul-redis) on the redis master's node"
+            ssh "$LEAD" "docker stop -t 20 gul-redis gul-pg >/dev/null" < /dev/null
+          else
+            echo "stopping gul-redis on the master"
+            ssh "$LEAD" "docker stop -t 20 gul-redis >/dev/null" < /dev/null
+          fi
+          for i in $(seq 1 45); do [ "$(master)" = "$NEWIP" ] && break; sleep 2; done
+          [ "$(master)" = "$NEWIP" ] || { echo "Sentinels did NOT promote the replica" >&2; exit 1; }
+          echo "new redis master after $(( $(date +%s) - t0 )) s"
+          for i in $(seq 1 40); do
+            a=$(site "$A"); b=$(site "$B")
+            [ "$a" = 200 ] && [ "$b" = 200 ] && break
+            sleep 2
+          done
+          echo "site through both nodes: $a / $b, $(( $(date +%s) - t0 )) s after the stop"
+          [ "$a" = 200 ] && [ "$b" = 200 ]
+          echo "starting the stopped containers again"
+          ssh "$LEAD" "docker start gul-pg gul-redis >/dev/null 2>&1 || docker start gul-redis >/dev/null" < /dev/null
+          sleep 25
+          sen sentinel replicas gul | grep -A1 -E '^flags$' | grep -v -- -- || true
+          echo "failing back: redis master and Patroni leader to the primary"
+          [ "$(master)" = "$A" ] || { sen sentinel failover gul; for i in $(seq 1 30); do [ "$(master)" = "$A" ] && break; sleep 2; done; }
+          [ "$(master)" = "$A" ] && echo "redis master is the primary again"
+          if ! ssh "$PA" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary" < /dev/null | grep -qx 200; then
+            for i in $(seq 1 30); do
+              ssh "$PA" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/replica" < /dev/null | grep -qx 200 && break; sleep 3
+            done
+            ssh "$PA" "docker exec gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate gul-a --force'" < /dev/null
+          fi
+          sleep 15
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+          echo "final: site $(site "$A") / $(site "$B")"
