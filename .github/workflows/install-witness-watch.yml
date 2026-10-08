@@ -1,0 +1,63 @@
+name: Install the witness health watcher
+
+# Runs infra/witness/watch.sh on the witness as container gul-witness-watch: probes both app nodes
+# every 30 s and dispatches watchdog.yml the moment one changes state. Needs the repository secret
+# WITNESS_GH_TOKEN: a fine-grained token for THIS repository with only "Actions: read and write"
+# (it can start workflows and nothing else; the destructive ones wait for approval in the "danger"
+# environment). The token is written to /etc/gul-witness.env (600) and never printed.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    env:
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the token
+        env:
+          T: ${{ secrets.WITNESS_GH_TOKEN }}
+        run: |
+          [ -n "$T" ] || { echo "repository secret WITNESS_GH_TOKEN is not set -- see this file's header" >&2; exit 1; }
+          echo "token length ${#T}"
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' > ~/.ssh/config
+
+      - name: Ship the script and its environment, (re)start the container
+        env:
+          T: ${{ secrets.WITNESS_GH_TOKEN }}
+          A: ${{ secrets.DEPLOY_HOST }}
+          B: ${{ secrets.SECONDARY_HOST }}
+        run: |
+          set -e
+          umask 077
+          printf '%s\n' "A=$A" "B=$B" "GH_TOKEN=$T" "REPO=${{ github.repository }}" > witness.env
+          scp -q witness.env "$PW:/tmp/gul-witness.env"
+          rm -f witness.env
+          scp -q infra/witness/watch.sh "$PW:/tmp/gul-witness-watch.sh"
+          printf '%s\n' '#!/bin/sh' 'set -e' \
+            'install -m 600 -o deploy -g deploy /tmp/gul-witness.env /etc/gul-witness.env' \
+            'install -m 755 -o root -g root /tmp/gul-witness-watch.sh /usr/local/bin/gul-witness-watch.sh' \
+            'rm -f /tmp/gul-witness.env /tmp/gul-witness-watch.sh' > inst.sh
+          scp -q inst.sh "$PW:/tmp/inst.sh"
+          ssh "$PW" bash -s <<'REMOTE'
+          set -e
+          docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/inst.sh
+          rm -f /tmp/inst.sh
+          docker rm -f gul-witness-watch >/dev/null 2>&1 || true
+          docker run -d --name gul-witness-watch --restart unless-stopped \
+            --log-driver journald --log-opt tag=gul-witness-watch \
+            --env-file /etc/gul-witness.env -v /usr/local/bin/gul-witness-watch.sh:/watch.sh:ro \
+            alpine:3 sh -c 'apk add --no-cache curl >/dev/null && exec sh /watch.sh' >/dev/null
+          sleep 20
+          docker logs --tail 5 gul-witness-watch
+          REMOTE

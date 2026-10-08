@@ -10,8 +10,12 @@ name: Watchdog (node health -> DNS + Telegram)
 #   both nodes down               -> touch nothing (removing records would only make it worse) + alert
 # The last live address is never removed. admin.gulyaly.com is single-node by design and only alerted on.
 #
-# Interim: GitHub's 5-minute schedule is the floor. The planned witness node (HA plan, step 2) will
-# run the same logic every 30 s; this workflow then stays as the outside, independent second check.
+# Two triggers: GitHub's own 5-minute schedule (the floor, independent of our servers), and the
+# witness (infra/witness/watch.sh), which probes every 30 s and dispatches this workflow the moment
+# a node changes state. The witness holds only a token that can start workflows; the Timeweb key
+# stays here. Workflows that can destroy or buy anything run in the GitHub environment "danger",
+# which waits for the owner's approval -- so a stolen witness token can start this check and
+# nothing that hurts.
 
 on:
   schedule:

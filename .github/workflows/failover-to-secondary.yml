@@ -24,6 +24,8 @@ on:
 jobs:
   failover:
     runs-on: ubuntu-latest
+    # Needs the owner's approval click (GitHub environment "danger"): see watchdog.yml for why.
+    environment: danger
     steps:
       - name: Superseded by Patroni
         run: |
