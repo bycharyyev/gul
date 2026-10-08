@@ -1,0 +1,121 @@
+name: Enable the WAL archive (rolling restart of gul-pg)
+
+# Puts the backup bucket's keys (BACKUP_S3_* from each node's .env) into patroni.env and recreates
+# gul-pg on the current image, replica first, then the leader after a planned switchover -- so
+# Postgres is never down on both nodes, and writes pause only for the switchover itself. With the
+# keys present, the entrypoint turns on archive_mode with gul-wal-archive and archive_timeout 60.
+# Then proves it: forces a WAL switch, checks pg_stat_archiver, and takes a first base backup.
+# Ends with gul-a as leader. Re-runnable.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: etcd
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    # Needs the owner's approval click (GitHub environment "danger"): see watchdog.yml for why.
+    environment: danger
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      W: ${{ secrets.WITNESS_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/gul-patroni:16
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' > ~/.ssh/config
+
+      - name: patroni.env gets the backup bucket keys; pull the image
+        run: |
+          set -e
+          for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
+            host=${t%%:*}; dir=${t#*:}
+            ssh "$host" "DIR='$dir' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            umask 077
+            sed -i '/^BACKUP_S3_/d' "$DIR/patroni.env"
+            grep -E '^BACKUP_S3_(ENDPOINT|ACCESS_KEY_ID|SECRET_ACCESS_KEY|BUCKET|REGION)=' "$DIR/.env" \
+              | sed -E "s/^([A-Z0-9_]+)=[\"'](.*)[\"']\$/\1=\2/" >> "$DIR/patroni.env"
+            n=$(grep -c '^BACKUP_S3_' "$DIR/patroni.env")
+            echo "$DIR/patroni.env: $n BACKUP_S3_* keys"
+            [ "$n" -ge 4 ]
+          REMOTE
+            ssh "$host" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin >/dev/null && docker pull -q '$IMAGE'" < /dev/null
+          done
+
+      - name: Rolling recreate -- replica, switchover, old leader, switchover back to gul-a
+        run: |
+          set -e
+          role() { ssh "$1" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/primary" < /dev/null; }
+          wait_url() { # wait_url <host> <path>
+            for i in $(seq 1 80); do
+              [ "$(ssh "$1" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8008/$2" < /dev/null)" = 200 ] && return 0
+              sleep 3
+            done
+            ssh "$1" "docker logs --tail 40 gul-pg" < /dev/null; return 1
+          }
+          recreate() { # recreate <host> <dir> <name> <ip>
+            ssh "$1" "DIR='$2' NAME='$3' IP='$4' A='$A' B='$B' W='$W' IMAGE='$IMAGE' bash -s" <<'REMOTE'
+            set -e
+            vol=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' gul-pg)
+            [ -n "$vol" ] || { echo "cannot find gul-pg's volume" >&2; exit 1; }
+            docker stop -t 120 gul-pg >/dev/null
+            docker rm gul-pg >/dev/null
+            docker run -d --name gul-pg --restart unless-stopped --network host --stop-timeout 120 \
+              --log-driver journald --log-opt tag=gul-pg \
+              -v "$vol":/var/lib/postgresql/data --env-file "$DIR/patroni.env" \
+              -e NODE_NAME="$NAME" -e NODE_IP="$IP" -e ETCD_HOSTS="$A:2379,$B:2379,$W:2379" \
+              "$IMAGE" >/dev/null
+            echo "$NAME recreated on volume $vol"
+          REMOTE
+          }
+          switchover() { # switchover <candidate>
+            ssh "$PA" "docker exec -e C='$1' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$C\" --force'" < /dev/null \
+              || ssh "$PB" "docker exec -e C='$1' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$C\" --force'" < /dev/null
+          }
+          if [ "$(role "$PA")" = 200 ]; then
+            recreate "$PB" /opt/gul-secondary gul-b "$B"; wait_url "$PB" replica
+            switchover gul-b; wait_url "$PB" primary
+            recreate "$PA" /opt/gul gul-a "$A"; wait_url "$PA" replica
+          else
+            recreate "$PA" /opt/gul gul-a "$A"; wait_url "$PA" replica
+            recreate "$PB" /opt/gul-secondary gul-b "$B"; wait_url "$PB" replica || true
+          fi
+          sleep 10
+          switchover gul-a; wait_url "$PA" primary
+          sleep 10
+          ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
+
+      - name: Prove the archive works, take the first base backup
+        run: |
+          set -e
+          ssh "$PA" bash -s <<'REMOTE'
+          set -e
+          q() { docker exec gul-pg sh -c "psql -U \"\$POSTGRES_USER\" -d postgres -Atc \"$1\""; }
+          echo "archive_mode=$(q 'show archive_mode') archive_timeout=$(q 'show archive_timeout')"
+          q 'select pg_switch_wal()' >/dev/null
+          sleep 15
+          echo "pg_stat_archiver: $(q "select archived_count||' archived, '||failed_count||' failed, last '||coalesce(last_archived_wal,'-') from pg_stat_archiver")"
+          [ "$(q 'select archived_count from pg_stat_archiver')" -gt 0 ]
+          docker exec gul-pg gul-base-backup --force
+          REMOTE
+
+      - name: Site on both nodes
+        run: |
+          for ip in "$A" "$B"; do
+            echo "node -> $(curl -s -o /dev/null -m 15 --resolve "api.gulyaly.com:443:$ip" -w '%{http_code}' https://api.gulyaly.com/api/health/ready)"
+          done

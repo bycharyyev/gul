@@ -1,0 +1,40 @@
+name: Fetch PITR set (latest base backup + WAL since)
+
+# For infra/backups/pitr-drill.sh on the owner's PC: downloads the newest base backup and every
+# archived WAL file from its day onwards, all still encrypted (the private key exists only on that
+# PC), and hands them over as a one-day artifact.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    env:
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download
+        run: |
+          set -e
+          . infra/patroni/s3.sh
+          mkdir -p pitr/wal
+          base=$(s3_keys base/ | sort | tail -1)
+          [ -n "$base" ] || { echo "no base backup in the bucket yet" >&2; exit 1; }
+          s3 -o "pitr/$(basename "$base")" "$S3_EP/$S3_BUCKET/$base"
+          day=$(echo "$base" | sed -n 's#^base/\([0-9]\{8\}\)-.*#\1#p')
+          n=0
+          for key in $(s3_keys wal/ | awk -F/ -v d="$day" '$2 >= d'); do
+            s3 -o "pitr/wal/$(basename "$key")" "$S3_EP/$S3_BUCKET/$key"
+            n=$((n + 1))
+          done
+          echo "base: $base, WAL files: $n, total $(du -sh pitr | cut -f1)"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pitr-set
+          path: pitr/
+          retention-days: 1

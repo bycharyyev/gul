@@ -27,6 +27,16 @@ export PATRONI_RESTAPI_PASSWORD="$REPLICATOR_PASSWORD"
 
 hosts_yaml=$(echo "$ETCD_HOSTS" | tr ',' '\n' | sed 's/^/    - /')
 
+# Continuous WAL archive to S3 when this node has the backup bucket's keys (gul-wal-archive). Local
+# parameters, so they take effect whenever this container starts. Only the leader archives
+# (archive_mode=on is ignored on a standby); after a failover the new leader carries on.
+archive_params=""
+if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
+  archive_params='    archive_mode: "on"
+    archive_command: '"'"'/usr/local/bin/gul-wal-archive "%p" "%f"'"'"'
+    archive_timeout: 60'
+fi
+
 cat > /tmp/patroni.yml <<EOF
 scope: gul
 name: $NODE_NAME
@@ -69,6 +79,7 @@ postgresql:
   use_unix_socket: true
   parameters:
     unix_socket_directories: /var/run/postgresql
+$archive_params
   # Same posture as before Patroni: password (scram) for everything over TCP, and the host
   # firewall decides who may reach 5432 at all.
   pg_hba:

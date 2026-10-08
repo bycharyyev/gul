@@ -6,7 +6,7 @@ name: Build Patroni image
 on:
   push:
     branches: [main]
-    paths: ['infra/patroni/**', '.github/workflows/build-patroni-image.yml']
+    paths: ['infra/patroni/**', 'infra/backups/backup-recipient.pem', '.github/workflows/build-patroni-image.yml']
   workflow_dispatch: {}
 
 jobs:
@@ -21,9 +21,11 @@ jobs:
         run: |
           set -e
           IMG="ghcr.io/${{ github.repository_owner }}/gul-patroni"
+          cp infra/backups/backup-recipient.pem infra/patroni/
           docker build -t "$IMG:16" -t "$IMG:${{ github.sha }}" infra/patroni
           docker run --rm --entrypoint patroni "$IMG:16" --version
           docker run --rm --entrypoint postgres "$IMG:16" --version
+          docker run --rm --entrypoint sh "$IMG:16" -c 'openssl version && test -r /etc/gul/backup-recipient.pem && test -x /usr/local/bin/gul-wal-archive && . /usr/local/lib/gul/s3.sh && echo scripts ok'
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "$IMG:16"
           docker push "$IMG:${{ github.sha }}"
