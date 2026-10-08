@@ -4,7 +4,12 @@ name: HA diagnostics (read-only)
 # routers log, whether the API's readiness answers locally, and recent API log lines. Read-only.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      restart_api:
+        description: 'After inspecting, restart api/api-2/api-worker on both nodes (recovery)'
+        type: boolean
+        default: false
 
 jobs:
   diag:
@@ -26,7 +31,7 @@ jobs:
           for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
             host=${t%%:*}; dir=${t#*:}
             echo "================ $dir ================"
-            ssh "$host" "DIR='$dir' bash -s" <<'REMOTE'
+            ssh "$host" "DIR='$dir' RESTART='${{ inputs.restart_api }}' bash -s" <<'REMOTE'
             cd "$DIR"
             P=$(grep -E '^REDIS_PASSWORD=' .env | head -1 | cut -d= -f2- | sed -E "s/^[\"'](.*)[\"']\$/\1/")
             echo "--- containers ---"; docker ps --format '{{.Names}}\t{{.Status}}' | sort
@@ -35,6 +40,15 @@ jobs:
             echo "--- redis router (haproxy) log ---"; docker compose logs --tail 15 redis 2>&1 | tail -15
             echo "--- readiness, local, 6 s ---"
             for p in 4000 4001; do echo "$p: $(curl -s -m 6 http://127.0.0.1:$p/api/health/ready || echo TIMEOUT)"; done
-            echo "--- api log ---"; docker compose logs --tail 25 api 2>&1 | grep -viE 'GET /api/health' | tail -25
+            echo "--- redis clients by source (who is connected to this node's redis) ---"
+            docker exec gul-redis redis-cli --no-auth-warning -a "$P" client list 2>/dev/null | grep -o 'cmd=[a-z|]*' | sort | uniq -c
+            echo "--- api log (non-request lines) ---"; docker compose logs --since 30m api api-worker 2>&1 | grep -vE 'http.request.completed|RouterExplorer|RoutesResolver' | tail -25
+            if [ "$RESTART" = true ]; then
+              docker compose restart api api-2 api-worker
+              for p in 4000 4002 4001; do
+                for i in $(seq 1 30); do curl -fsS -m 5 "http://127.0.0.1:$p/api/health/ready" >/dev/null && break; sleep 3; done
+                echo "after restart $p: $(curl -s -m 6 http://127.0.0.1:$p/api/health/ready || echo TIMEOUT)"
+              done
+            fi
           REMOTE
           done
