@@ -1,74 +1,84 @@
 name: Install DB backups to S3
 
-# Installs the hourly Postgres dump on the primary: backup-db.sh, the systemd units, and the public
-# certificate every dump is encrypted to (its private key never leaves the owner's PC). Backups go
-# to a dedicated bucket; Object Lock is requested and used when the provider supports it.
+# Installs the hourly Postgres dump on BOTH nodes: backup-db.sh, the systemd units, and the public
+# certificate every dump is encrypted to (its private key never leaves the owner's PC). Only the
+# node whose Postgres is the Patroni leader actually dumps each hour (backup-db.sh checks), so
+# backups carry on on whichever node survives. Backups go to a dedicated bucket; Object Lock is
+# requested and used when the provider supports it.
 
 on:
   workflow_dispatch:
     inputs:
       run_now:
-        description: "Run one backup immediately after installing"
+        description: "Run the backup unit on both nodes right after installing (the leader dumps)"
         type: boolean
         default: true
 
 jobs:
   install:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [primary, secondary]
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up SSH
+      - name: Set up SSH (pinned host keys)
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          if [ "${{ matrix.node }}" = primary ]; then
+            echo "TARGET=${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" >> "$GITHUB_ENV"
+            echo "DIR=/opt/gul" >> "$GITHUB_ENV"
+          else
+            echo "TARGET=${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" >> "$GITHUB_ENV"
+            echo "DIR=/opt/gul-secondary" >> "$GITHUB_ENV"
+          fi
 
       - name: Copy the script and units
         run: |
-          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p /opt/gul/scripts"
-          scp -i ~/.ssh/deploy_key infra/backups/backup-db.sh "$TARGET:/opt/gul/scripts/backup-db.sh"
-          scp -i ~/.ssh/deploy_key infra/backups/backup-recipient.pem "$TARGET:/opt/gul/scripts/backup-recipient.pem"
-          scp -i ~/.ssh/deploy_key infra/backups/gul-db-backup.service infra/backups/gul-db-backup.timer "$TARGET:/tmp/"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "chmod 750 /opt/gul/scripts/backup-db.sh"
+          set -e
+          ssh -i ~/.ssh/deploy_key "$TARGET" "mkdir -p $DIR/scripts"
+          scp -i ~/.ssh/deploy_key infra/backups/backup-db.sh "$TARGET:$DIR/scripts/backup-db.sh"
+          scp -i ~/.ssh/deploy_key infra/backups/backup-recipient.pem "$TARGET:$DIR/scripts/backup-recipient.pem"
+          # The units name /opt/gul; point them at this node's directory.
+          sed "s#/opt/gul#$DIR#g" infra/backups/gul-db-backup.service > gul-db-backup.service
+          scp -i ~/.ssh/deploy_key gul-db-backup.service infra/backups/gul-db-backup.timer "$TARGET:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "chmod 750 $DIR/scripts/backup-db.sh"
 
-      - name: Require dedicated immutable-backup configuration
+      - name: Require dedicated backup configuration
         run: |
-          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          ssh -i ~/.ssh/deploy_key "$TARGET" 'set -e
+          ssh -i ~/.ssh/deploy_key "$TARGET" "set -e
             for key in BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_BUCKET; do
-              grep -q "^${key}=.." /opt/gul/.env || {
-                echo "missing non-empty ${key} in /opt/gul/.env" >&2; exit 1;
-              }
-            done'
+              grep -q \"^\${key}=..\" $DIR/.env || { echo \"missing non-empty \${key} in $DIR/.env\" >&2; exit 1; }
+            done" < /dev/null
 
       - name: Install the timer
         run: |
-          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           # The deploy user has no sudo but is in the docker group, which is root-equivalent on
-          # this host. Built line by line into a file rather than as a heredoc: heredocs inside a
-          # run block have caused real bugs in this repo before.
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'set -e' > /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'cp /tmp/gul-db-backup.service /etc/systemd/system/' >> /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'cp /tmp/gul-db-backup.timer /etc/systemd/system/' >> /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl daemon-reload' >> /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl enable --now gul-db-backup.timer' >> /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl list-timers gul-db-backup.timer --no-pager' >> /tmp/install-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/install-backup.sh"
+          # this host. Built line by line, not a heredoc: heredocs in run blocks have bitten here.
+          printf '%s\n' 'set -e' \
+            'cp /tmp/gul-db-backup.service /etc/systemd/system/' \
+            'cp /tmp/gul-db-backup.timer /etc/systemd/system/' \
+            'systemctl daemon-reload' \
+            'systemctl enable --now gul-db-backup.timer' \
+            'systemctl list-timers gul-db-backup.timer --no-pager' > install-backup.sh
+          scp -i ~/.ssh/deploy_key install-backup.sh "$TARGET:/tmp/install-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/install-backup.sh" < /dev/null
 
-      - name: Run one backup now and show what happened
+      - name: Run the unit now and show what happened
         if: ${{ inputs.run_now }}
         run: |
-          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'set -e' > /tmp/run-backup.sh"
           # `|| true` on start: under `set -e` a failed unit used to end the script before the
-          # journal was printed, so the log showed that it failed and never why. The last line
-          # still fails the step when the unit failed.
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'systemctl start gul-db-backup.service || true' >> /tmp/run-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo 'journalctl -u gul-db-backup.service -n 25 --no-pager' >> /tmp/run-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "echo '! systemctl is-failed --quiet gul-db-backup.service' >> /tmp/run-backup.sh"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/run-backup.sh"
+          # journal was printed. The last line still fails the step when the unit failed.
+          printf '%s\n' 'set -e' \
+            'systemctl start gul-db-backup.service || true' \
+            'journalctl -u gul-db-backup.service -n 8 --no-pager' \
+            '! systemctl is-failed --quiet gul-db-backup.service' > run-backup.sh
+          scp -i ~/.ssh/deploy_key run-backup.sh "$TARGET:/tmp/run-backup.sh"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/run-backup.sh" < /dev/null
           echo "--- anything left in the staging directory means an upload failed ---"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "ls -la /opt/gul/backups 2>/dev/null || echo 'staging directory is empty or absent'"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "ls -la $DIR/backups 2>/dev/null || echo 'staging directory is empty or absent'" < /dev/null
