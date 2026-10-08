@@ -26,6 +26,7 @@ jobs:
         env:
           PRIMARY: ${{ secrets.DEPLOY_HOST }}
           SECONDARY: ${{ secrets.SECONDARY_HOST }}
+          WITNESS: ${{ secrets.WITNESS_HOST }}
         run: |
           # 22/80/443 are meant to be open. Everything else on this list is meant to be reachable
           # only from the other server, and a success is a finding.
@@ -43,14 +44,21 @@ jobs:
           : > /tmp/exposed
 
           echo "--- primary ---"
-          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed"; do
+          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed" "2379 closed" "2380 closed"; do
             probe "$PRIMARY" ${spec}
           done
 
           echo "--- secondary ---"
-          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed" "587 closed" "25 closed"; do
+          for spec in "22 OPEN" "80 OPEN" "443 OPEN" "5432 closed" "6379 closed" "19999 closed" "587 closed" "25 closed" "2379 closed" "2380 closed"; do
             probe "$SECONDARY" ${spec}
           done
+
+          if [ -n "$WITNESS" ]; then
+            echo "--- witness ---"
+            for spec in "22 OPEN" "2379 closed" "2380 closed" "80 closed" "443 closed"; do
+              probe "$WITNESS" ${spec}
+            done
+          fi
 
           echo
           if [ -s /tmp/exposed ]; then
