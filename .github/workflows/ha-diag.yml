@@ -40,6 +40,13 @@ jobs:
             echo "--- redis router (haproxy) log ---"; docker compose logs --tail 15 redis 2>&1 | tail -15
             echo "--- readiness, local, 6 s ---"
             for p in 4000 4001; do echo "$p: $(curl -s -m 6 http://127.0.0.1:$p/api/health/ready || echo TIMEOUT)"; done
+            echo "--- telegram polling leases (owner = host:pid of the polling worker) ---"
+            for k in seller admin store; do
+              echo "$k: $(docker exec gul-redis sh -c "redis-cli --no-auth-warning -a '$P' get lease:telegram-polling:$k" 2>/dev/null)"
+            done
+            echo "this host: $(hostname)"
+            echo "--- 409 conflicts in the last 15 min ---"
+            docker compose logs --since 15m api-worker 2>&1 | grep -c '409' || true
             echo "--- redis clients by source (who is connected to this node's redis) ---"
             docker exec gul-redis redis-cli --no-auth-warning -a "$P" client list 2>/dev/null | grep -o 'cmd=[a-z|]*' | sort | uniq -c
             echo "--- api log (non-request lines) ---"; docker compose logs --since 30m api api-worker 2>&1 | grep -vE 'http.request.completed|RouterExplorer|RoutesResolver' | tail -25
