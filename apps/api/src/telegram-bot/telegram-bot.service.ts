@@ -1,7 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Telegraf, Markup } from "telegraf";
 import { PrismaService } from "../prisma/prisma.service";
+import type Redis from "ioredis";
 import { runsBackgroundWork } from "../common/app-role";
+import { PollingLease, telegrafRunner } from "../common/polling-lease";
+import { REDIS_CLIENT } from "../queue/queue.module";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: "🟡 Ожидает оплаты",
@@ -24,8 +27,12 @@ const MENU_KEYBOARD = Markup.keyboard([
 export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramBotService.name);
   private bot: Telegraf | null = null;
+  private lease: PollingLease | null = null;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private redis: Redis,
+  ) {}
 
   onModuleInit() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -52,23 +59,32 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
     // secondary), so unconditionally calling launch() here meant one node's poller died within
     // seconds of boot every single deploy, and inbound commands (/start shop-linking, /unlink,
     // this /chatid) worked only by accident, on whichever node happened to win that race -- with
-    // no retry: the .catch() below only logs, it never relaunches. TELEGRAM_BOT_POLLING="true" is
-    // written to primary's .env only (see deploy.yml), so exactly one node ever calls launch().
+    // no retry. TELEGRAM_BOT_POLLING="true" marks a node eligible (both nodes, see deploy.yml); the
+    // lease below picks the one process that polls.
     // Never from an APP_ROLE=http process (ADR 0008): there may be several on one node, and the
     // second long-poller on a token is killed by Telegram with 409.
     if (process.env.TELEGRAM_BOT_POLLING !== "true" || !runsBackgroundWork()) {
       this.logger.log("Telegram bot: outbound-only on this node (TELEGRAM_BOT_POLLING unset)");
       return;
     }
-    // launch()'s returned promise only resolves when the bot stops polling — use the onLaunch
-    // callback to know when startup actually finished, and catch to log genuine startup failures.
-    bot
-      .launch(() => this.logger.log("Telegram seller bot started (long polling)"))
-      .catch((err) => this.logger.error("Telegram bot stopped unexpectedly", err));
+    // Eligible only; which eligible process actually polls is a Redis lease (common/polling-lease.ts),
+    // so the bots keep answering when the node that was polling goes down.
+    this.lease = new PollingLease(
+      this.redis,
+      "lease:telegram-polling:seller",
+      telegrafRunner(bot, this.logger, "Telegram seller bot"),
+      this.logger,
+    );
+    this.lease.begin();
   }
 
-  onModuleDestroy() {
-    this.bot?.stop("shutdown");
+  async onModuleDestroy() {
+    await this.lease?.end();
+    try {
+      this.bot?.stop("shutdown");
+    } catch {
+      // Never launched on this process.
+    }
   }
 
   /** Sends free-form text to the seller's linked chat, if any. Never throws — notification failures must not break the calling flow. */

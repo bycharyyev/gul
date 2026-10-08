@@ -340,9 +340,9 @@ jobs:
             # t.me/<username> deep link, no active/active polling concern at all.
             sed -i "/^TELEGRAM_BOT_USERNAME=/d" .env
             echo "TELEGRAM_BOT_USERNAME=${{ env.TELEGRAM_BOT_USERNAME }}" >> .env
-            # Same primary-only reasoning as above: Telegram getUpdates long-polling allows only
-            # one live consumer per bot token, so only one of the two active/active nodes may
-            # ever set this to "true" -- see TELEGRAM_BOT_POLLING in apps/api/.env.example.
+            # Marks this node eligible to poll; with both nodes eligible, a Redis lease picks the one
+            # process that polls (Telegram allows one getUpdates consumer per token) -- see
+            # apps/api/src/common/polling-lease.ts.
             grep -q "^TELEGRAM_BOT_POLLING=" .env || echo "TELEGRAM_BOT_POLLING=true" >> .env
             # @gulyalybot, the admin/ops bot -- separate token, separate polling gate, same
             # primary-only reasoning as TELEGRAM_BOT_TOKEN/TELEGRAM_BOT_POLLING above (one live
@@ -564,6 +564,13 @@ jobs:
             echo "TELEGRAM_BOT_USERNAME=${{ env.TELEGRAM_BOT_USERNAME }}" >> .env
             sed -i "/^TELEGRAM_ADMIN_BOT_USERNAME=/d" .env
             echo "TELEGRAM_ADMIN_BOT_USERNAME=${{ env.TELEGRAM_ADMIN_BOT_USERNAME }}" >> .env
+            # Eligible to poll the bots, like the primary: a Redis lease picks the one process that
+            # actually polls (apps/api/src/common/polling-lease.ts), so the bots survive the
+            # primary going down.
+            for f in TELEGRAM_BOT_POLLING TELEGRAM_ADMIN_BOT_POLLING TELEGRAM_STORE_BOT_POLLING; do
+              sed -i "/^$f=/d" .env
+              echo "$f=true" >> .env
+            done
             for attempt in 1 2 3; do
               docker compose pull && break
               echo "pull attempt $attempt failed; retrying in $((attempt * 15))s" >&2

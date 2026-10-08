@@ -1,11 +1,15 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
 import { Context, Markup, Telegraf } from "telegraf";
+import type Redis from "ioredis";
 import { runsBackgroundWork } from "../common/app-role";
+import { PollingLease, telegrafRunner } from "../common/polling-lease";
+import { REDIS_CLIENT } from "../queue/queue.module";
 
 const SITE_URL = "https://gulyaly.com";
 const SUPPORT_EMAIL = "support@gulyaly.com";
@@ -21,6 +25,9 @@ const MENU = Markup.inlineKeyboard([
 export class StoreTelegramBotService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(StoreTelegramBotService.name);
   private bot: Telegraf | null = null;
+  private lease: PollingLease | null = null;
+
+  constructor(@Inject(REDIS_CLIENT) private redis: Redis) {}
 
   onModuleInit() {
     const token = process.env.TELEGRAM_STORE_BOT_TOKEN;
@@ -79,16 +86,22 @@ export class StoreTelegramBotService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    bot
-      .launch(() =>
-        this.logger.log("Telegram storefront bot started (long polling)"),
-      )
-      .catch((err) =>
-        this.logger.error("Telegram storefront bot stopped unexpectedly", err),
-      );
+    // Eligible only; a Redis lease picks the one process that polls (common/polling-lease.ts).
+    this.lease = new PollingLease(
+      this.redis,
+      "lease:telegram-polling:store",
+      telegrafRunner(bot, this.logger, "Telegram storefront bot"),
+      this.logger,
+    );
+    this.lease.begin();
   }
 
-  onModuleDestroy() {
-    this.bot?.stop("shutdown");
+  async onModuleDestroy() {
+    await this.lease?.end();
+    try {
+      this.bot?.stop("shutdown");
+    } catch {
+      // Never launched on this process.
+    }
   }
 }
