@@ -72,6 +72,8 @@ on:
 jobs:
   manage:
     runs-on: ubuntu-latest
+    # Needs the owner's approval click (GitHub environment "danger"): see watchdog.yml for why.
+    environment: danger
     env:
       CURL_HOME: ${{ github.workspace }}/.github/curl
     steps:

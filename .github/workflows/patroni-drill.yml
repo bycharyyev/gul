@@ -24,6 +24,8 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # Needs the owner's approval click (GitHub environment "danger"): see watchdog.yml for why.
+    environment: danger
     timeout-minutes: 20
     env:
       A: ${{ secrets.DEPLOY_HOST }}
