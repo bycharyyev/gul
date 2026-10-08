@@ -1,0 +1,29 @@
+name: Build Patroni image
+
+# ghcr.io/<owner>/gul-patroni:16 (and :<sha>) from infra/patroni. Used by the gul-pg container on
+# both database nodes; see migrate-to-patroni.yml.
+
+on:
+  push:
+    branches: [main]
+    paths: ['infra/patroni/**', '.github/workflows/build-patroni-image.yml']
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build, smoke-test, push
+        run: |
+          set -e
+          IMG="ghcr.io/${{ github.repository_owner }}/gul-patroni"
+          docker build -t "$IMG:16" -t "$IMG:${{ github.sha }}" infra/patroni
+          docker run --rm --entrypoint patroni "$IMG:16" --version
+          docker run --rm --entrypoint postgres "$IMG:16" --version
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMG:16"
+          docker push "$IMG:${{ github.sha }}"
