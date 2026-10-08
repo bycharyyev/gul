@@ -87,16 +87,20 @@ jobs:
             ssh "$PA" "docker exec -e C='$1' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$C\" --force'" < /dev/null \
               || ssh "$PB" "docker exec -e C='$1' gul-pg sh -c 'PATRONI_CTL_USERNAME=patroni PATRONI_CTL_PASSWORD=\"\$REPLICATOR_PASSWORD\" patronictl -c /tmp/patroni.yml switchover gul --candidate \"\$C\" --force'" < /dev/null
           }
+          # Patroni hands the leader only to the synchronous standby (synchronous_mode), and a member
+          # that just started is a plain replica for a loop or two -- wait for GET /sync = 200.
           if [ "$(role "$PA")" = 200 ]; then
-            recreate "$PB" /opt/gul-secondary gul-b "$B"; wait_url "$PB" replica
+            recreate "$PB" /opt/gul-secondary gul-b "$B"; wait_url "$PB" replica; wait_url "$PB" sync
             switchover gul-b; wait_url "$PB" primary
             recreate "$PA" /opt/gul gul-a "$A"; wait_url "$PA" replica
           else
             recreate "$PA" /opt/gul gul-a "$A"; wait_url "$PA" replica
             recreate "$PB" /opt/gul-secondary gul-b "$B"; wait_url "$PB" replica || true
           fi
-          sleep 10
-          switchover gul-a; wait_url "$PA" primary
+          if [ "$(role "$PA")" != 200 ]; then
+            wait_url "$PA" sync
+            switchover gul-a; wait_url "$PA" primary
+          fi
           sleep 10
           ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
 
