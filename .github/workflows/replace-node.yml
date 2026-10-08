@@ -248,16 +248,17 @@ jobs:
           set -e
           E="http://$SURV:2379,http://$W:2379"
           ec() { ssh "$PW" "docker exec gul-etcd etcdctl --endpoints=$E $*" < /dev/null; }
-          id=$(ec member list | awk -F', ' -v n="$NAME" '$3 == n {print $1}')
-          [ -n "$id" ] && ec member remove "$id"
+          # The role's old member and any earlier entry for this host go: the host's etcd data was
+          # wiped by the clean slate, and a wiped member cannot rejoin under its old ID.
+          for id in $(ec member list | awk -F', ' -v n="$NAME" -v p="http://$H:2380" '$3 == n || $4 == p {print $1}'); do
+            ec member remove "$id"
+          done
           # Removing the member that was the raft leader starts an election; an add sent during it
           # times out (seen in the first drill). Retry until the cluster has a leader again.
-          if ! ec member list | grep -q "http://$H:2380"; then
-            for i in $(seq 1 12); do
-              ec member add "$NAME" --peer-urls="http://$H:2380" >/dev/null 2>&1 && break
-              echo "member add not accepted yet (election?), retrying"; sleep 5
-            done
-          fi
+          for i in $(seq 1 12); do
+            ec member add "$NAME" --peer-urls="http://$H:2380" >/dev/null 2>&1 && break
+            echo "member add not accepted yet (election?), retrying"; sleep 5
+          done
           ec member list | grep -q "http://$H:2380" || { echo "could not add the new host to etcd" >&2; exit 1; }
           CLUSTER=$(ec member list | awk -F', ' -v n="$NAME" -v h="$H" '{peer=$4; if ($3==n || $3=="") {print n"=http://"h":2380"} else print $3"="peer}' | paste -sd, -)
           echo "cluster: $(echo "$CLUSTER" | sed 's/=http[^,]*//g')"
@@ -344,9 +345,11 @@ jobs:
         run: |
           set -e
           # Certificates from the survivor (the same wildcard pair both nodes serve).
-          ssh "$PS" "docker run --rm -v /etc/ssl/gulyaly:/c:ro -v /tmp:/o alpine sh -c 'tar czf /o/gulcert.tgz -C /c . && chmod 644 /o/gulcert.tgz'" < /dev/null
+          # The archive holds the private key: owned by deploy, mode 600, and removed by a container
+          # too (a root-owned file in sticky /tmp cannot be deleted by deploy -- first drill).
+          ssh "$PS" "docker run --rm -e U=\$(id -u) -e G=\$(id -g) -v /etc/ssl/gulyaly:/c:ro -v /tmp:/o alpine sh -c 'umask 077 && tar czf /o/gulcert.tgz -C /c . && chown \$U:\$G /o/gulcert.tgz'" < /dev/null
           scp -q "$PS:/tmp/gulcert.tgz" gulcert.tgz
-          ssh "$PS" "rm -f /tmp/gulcert.tgz" < /dev/null
+          ssh "$PS" "docker run --rm -v /tmp:/o alpine rm -f /o/gulcert.tgz" < /dev/null
           ssh "deploy@$H" "mkdir -p /tmp/nginx-sync" < /dev/null
           scp -q gulcert.tgz "deploy@$H:/tmp/gulcert.tgz"; rm -f gulcert.tgz
           scp -q infra/nginx/*.conf "deploy@$H:/tmp/nginx-sync/"
