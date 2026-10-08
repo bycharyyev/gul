@@ -8,6 +8,8 @@ name: HA drills (Patroni, Redis, whole data tier) / switchover
 #             on both nodes, starts it again (it rejoins as a replica), then fails back to the primary.
 # node-drill: stops BOTH gul-pg and gul-redis on the primary at once (its whole data tier), proves
 #             the secondary carries the site alone, then restores and moves both leaders back.
+# app-drill:  stops the secondary's API (as if that node broke), measures how long until the
+#             witness + watchdog take it out of DNS, then starts it and measures it coming back.
 # status:     patronictl list + redis roles, read-only.
 
 on:
@@ -15,7 +17,7 @@ on:
     inputs:
       action:
         type: choice
-        options: [status, drill, switchover, redis-drill, node-drill]
+        options: [status, drill, switchover, redis-drill, node-drill, app-drill]
         default: status
       candidate:
         description: 'switchover only: gul-a or gul-b'
@@ -145,3 +147,23 @@ jobs:
           sleep 15
           ssh "$PA" "docker exec gul-pg patronictl -c /tmp/patroni.yml list" < /dev/null
           echo "final: site $(site "$A") / $(site "$B")"
+
+      - name: App drill -- secondary API down, DNS follows
+        if: inputs.action == 'app-drill'
+        run: |
+          set -e
+          sudo apt-get install -y -qq dnsutils >/dev/null 2>&1 || true
+          in_dns() { dig +short @ns1.timeweb.ru api.gulyaly.com A | grep -qx "$B"; }
+          in_dns || { echo "the secondary is not in DNS to begin with" >&2; exit 1; }
+          t0=$(date +%s)
+          ssh "$PB" "cd /opt/gul-secondary && docker compose stop api api-2 >/dev/null 2>&1" < /dev/null
+          echo "secondary API stopped"
+          for i in $(seq 1 60); do in_dns || break; sleep 10; done
+          in_dns && { echo "still in DNS after 10 min" >&2; ssh "$PB" "cd /opt/gul-secondary && docker compose start api api-2" < /dev/null; exit 1; }
+          echo "removed from DNS $(( $(date +%s) - t0 )) s after the stop"
+          t1=$(date +%s)
+          ssh "$PB" "cd /opt/gul-secondary && docker compose start api api-2 >/dev/null 2>&1" < /dev/null
+          echo "secondary API started"
+          for i in $(seq 1 60); do in_dns && break; sleep 10; done
+          in_dns || { echo "not back in DNS after 10 min" >&2; exit 1; }
+          echo "back in DNS $(( $(date +%s) - t1 )) s after the start"
