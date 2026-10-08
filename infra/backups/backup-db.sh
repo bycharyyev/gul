@@ -19,12 +19,15 @@ set -euo pipefail
 # the host -- can download the objects and read nothing. The price: a restore needs that private
 # key, and losing it makes every backup unreadable. See infra/backups/README.md.
 
-cd /opt/gul
+# Installed on both nodes (/opt/gul on the primary, /opt/gul-secondary on the secondary): the
+# directory is wherever this script lives, one level up.
+APP_DIR=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+cd "$APP_DIR"
 
-ENV_FILE=/opt/gul/.env
-STAGING=/opt/gul/backups          # transient: holds an encrypted dump only while it uploads
+ENV_FILE=$APP_DIR/.env
+STAGING=$APP_DIR/backups          # transient: holds an encrypted dump only while it uploads
 PREFIX=db-backups
-RECIPIENT=/opt/gul/scripts/backup-recipient.pem
+RECIPIENT=$APP_DIR/scripts/backup-recipient.pem
 # 30 days, one dump an hour: about 720 objects of ~60K, so roughly 40MB in the bucket.
 RETENTION_DAYS=30
 
@@ -55,6 +58,14 @@ REGION=${REGION:-us-east-1}
 if [ -z "$S3_ENDPOINT" ] || [ -z "$S3_ACCESS_KEY_ID" ] || [ -z "$S3_SECRET_ACCESS_KEY" ] || [ -z "$S3_BUCKET" ]; then
   echo "dedicated BACKUP_S3_* storage is not configured in $ENV_FILE -- refusing to run" >&2
   exit 1
+fi
+
+# Both nodes run this timer; only the one whose Postgres is the Patroni leader dumps. So backups
+# continue on the survivor when either node is gone, and a normal hour gets exactly one. (A dump
+# from the replica would be as good; the point is one per hour, not two.)
+if docker ps --format '{{.Names}}' | grep -qx gul-pg    && [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:8008/primary || true)" != 200 ]; then
+  echo "not the Patroni leader -- the leader's node takes this hour's backup"
+  exit 0
 fi
 if [ ! -s "$RECIPIENT" ]; then
   echo "encryption certificate $RECIPIENT is missing -- refusing to upload an unencrypted dump" >&2
