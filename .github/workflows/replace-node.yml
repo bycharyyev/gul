@@ -250,7 +250,15 @@ jobs:
           ec() { ssh "$PW" "docker exec gul-etcd etcdctl --endpoints=$E $*" < /dev/null; }
           id=$(ec member list | awk -F', ' -v n="$NAME" '$3 == n {print $1}')
           [ -n "$id" ] && ec member remove "$id"
-          ec member add "$NAME" --peer-urls="http://$H:2380" >/dev/null
+          # Removing the member that was the raft leader starts an election; an add sent during it
+          # times out (seen in the first drill). Retry until the cluster has a leader again.
+          if ! ec member list | grep -q "http://$H:2380"; then
+            for i in $(seq 1 12); do
+              ec member add "$NAME" --peer-urls="http://$H:2380" >/dev/null 2>&1 && break
+              echo "member add not accepted yet (election?), retrying"; sleep 5
+            done
+          fi
+          ec member list | grep -q "http://$H:2380" || { echo "could not add the new host to etcd" >&2; exit 1; }
           CLUSTER=$(ec member list | awk -F', ' -v n="$NAME" -v h="$H" '{peer=$4; if ($3==n || $3=="") {print n"=http://"h":2380"} else print $3"="peer}' | paste -sd, -)
           echo "cluster: $(echo "$CLUSTER" | sed 's/=http[^,]*//g')"
           ssh "deploy@$H" "NAME='$NAME' H='$H' CLUSTER='$CLUSTER' bash -s" <<'REMOTE'
