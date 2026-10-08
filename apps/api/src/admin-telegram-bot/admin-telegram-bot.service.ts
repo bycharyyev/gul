@@ -1,7 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Telegraf } from "telegraf";
 import { PrismaService } from "../prisma/prisma.service";
+import type Redis from "ioredis";
 import { runsBackgroundWork } from "../common/app-role";
+import { PollingLease, telegrafRunner } from "../common/polling-lease";
+import { REDIS_CLIENT } from "../queue/queue.module";
 
 /**
  * A second, dedicated bot (@gulyalybot) for platform-ops notifications -- new orders, Sentry
@@ -15,8 +18,12 @@ import { runsBackgroundWork } from "../common/app-role";
 export class AdminTelegramBotService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AdminTelegramBotService.name);
   private bot: Telegraf | null = null;
+  private lease: PollingLease | null = null;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private redis: Redis,
+  ) {}
 
   onModuleInit() {
     const token = process.env.TELEGRAM_ADMIN_BOT_TOKEN;
@@ -34,21 +41,32 @@ export class AdminTelegramBotService implements OnModuleInit, OnModuleDestroy {
     this.bot = bot;
 
     // Same active/active constraint as the seller bot: getUpdates long-polling allows exactly one
-    // live consumer per token, so only the node with TELEGRAM_ADMIN_BOT_POLLING="true" (primary,
-    // see deploy.yml) may call launch().
+    // live consumer per token. TELEGRAM_ADMIN_BOT_POLLING="true" marks a node eligible (both nodes,
+    // see deploy.yml); the lease below picks the one process that polls.
     // Never from an APP_ROLE=http process (ADR 0008): there may be several on one node, and the
     // second long-poller on a token is killed by Telegram with 409.
     if (process.env.TELEGRAM_ADMIN_BOT_POLLING !== "true" || !runsBackgroundWork()) {
       this.logger.log("Admin bot: outbound-only on this node (TELEGRAM_ADMIN_BOT_POLLING unset)");
       return;
     }
-    bot
-      .launch(() => this.logger.log("Telegram admin bot started (long polling)"))
-      .catch((err) => this.logger.error("Telegram admin bot stopped unexpectedly", err));
+    // Eligible only; which eligible process actually polls is a Redis lease (common/polling-lease.ts),
+    // so the bots keep answering when the node that was polling goes down.
+    this.lease = new PollingLease(
+      this.redis,
+      "lease:telegram-polling:admin",
+      telegrafRunner(bot, this.logger, "Telegram admin bot"),
+      this.logger,
+    );
+    this.lease.begin();
   }
 
-  onModuleDestroy() {
-    this.bot?.stop("shutdown");
+  async onModuleDestroy() {
+    await this.lease?.end();
+    try {
+      this.bot?.stop("shutdown");
+    } catch {
+      // Never launched on this process.
+    }
   }
 
   /**
