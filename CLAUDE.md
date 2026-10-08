@@ -187,8 +187,15 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 > both nodes in 11 s, old leader rejoins as replica by itself; `action=switchover candidate=gul-a`
 > moves it back. The primary's data volume is still `gul_postgres-data`. `setup-replication.yml`
 > and `failover-to-secondary.yml` now refuse to run. Everything below about `pg-standby`,
-> `pg_promote()` and manual failover is pre-Patroni history. Still single-node: Redis (on the
-> primary) and the backup timer (primary only).
+> `pg_promote()` and manual failover is pre-Patroni history. **Redis is HA too**
+> (`migrate-redis-ha.yml`): `gul-redis` on both nodes (master + replica, host network), three
+> `gul-sentinel`s (primary, secondary, witness) elect the master, and every API Redis client is built
+> by `apps/api/src/queue/redis-connection.ts`, which asks the Sentinels (`REDIS_SENTINELS` in .env,
+> `set-redis-sentinels.yml`) -- never trust a node's own claim to be master: a restarted old master
+> says so for seconds and hung the API through the HAProxy router (compose `redis`, now only the
+> fallback when `REDIS_SENTINELS` is unset). `/api/health/ready` gives up after 3 s. Drills:
+> `patroni-drill.yml` (`drill`, `redis-drill`, `node-drill`). Still single-node: the backup timer
+> (primary only).
 
 A second, dedicated VPS (`SECONDARY_HOST`/`SECONDARY_USER` secrets; bootstrapped the same way as
 primary — `deploy` user, docker, SSH key, key-only since 2026-10-01 via `harden-ssh.yml`; password login had been

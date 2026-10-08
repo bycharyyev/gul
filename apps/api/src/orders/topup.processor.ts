@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker, type Job } from "bullmq";
-import IORedis from "ioredis";
-import { TOPUP_QUEUE } from "../queue/queue.module";
+import { TOPUP_QUEUE, redisConnection } from "../queue/queue.module";
 import { OrdersService } from "./orders.service";
 import { OPERATOR_GATEWAY, type OperatorGateway } from "./operator-gateway.interface";
 import { runsBackgroundWork } from "../common/app-role";
@@ -19,9 +18,7 @@ export class TopupProcessor implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     // ADR 0008: an APP_ROLE=http process serves requests only; background work runs elsewhere.
     if (!runsBackgroundWork()) return;
-    const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-      maxRetriesPerRequest: null,
-    });
+    const connection = redisConnection();
 
     this.worker = new Worker(
       TOPUP_QUEUE,
