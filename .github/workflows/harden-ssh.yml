@@ -17,7 +17,7 @@ on:
       target:
         description: Which host
         type: choice
-        options: [secondary, primary, both]
+        options: [secondary, primary, witness, both]
         default: secondary
 
 jobs:
@@ -26,12 +26,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host: [primary, secondary]
+        host: [primary, secondary, witness]
     steps:
       - name: Skip hosts not selected
         id: sel
         run: |
-          if [ "${{ inputs.target }}" = "both" ] || [ "${{ inputs.target }}" = "${{ matrix.host }}" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+          # both = the two app nodes (as before); the witness is only ever chosen by name.
+          if { [ "${{ inputs.target }}" = "both" ] && [ "${{ matrix.host }}" != "witness" ]; } || [ "${{ inputs.target }}" = "${{ matrix.host }}" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Set up SSH (pinned host keys)
         if: steps.sel.outputs.go == 'true'
@@ -43,6 +44,9 @@ jobs:
           if [ "${{ matrix.host }}" = "primary" ]; then
             echo "TARGET=${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" >> "$GITHUB_ENV"
             echo "HOST=${{ secrets.DEPLOY_HOST }}" >> "$GITHUB_ENV"
+          elif [ "${{ matrix.host }}" = "witness" ]; then
+            echo "TARGET=${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}" >> "$GITHUB_ENV"
+            echo "HOST=${{ secrets.WITNESS_HOST }}" >> "$GITHUB_ENV"
           else
             echo "TARGET=${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}" >> "$GITHUB_ENV"
             echo "HOST=${{ secrets.SECONDARY_HOST }}" >> "$GITHUB_ENV"
