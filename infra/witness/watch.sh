@@ -23,15 +23,20 @@ probe() {
   [ "$code" = "200:0" ]
 }
 
-dispatch() { # dispatch <workflow file> <reason>
+dispatch() { # dispatch <workflow file> <reason> [inputs as a JSON object]
+  inputs=${3:-'{}'}
   http=$(curl -s -o /tmp/dispatch.out -w '%{http_code}' -X POST \
     -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/$REPO/actions/workflows/$1/dispatches" -d '{"ref":"main"}' || true)
+    "https://api.github.com/repos/$REPO/actions/workflows/$1/dispatches" \
+    -d "{\"ref\":\"main\",\"inputs\":$inputs}" || true)
   echo "$(date -u +%FT%TZ) dispatched $1 ($2): HTTP $http"
   [ "$http" = 204 ] || cat /tmp/dispatch.out
 }
 
-state_a=up; state_b=up; miss_a=0; miss_b=0
+# Down this long, with the other node up, and the node gets replaced (replace-node.yml re-proves it
+# is dead before buying anything, and refuses a second auto-bought server).
+REPLACE_AFTER=900
+state_a=up; state_b=up; miss_a=0; miss_b=0; since_a=0; since_b=0; asked_a=0; asked_b=0
 last=0; pending=""
 
 echo "$(date -u +%FT%TZ) watching both app nodes every ${INTERVAL}s"
@@ -45,6 +50,20 @@ while :; do
       pending="node $n $new"
     fi
     eval "miss_$n=$miss; state_$n=$new"
+    if [ "$new" = down ]; then
+      eval "[ \$since_$n -gt 0 ] || since_$n=\$(date +%s)"
+    else
+      eval "since_$n=0; asked_$n=0"
+    fi
+  done
+
+  for n in a b; do
+    o=b; role=primary; [ "$n" = b ] && { o=a; role=secondary; }
+    eval "since=\$since_$n; asked=\$asked_$n; other=\$state_$o"
+    if [ "$since" -gt 0 ] && [ "$asked" = 0 ] && [ "$other" = up ] && [ $(( $(date +%s) - since )) -ge "$REPLACE_AFTER" ]; then
+      dispatch replace-node.yml "node $n down for $REPLACE_AFTER s" "{\"node\":\"$role\",\"mode\":\"auto\",\"confirm\":\"REPLACE\"}"
+      eval "asked_$n=1"
+    fi
   done
 
   now=$(date +%s)
