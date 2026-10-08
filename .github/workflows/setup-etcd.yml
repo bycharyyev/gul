@@ -1,0 +1,118 @@
+name: Set up etcd quorum (primary + secondary + witness)
+
+# HA plan step 2: a three-member etcd cluster -- the vote Patroni will use to decide which node's
+# Postgres is the leader. Any two members are a majority, so one node of the three can die and the
+# vote still works; a lone node never has a majority, which is what prevents two leaders.
+#
+# Members run as a plain container with host networking (named gul-etcd, volume gul-etcd-data),
+# outside every compose project, like pg-standby. Ports 2379 (clients) and 2380 (peers) are open
+# only to the other two members: host networking means ufw governs them (DOCKER-USER does not).
+# Nothing secret is stored in etcd (Patroni keeps cluster state there, not passwords); peer TLS
+# is a follow-up.
+#
+# Idempotent: a member that already has data is left running as it is. Use `reset` only before
+# Patroni depends on the cluster -- it wipes every member's etcd data and forms a new cluster.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: 'Wipe all etcd data and form a new cluster (only before Patroni uses it)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: etcd
+  cancel-in-progress: false
+
+jobs:
+  etcd:
+    runs-on: ubuntu-latest
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      W: ${{ secrets.WITNESS_HOST }}
+      A_USER: ${{ secrets.DEPLOY_USER }}
+      B_USER: ${{ secrets.SECONDARY_USER }}
+      W_USER: ${{ secrets.WITNESS_USER }}
+      RESET: ${{ inputs.reset || 'false' }}
+      IMAGE: quay.io/coreos/etcd:v3.5.17
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          for v in A B W; do [ -n "${!v}" ] || { echo "$v host secret is empty" >&2; exit 1; }; done
+
+      - name: Firewall -- etcd ports open to the other members only
+        run: |
+          fw() { # fw <user@host> <self-ip> <role>
+            local self=$2 role=$3
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "command -v ufw >/dev/null 2>&1 || (apt-get update -y && apt-get install -y ufw)"
+              # Allow what each node serves BEFORE enabling, so this can never lock anyone out.
+              echo "ufw allow 22/tcp"
+              if [ "$role" != witness ]; then echo "ufw allow 80/tcp"; echo "ufw allow 443/tcp"; fi
+              for peer in "$A" "$B" "$W"; do
+                [ "$peer" = "$self" ] && continue
+                echo "ufw allow from $peer to any port 2379,2380 proto tcp comment 'etcd peer'"
+              done
+              echo "ufw --force enable"
+              echo "ufw status | grep -E '2379|Status'"
+            } > /tmp/fw.sh
+            scp -q -i ~/.ssh/deploy_key /tmp/fw.sh "$1:/tmp/fw.sh"
+            ssh -i ~/.ssh/deploy_key "$1" \
+              "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rc=\$?; rm -f /tmp/fw.sh; exit \$rc" < /dev/null
+            ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 "$1" "echo ssh still reachable" < /dev/null
+          }
+          fw "$A_USER@$A" "$A" primary
+          fw "$B_USER@$B" "$B" secondary
+          fw "$W_USER@$W" "$W" witness
+
+      - name: Start the members
+        run: |
+          CLUSTER="gul-a=http://$A:2380,gul-b=http://$B:2380,gul-w=http://$W:2380"
+          start() { # start <user@host> <name> <ip>
+            ssh -i ~/.ssh/deploy_key "$1" \
+              "NAME='$2' IP='$3' CLUSTER='$CLUSTER' IMAGE='$IMAGE' RESET='$RESET' bash -s" <<'REMOTE'
+            set -e
+            if [ "$RESET" = "true" ]; then
+              docker rm -f gul-etcd >/dev/null 2>&1 || true
+              docker volume rm gul-etcd-data >/dev/null 2>&1 || true
+            fi
+            if docker ps --format '{{.Names}}' | grep -qx gul-etcd; then
+              echo "$NAME: already running"; exit 0
+            fi
+            docker rm -f gul-etcd >/dev/null 2>&1 || true
+            docker pull -q "$IMAGE"
+            # 250 ms heartbeat / 2.5 s election: members are in different countries (~40-60 ms
+            # apart), the defaults (100 ms / 1 s) would flap on an ordinary latency spike.
+            docker run -d --name gul-etcd --restart unless-stopped --network host \
+              -v gul-etcd-data:/etcd-data "$IMAGE" etcd \
+              --name "$NAME" --data-dir /etcd-data \
+              --listen-peer-urls http://0.0.0.0:2380 --listen-client-urls http://0.0.0.0:2379 \
+              --initial-advertise-peer-urls "http://$IP:2380" --advertise-client-urls "http://$IP:2379" \
+              --initial-cluster "$CLUSTER" --initial-cluster-state new --initial-cluster-token gul-etcd \
+              --heartbeat-interval 250 --election-timeout 2500 \
+              --auto-compaction-retention 1 --quota-backend-bytes 1073741824 >/dev/null
+            echo "$NAME: started"
+          REMOTE
+          }
+          start "$A_USER@$A" gul-a "$A"
+          start "$B_USER@$B" gul-b "$B"
+          start "$W_USER@$W" gul-w "$W"
+
+      - name: Verify the quorum from every member
+        run: |
+          sleep 15
+          for t in "$A_USER@$A" "$B_USER@$B" "$W_USER@$W"; do
+            echo "--- seen from one member ---"
+            ssh -i ~/.ssh/deploy_key "$t" \
+              "docker exec gul-etcd etcdctl --endpoints=http://$A:2379,http://$B:2379,http://$W:2379 endpoint status -w table" < /dev/null
+          done
+          ssh -i ~/.ssh/deploy_key "$W_USER@$W" \
+            "docker exec gul-etcd etcdctl --endpoints=http://$A:2379,http://$B:2379,http://$W:2379 endpoint health" < /dev/null
