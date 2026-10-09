@@ -1,0 +1,47 @@
+name: Redis force failover (outage recovery)
+
+# For when the Sentinels cannot reach a majority (stale entries for gone Sentinels inflate the count;
+# 2026-10-09) and the master is truly down: SENTINEL FAILOVER on the secondary's Sentinel promotes
+# its replica without asking the others. Refuses while the current master still answers, so it
+# cannot create a second master. Then resets every live Sentinel so they forget the dead ones.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  failover:
+    runs-on: ubuntu-latest
+    env:
+      A: ${{ secrets.DEPLOY_HOST }}
+      B: ${{ secrets.SECONDARY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
+    steps:
+      - name: Force, then tidy
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          s() { ssh -i ~/.ssh/k -o ConnectTimeout=10 -o BatchMode=yes "$@" < /dev/null; }
+          M=$(s "$PB" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1")
+          for t in "$PB" "$PW"; do
+            if s "$t" "docker run --rm redis:7-alpine redis-cli -h $M -p 6379 --no-auth-warning ping" 2>/dev/null | grep -qE 'PONG|NOAUTH'; then
+              echo "the current master still answers -- not forcing anything" >&2; exit 1
+            fi
+          done
+          echo "master unreachable from secondary and witness: forcing failover"
+          s "$PB" "docker exec gul-sentinel redis-cli -p 26379 sentinel failover gul"
+          for i in $(seq 1 30); do
+            n=$(s "$PB" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1")
+            [ "$n" != "$M" ] && break; sleep 2
+          done
+          [ "$n" != "$M" ] || { echo "failover did not happen" >&2; exit 1; }
+          echo "new master: $( [ "$n" = "$B" ] && echo secondary || echo other)"
+          sleep 5
+          for t in "$PB" "$PW" "$PA"; do s "$t" "docker exec gul-sentinel redis-cli -p 26379 sentinel reset gul >/dev/null" 2>/dev/null || true; done
+          sleep 15
+          s "$PB" "docker exec gul-sentinel redis-cli -p 26379 sentinel ckquorum gul" || true
+          sleep 10
+          echo "secondary readiness: $(s "$PB" "curl -s -m 6 http://127.0.0.1:4000/api/health/ready")"
