@@ -20,11 +20,23 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          ssh_run() { ssh -i ~/.ssh/k -o BatchMode=yes "$1" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c '$2'" < /dev/null; }
-          KEY=$(ssh -i ~/.ssh/k -o BatchMode=yes "$PA" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c \"grep -oE '^\[[0-9a-f-]{36}\]' /etc/netdata/stream.conf | head -1 | tr -d '[]'\"" < /dev/null)
+          printf '%s\n' 'grep -oE "^\[[0-9a-f-]{36}\]" /etc/netdata/stream.conf | head -1 | tr -d "[]"' > getkey.sh
+          KEY=$(ssh -i ~/.ssh/k -o BatchMode=yes "$PA" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c 'grep -oE \"^\[[0-9a-f-]{36}\]\" /etc/netdata/stream.conf | head -1 | tr -d \"[]\"'" < /dev/null)
           [ -n "$KEY" ] || { echo "no streaming key found on the primary" >&2; exit 1; }
           echo "::add-mask::$KEY"
-          ssh_run "$PB" "sed -i -E 's/^(\s*api key\s*=).*/\1 $KEY/' /etc/netdata/stream.conf && grep -q 'api key *= *$KEY' /etc/netdata/stream.conf && echo 'key set (masked)' && systemctl restart netdata && echo 'netdata restarted'"
+          printf '%s\n' "$KEY" > nk.txt && chmod 600 nk.txt
+          printf '%s\n' \
+            'set -e' \
+            'K=$(cat /tmp/nk.txt); rm -f /tmp/nk.txt' \
+            'sed -i -E "s/^(\s*api key\s*=).*/\1 $K/" /etc/netdata/stream.conf' \
+            'if grep -qE "^\s*api key\s*= *$K" /etc/netdata/stream.conf; then echo key-set; else echo key-NOT-set; exit 1; fi' \
+            'systemctl restart netdata' \
+            'echo restarted' > fixkey.sh
+          scp -q -i ~/.ssh/k nk.txt "$PB:/tmp/nk.txt"
+          scp -q -i ~/.ssh/k fixkey.sh "$PB:/tmp/fixkey.sh"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PB" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fixkey.sh; rm -f /tmp/fixkey.sh /tmp/nk.txt" < /dev/null
           sleep 60
-          echo "-- secondary streaming state (last lines):"
-          ssh_run "$PB" "journalctl -u netdata --no-pager -n 40 2>/dev/null | grep -iE 'stream|connect|reject|denied' | tail -6"
+          printf '%s\n' 'journalctl -u netdata --no-pager -n 60 | grep -iE "stream|reject|denied|connect" | tail -8' > logs.sh
+          scp -q -i ~/.ssh/k logs.sh "$PB:/tmp/logs.sh"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PB" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/logs.sh; rm -f /tmp/logs.sh" < /dev/null
+          rm -f nk.txt
