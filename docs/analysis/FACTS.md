@@ -11,7 +11,7 @@
 | API (NestJS) | 27004 | 380 |
 | Web (Next.js) | 11431 | 94 |
 | Admin (Vite) | 14633 | 74 |
-| Mobile (Flutter) | 27501 | 132 |
+| Mobile (Flutter) | 27504 | 132 |
 | packages/types | 2451 | 14 |
 | packages/api-client | 2312 | 6 |
 | packages/i18n | 5392 | 12 |
