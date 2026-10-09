@@ -95,7 +95,10 @@ class SupportController extends StateNotifier<SupportState> {
     _timer?.cancel();
     // A failed poll must never escape the timer zone: an unhandled error there is reported as a crash
     // (Crashlytics, 1.0.6: AppException network from ApiClient._send, three events). The next tick retries.
-    _timer = Timer.periodic(pollInterval, (_) => poll().catchError((Object _) {}));
+    _timer = Timer.periodic(
+      pollInterval,
+      (_) => poll().catchError((Object _) {}),
+    );
   }
 
   void stopPolling() {
