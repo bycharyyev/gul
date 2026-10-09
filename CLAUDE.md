@@ -185,90 +185,63 @@ Push to `main` → `.github/workflows/deploy.yml` does everything: typecheck/bui
 > `GET :8008/primary`, so `DATABASE_URL` is `@postgres:5432` everywhere and never changes on a
 > failover. Measured drill (`patroni-drill.yml action=drill`): new leader in 6 s, site healthy on
 > both nodes in 11 s, old leader rejoins as replica by itself; `action=switchover candidate=gul-a`
-> moves it back. The primary's data volume is still `gul_postgres-data`. `setup-replication.yml`
-> and `failover-to-secondary.yml` now refuse to run. Everything below about `pg-standby`,
-> `pg_promote()` and manual failover is pre-Patroni history. **Redis is HA too**
+> moves it back. The primary's data volume is still `gul_postgres-data`. **Redis is HA too**
 > (`migrate-redis-ha.yml`): `gul-redis` on both nodes (master + replica, host network), three
 > `gul-sentinel`s (primary, secondary, witness) elect the master, and every API Redis client is built
 > by `apps/api/src/queue/redis-connection.ts`, which asks the Sentinels (`REDIS_SENTINELS` in .env,
 > `set-redis-sentinels.yml`) -- never trust a node's own claim to be master: a restarted old master
 > says so for seconds and hung the API through the HAProxy router (compose `redis`, now only the
 > fallback when `REDIS_SENTINELS` is unset). `/api/health/ready` gives up after 3 s. Drills:
-> `patroni-drill.yml` (`drill`, `redis-drill`, `node-drill`). Still single-node: the backup timer
-> (primary only).
+> `patroni-drill.yml` (`drill`, `redis-drill`, `node-drill`).
 
-A second, dedicated VPS (`SECONDARY_HOST`/`SECONDARY_USER` secrets; bootstrapped the same way as
-primary — `deploy` user, docker, SSH key, key-only since 2026-10-01 via `harden-ssh.yml`; password login had been
-enabled on request until then) runs:
+Three servers, each with one job (2026-10-09):
 
-- **api/web/admin continuously** (`enable-active-active.yml`), pointed at the **primary's**
-  Postgres over the network rather than its own local standby — genuinely active/active for the
-  app tier: a crash of primary's containers alone needs no failover procedure at all, since the
-  secondary is already correctly serving. Full reasoning:
-  [`HIGH_AVAILABILITY.md`](docs/architecture/HIGH_AVAILABILITY.md).
-- **A streaming Postgres replica**: a bare `pg-standby` container (not part of any compose
-  project), bootstrapped once via `pg_basebackup -R` against the primary and continuously
-  streaming since — stays read-only/unused day-to-day (the secondary's own app containers talk to
-  primary's DB, not this one) until an actual `failover-to-secondary.yml` promotion. The primary's
-  `docker-compose.prod.yml` publishes `5432`, and `6379` alongside it since the shared queue.
-  **`ufw` does not protect either of them, and believing it did left the database open to the
-  internet from August until 2026-09-03.** Docker publishes a port by writing its own iptables
-  rules, and packets to a published port meet docker's chains in the FORWARD path before ufw's
-  filter rules are consulted — so a `ufw allow from <secondary>` on such a port appears in
-  `ufw status`, reads as a restriction, and stops nothing. What actually restricts them is
-  `gul-docker-firewall.service`/`.timer` (source in [`infra/firewall/`](infra/firewall/), installed
-  by `install-docker-firewall.yml`), which writes DROP rules into `DOCKER-USER` — the chain docker
-  consults first and does not rewrite — and re-asserts them every ten minutes, since a daemon
-  restart can drop them silently. **ufw still governs ports served by host processes** (nginx,
-  sshd, netdata's 19999), which is why 19999 was correctly closed while 5432 was not; that
-  contrast is the quickest way to tell the two cases apart. Verify from outside, never from either
-  server: `check-exposed-ports.yml` runs on a GitHub runner, because the secondary is allowed
-  through and a laptop on a VPN reports every port open. Role/credentials: a `replicator` role
-  (`REPLICATOR_PASSWORD` secret) for streaming, plus the normal app DB user allowed from the
-  secondary's IP for active/active traffic — both scoped in `pg_hba.conf`.
-- **nginx, already installed and holding current certs** — copied from primary
-  (`prepare-secondary-failover.yml`), actually serving the active/active app traffic today (not
-  idle) whenever DNS sends anything here — see the DNS gap below.
-- **`/opt/gul-secondary/`**: `docker-compose.secondary.yml` (app containers only — no postgres, and
-  since 2026-09-03 no redis either: both nodes share the primary's queue, because a queue per node
-  meant an order accepted here was invisible to the other node's worker and to the admin console's
-  backlog) + a `.env` copied
-  from primary's but with `DATABASE_URL`'s host rewritten to primary's real IP (not the local
-  `postgres` alias, which is reserved for post-failover use).
+- **A — primary** (`DEPLOY_HOST`): app containers, Patroni/Postgres and Redis (leader when it wins
+  the vote), Telegram bots, hourly and WAL backups, the admin console.
+- **B — secondary** (`SECONDARY_HOST`): the same app containers, Patroni/Postgres and Redis as
+  replicas. Serves traffic too (DNS round-robin). Whichever node holds the leadership runs the
+  leader-only work.
+- **W — witness** (`WITNESS_HOST`): **no application**. It holds one etcd member, one Sentinel and
+  the watcher `gul-witness-watch` (probes A and B every 30 s, dispatches `watchdog.yml` and, after
+  15 min down, `replace-node.yml`). Its GitHub token can start workflows only.
 
-**DNS already round-robins**: `gulyaly.com`, `www` and `api` carry A records for both hosts (verified 2026-10-01), so the secondary serves live traffic; `admin` resolves to one host only. Anything that assumes "the" server answering a public request — HTTP-01 challenges above all — is wrong here.
+The votes: etcd (3 members, Patroni leader election) and Sentinel (3, Redis master). Any two of the
+three agree; one node or the witness can die and nothing else changes.
 
-**To fail over** (primary's *database* is gone, not just its app tier — a crashed app tier alone
-needs nothing, see above): run `.github/workflows/failover-to-secondary.yml` with
-`confirm: FAILOVER` — it calls `pg_promote()` on the standby (irreversible: it stops following the
-primary), repoints the *already-running* app containers' `DATABASE_URL` from primary's (dead) IP
-to the now-writable local database, and health-checks the API. **DNS is not touched automatically**
-(rejected earlier as a split-brain risk with only two nodes) — if the second A record above isn't
-in place yet, the last step is manually pointing `gulyaly.com` at the secondary; TTL is already
-low. Rerun `prepare-secondary-failover.yml` beforehand if it's been a while, so certs/`.env` are
-current (it also keeps `.env`'s `DATABASE_URL` pointed at primary, consistent with active/active,
-rather than resetting it back to the local standby). Known gap: the uploads volume isn't synced to
-the secondary, so failover serves current database state but stale/missing uploaded files until
-that's addressed. **Failback** (old primary rejoining after a promotion) isn't automated — its WAL
-has diverged, so it needs a manual re-base before it can safely take writes again; treat it as
-untrusted for writes until that happens.
+What happens without a human:
+- A database or Redis leader dies: the other node takes over in ~6–13 s (`patroni-drill.yml`).
+- A node stops answering: the watcher removes it from DNS in ~2 min (`watchdog.yml`).
+- A node stays dead 15 min: `replace-node.yml` proves it dead, buys a Timeweb server (from the
+  node image `gul-node-*` when one exists in that location), fences the dead address, joins the
+  votes, restores app and data from the live node, updates DNS and the secrets, reports to Telegram.
+- The dead node comes back: `replace-node.yml` rebuilds it onto the returned host from a fresh copy
+  of the data and deletes the stand-in (`FENCED_HOST`).
+
+Known limits: Redis and the hourly backup timer run per node but only the leader writes the
+backups; the stand-in's Timeweb cost is billed hourly until it is deleted; a Timeweb "no capacity"
+answer for every location leaves the site on one node until capacity returns (the witness retries
+every 30 min). Full design and the drill record: [`docs/architecture/HIGH_AVAILABILITY.md`](docs/architecture/HIGH_AVAILABILITY.md).
+
+**DNS** round-robins the apex, `www` and `api` across A and B; `admin` resolves to A only.
+Anything that assumes "the" server answering a public request, including HTTP-01 challenges, is
+wrong here. Certificates are the CI-issued wildcard (`renew-certs.yml`), not per host.
 
 ### Mail relay: outgoing SMTP on the secondary
 
 > **App mail does not use this relay (since 2026-10-02).** Every email the API sends goes through
 > the paid REG.RU mailbox `noreply@gulyaly.com` (`mail.hosting.reg.ru:465`) on both hosts, set by
 > `switch-mail-to-regru.yml`; mail through this relay landed in spam. Never point `MAIL_*` back at
-> it and never re-run `setup-mail-relay.yml`. Server alerts (`infra/alerts`) moved to REG.RU too
+> it. The `setup-mail-relay` workflow was removed on 2026-10-09. Server alerts (`infra/alerts`) moved to REG.RU too
 > (`switch-alerts-to-regru.yml`). The relay's Postfix/OpenDKIM still run but carry nothing; stopping them is
 > `switch-alerts-to-regru.yml` with `disable_relay` (an owner action — the step was refused to the agent). What follows is history.
 
-`setup-mail-relay.yml` installs Postfix on the secondary as an authenticated submission relay
+The removed `setup-mail-relay.yml` installed Postfix on the secondary as an authenticated submission relay
 (port 587, SASL, STARTTLS) and points the primary's `MAIL_HOST` at it. Port 587 is firewalled to
 the primary's IP only; port 25 is explicitly denied (this relay only sends the app's own outgoing
 mail, it doesn't need to receive any). `MAIL_HOST` is still the secondary's raw IP with a pinned
 self-signed cert (`MAIL_TLS_CA_BASE64`/`MAIL_TLS_SERVERNAME` in `email.service.ts`) rather than a
 real Let's Encrypt cert + hostname — now that `mail.gulyaly.com` resolves correctly (see below),
-this could be swapped for a real cert via `certbot-once.yml`, just not done yet.
+this could be swapped for a real cert in the CI wildcard flow, just not done yet.
 
 **DNS is now scriptable — see "DNS management" below.** `gulyaly.com`'s A/wildcard records, the
 `mail` A record, SPF (merged into Timeweb's existing record), and the DKIM public key were all

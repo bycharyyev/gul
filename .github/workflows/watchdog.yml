@@ -137,7 +137,7 @@ jobs:
           }
 
           if [ "$P" = down ] && [ "$S" = down ]; then
-            tg "🚨 Gulyaly: НЕ ОТВЕЧАЮТ ОБА сервера. Сайт недоступен. DNS не трогаю. Вероятно, упала база на основном сервере — может понадобиться failover-to-secondary."
+            tg "🚨 Gulyaly: НЕ ОТВЕЧАЮТ ОБА сервера. Сайт недоступен. DNS не трогаю. База и Redis переключаются сами (Patroni/Sentinel), если кворум есть; если нет — redis-force-failover.yml, а состояние — incident-state.yml."
           else
             check_node "$PRIMARY" "основной" "$P" "$S" " База жива (запасной отвечает). Админка admin.gulyaly.com есть только на основном — пока недоступна."
             check_node "$SECONDARY" "запасной" "$S" "$P"

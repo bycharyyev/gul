@@ -491,7 +491,7 @@ jobs:
           '
 
   # Keeps the secondary's app tier in lockstep with primary on every push -- without this, the
-  # secondary only ever gets updated by manually re-running enable-active-active.yml, which means
+  # secondary would otherwise only get updated by a manual step, which means
   # it could silently sit on old (potentially vulnerable) code indefinitely once DNS starts
   # sending it real traffic. Deploys the exact same SHA tag primary just confirmed healthy on
   # (needs: deploy already guarantees that), not just ":latest" -- keeps both nodes on an
