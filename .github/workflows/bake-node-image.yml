@@ -81,7 +81,7 @@ jobs:
             s=$(api "https://api.timeweb.cloud/api/v1/servers/$sid")
             st=$(echo "$s" | jq -r '.server.status')
             ip=$(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // empty')
-            if [ "$st" = on ] && [ -z "$ip" ] && [ "$ordered" = 0 ]; then api -X POST "https://api.timeweb.cloud/api/v1/servers/$sid/ips" -d '{"type":"ipv4"}' >/dev/null; ordered=1; fi
+            if [ "$st" = on ] && [ -z "$ip" ] && [ "$ordered" = 0 ]; then if r=$(api -X POST "https://api.timeweb.cloud/api/v1/servers/$sid/ips" -d '{"type":"ipv4"}' 2>&1); then ordered=1; else echo "IPv4 order not accepted yet: $(echo "$r" | tail -c 200)"; fi; fi
             [ "$st" = on ] && [ -n "$ip" ] && break
             sleep 10
           done
