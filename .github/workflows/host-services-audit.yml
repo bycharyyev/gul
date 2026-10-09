@@ -1,0 +1,34 @@
+name: Host services audit (read-only, one-off)
+
+# One-off: which services, listening ports and containers each server actually runs, to compare
+# with what the repository says should be there. Deleted in the follow-up once read.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+      PW: ${{ secrets.WITNESS_USER }}@${{ secrets.WITNESS_HOST }}
+    steps:
+      - name: Read
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          s() { ssh -i ~/.ssh/k -o ConnectTimeout=10 -o BatchMode=yes "$@" < /dev/null; }
+          for t in "$PA" "$PB" "$PW"; do
+            echo "================ $t ================"
+            echo "--- running services (non-kernel) ---"
+            s "$t" "systemctl list-units --type=service --state=running --no-legend 2>/dev/null | awk '{print \$1}' | grep -vE 'systemd-|getty|dbus|cron|rsyslog|snapd|polkit|multipathd|udisks|accounts|networkd|resolved|timesyncd|ufw|ssh|containerd|docker|unattended|wpa|irqbalance|packagekit|modemmanager|ModemManager|apparmor|kmod|lvm|blk|user@|qemu|cloud|netplan|fwupd|open-iscsi|chrony|atd|lxd|rpc|sysstat|apport|console|ua-|motd|grub|plymouth|uuidd|power|bluetooth|avahi' ; systemctl list-unit-files --state=enabled --no-legend 2>/dev/null | awk '{print \$1}' | grep -E 'gul|postfix|opendkim|netdata|autodeploy|cert|mail|witness|watchdog|backup' "
+            echo "--- listening (non-loopback) ---"
+            s "$t" "ss -tlnp 2>/dev/null | awk 'NR>1 && \$4 !~ /127.0.0.1|\[::1\]/ {print \$1, \$4}' | sort -u"
+            echo "--- containers ---"
+            s "$t" "docker ps -a --format '{{.Names}} {{.Status}}' 2>/dev/null | sort" || true
+            echo "--- gul files on disk ---"
+            s "$t" "ls /opt 2>/dev/null; ls /usr/local/bin 2>/dev/null | grep -i gul; ls /etc/systemd/system | grep -iE 'gul|autodeploy|cert-sync|postfix' || true"
+          done
