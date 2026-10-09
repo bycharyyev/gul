@@ -190,9 +190,8 @@ export class CargoService {
   private async nextTrackingNumber(): Promise<string> {
     // Same lock-free sequence approach as ReferralsService.generateUsername() -- concurrent
     // shipment creation can't collide, no application-level locking needed.
-    const rows = await this.prisma.$queryRawUnsafe<Array<{ value: bigint }>>(
-      `SELECT nextval('cargo_tracking_seq') AS value`,
-    );
+    // A constant sequence name, no interpolation: the tagged form is the safe one.
+    const rows = await this.prisma.$queryRaw<Array<{ value: bigint }>>`SELECT nextval('cargo_tracking_seq') AS value`;
     const year = new Date().getFullYear();
     return `CRG-${year}-${String(rows[0].value).padStart(6, "0")}`;
   }
