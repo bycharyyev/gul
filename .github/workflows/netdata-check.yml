@@ -1,0 +1,35 @@
+name: Netdata streaming check (read-only, one-off)
+
+# One-off: does the primary's netdata really receive the secondary's data, and does the secondary stream?
+# Deleted after reading.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Read
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' \
+            'echo "-- local info (mirrored hosts / version):"' \
+            'curl -s -m 8 http://127.0.0.1:19999/api/v1/info | tr "," "\n" | grep -iE "mirrored|version|host_id|hostname" | head -8' \
+            'echo "-- hosts this netdata serves:"' \
+            'curl -s -m 8 "http://127.0.0.1:19999/api/v1/info" >/dev/null; curl -s -m 8 "http://127.0.0.1:19999/api/v2/nodes" | head -c 600; echo' \
+            'echo "-- stream lines in log (last 10):"' \
+            'journalctl -u netdata --no-pager -n 300 2>/dev/null | grep -iE "stream|child|parent|connected|disconnect" | tail -10' \
+            'echo "-- stream.conf destination (secrets masked):"' \
+            'grep -E "^\[stream\]|destination|enabled" /etc/netdata/stream.conf 2>/dev/null | head -5; grep -E "^\[" /etc/netdata/stream.conf 2>/dev/null | head -10' > chk.sh
+          for t in "$PA" "$PB"; do
+            echo "================ $t"
+            scp -q -i ~/.ssh/k chk.sh "$t:/tmp/chk.sh"
+            ssh -i ~/.ssh/k -o BatchMode=yes "$t" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/chk.sh; rm -f /tmp/chk.sh" < /dev/null
+          done
