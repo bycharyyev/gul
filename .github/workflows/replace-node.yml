@@ -509,6 +509,19 @@ jobs:
           echo "RETIRED=1" >> "$GITHUB_ENV"
           echo "auto-bought server $sid and its IPv4 deleted"
 
+      - name: Sentinels forget every gone Sentinel (last, after the stand-in is deleted)
+        if: success()
+        run: |
+          # A Sentinel keeps every peer it ever saw. Entries for the dead node and for a deleted
+          # stand-in raise the majority it needs for a failover: on 2026-10-09 four known Sentinels
+          # with two alive meant NOQUORUM, and Redis stayed down until a forced failover.
+          M=$(ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel get-master-addr-by-name gul | head -1" < /dev/null)
+          for t in "$PS" "$PW" "deploy@$H"; do
+            ssh "$t" "docker exec gul-sentinel redis-cli -p 26379 sentinel reset gul >/dev/null" < /dev/null || true
+          done
+          sleep 20
+          ssh "$PW" "docker exec gul-sentinel redis-cli -p 26379 sentinel ckquorum gul; docker exec gul-sentinel redis-cli -p 26379 sentinel sentinels gul | grep -c '^name'" < /dev/null
+
       - name: Report
         if: always()
         run: |
