@@ -1,0 +1,31 @@
+name: Restart netdata on primary and secondary, then check streaming (one-off)
+
+# One-off: the primary's receiver stopped listing the secondary after the key fix. Restarting netdata on
+# both reloads the stream configuration. Monitoring-only service; no application impact. Deleted after running.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Restart and check
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'systemctl restart netdata && echo restarted' > rs.sh
+          printf '%s\n' 'sleep 60; curl -s -m 8 http://127.0.0.1:19999/api/v1/info | tr "," "\n" | grep -A3 -i mirrored_hosts_status | grep hostname' > ck.sh
+          for t in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+            scp -q -i ~/.ssh/k rs.sh "$t:/tmp/rs.sh"
+            ssh -i ~/.ssh/k -o BatchMode=yes "$t" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/rs.sh; rm -f /tmp/rs.sh" < /dev/null
+          done
+          sleep 75
+          scp -q -i ~/.ssh/k ck.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/ck.sh"
+          echo "== mirrored hosts on primary after restart:"
+          ssh -i ~/.ssh/k -o BatchMode=yes "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/ck.sh; rm -f /tmp/ck.sh" < /dev/null
