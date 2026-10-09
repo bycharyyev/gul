@@ -73,14 +73,14 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Metric | Value |
 | --- | --- |
-| GitHub Actions workflows | 64 |
-|   of which run on a schedule | 7 |
+| GitHub Actions workflows | 66 |
+|   of which run on a schedule | 8 |
 | nginx vhosts (infra/nginx) | 5 |
 | Docker compose files | 3 |
 
-Workflows: api-logs.yml, audit-servers.yml, build-patroni-image.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, delete-timeweb-server.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, enable-wal-archive.yml, failover-to-secondary.yml, fetch-latest-backup.yml, fetch-pitr-set.yml, ha-diag.yml, harden-ssh.yml, host-keys.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, install-witness-watch.yml, manage-dns.yml, migrate-redis-ha.yml, migrate-to-patroni.yml, mobile-ci.yml, patroni-drill.yml, prepare-secondary-failover.yml, provision-subdomain.yml, provision-timeweb-server.yml, prune-images.yml, renew-certs.yml, replace-node.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, secondary-netcheck.yml, set-cryptocloud-credentials.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-heleket-credentials.yml, set-redis-sentinels.yml, set-topup-gateway.yml, setup-etcd.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, timeweb-server-catalog.yml, watchdog.yml, wire-s3-env.yml.
+Workflows: api-logs.yml, audit-servers.yml, bake-node-image.yml, build-patroni-image.yml, certbot-once.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, delete-timeweb-server.yml, deploy.yml, diagnose-secondary.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-active-active.yml, enable-wal-archive.yml, failover-to-secondary.yml, fetch-latest-backup.yml, fetch-pitr-set.yml, ha-diag.yml, harden-ssh.yml, host-diag.yml, host-keys.yml, install-backup-credentials.yml, install-cert-sync.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, install-witness-watch.yml, manage-dns.yml, migrate-redis-ha.yml, migrate-to-patroni.yml, mobile-ci.yml, patroni-drill.yml, prepare-secondary-failover.yml, provision-subdomain.yml, provision-timeweb-server.yml, prune-images.yml, renew-certs.yml, replace-node.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, secondary-netcheck.yml, set-cryptocloud-credentials.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-heleket-credentials.yml, set-redis-sentinels.yml, set-topup-gateway.yml, setup-etcd.yml, setup-mail-relay.yml, setup-observability.yml, setup-replication.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, timeweb-server-catalog.yml, watchdog.yml, wire-s3-env.yml.
 
-Scheduled: audit-servers.yml, check-exposed-ports.yml, edge-latency.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml, watchdog.yml.
+Scheduled: audit-servers.yml, bake-node-image.yml, check-exposed-ports.yml, edge-latency.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml, watchdog.yml.
 
 ## Direct dependencies
 

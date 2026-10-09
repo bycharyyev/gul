@@ -157,17 +157,36 @@ jobs:
             '    ssh_authorized_keys:' "      - $(cat /tmp/deploy_key.pub)" 'runcmd:' \
             '  - [sh, -c, "curl -fsSL https://get.docker.com | sh"]' '  - [usermod, -aG, docker, deploy]' > /tmp/ci.yml
           name="gul-auto-$ROLE-$(date -u +%Y%m%d%H%M)"
-          # 4801 Cloud MSK 50, 2453 Cloud-50 (SPb), 2579 SSD-50 (SPb), 4243 Cloud NSK 50; then, dearer
-          # but usually with capacity, 6825 Cloud DE-50 (Frankfurt) and 6811 Cloud NL-50 (Amsterdam).
-          # In the first drill only Novosibirsk had room.
-          for preset in 4801 2453 2579 4243 6825 6811; do
+          sid=""
+          # Fastest path first: the baked node image (bake-node-image.yml) -- Docker, nginx and the
+          # container images already on disk. An image only makes servers in its own location.
+          img=$(api https://api.timeweb.cloud/api/v1/images | jq -r '[.images[] | select(.name | startswith("gul-node-")) | select(.status == "created")] | sort_by(.created_at) | last | select(. != null) | "\(.id) \(.location)"')
+          if [ -n "$img" ]; then
+            iid=${img%% *}; iloc=${img#* }
+            case "$iloc" in ru-1) ips="2453 2579";; ru-2) ips="4243";; ru-3) ips="4801";; de-1) ips="6825";; nl-1) ips="6811";; *) ips="";; esac
+            printf '%s\n' '#cloud-config' 'users:' '  - default' '  - name: deploy' '    shell: /bin/bash' \
+              '    ssh_authorized_keys:' "      - $(cat /tmp/deploy_key.pub)" > /tmp/ci-img.yml
+            for preset in $ips; do
+              payload=$(jq -n --arg n "$name" --argjson p "$preset" --arg i "$iid" --argjson k "$key" --rawfile ci /tmp/ci-img.yml \
+                '{name: $n, preset_id: $p, image_id: $i, ssh_keys_ids: [$k], is_ddos_guard: false, cloud_init: $ci}')
+              if resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload" 2>/dev/null); then
+                sid=$(echo "$resp" | jq -r '.server.id'); echo "from image $iid ($iloc), preset $preset: server $sid"; break
+              fi
+              echo "image path, preset $preset refused: $(echo "$resp" | jq -r '.error_code // .message // .' 2>/dev/null | head -c 160)"
+            done
+          else
+            echo "no baked node image yet -- building from plain Ubuntu"
+          fi
+          # Plain Ubuntu, if the image path gave nothing. 4801 Cloud MSK 50, 2453 Cloud-50 (SPb),
+          # 2579 SSD-50 (SPb), 4243 Cloud NSK 50; then, dearer but usually with capacity, 6825 Cloud
+          # DE-50 (Frankfurt) and 6811 Cloud NL-50 (Amsterdam). In the drills only Novosibirsk had room.
+          [ -n "$sid" ] || for preset in 4801 2453 2579 4243 6825 6811; do
             payload=$(jq -n --arg n "$name" --argjson p "$preset" --argjson k "$key" --rawfile ci /tmp/ci.yml \
               '{name: $n, preset_id: $p, os_id: 99, ssh_keys_ids: [$k], is_ddos_guard: false, cloud_init: $ci}')
             if resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload" 2>/dev/null); then
               sid=$(echo "$resp" | jq -r '.server.id'); echo "preset $preset: server $sid"; break
             fi
             echo "preset $preset refused: $(echo "$resp" | jq -r '.error_code // .message // .' 2>/dev/null | head -c 200)"
-            sid=""
           done
           [ -n "$sid" ] || { tg "❌ Gulyaly: Timeweb не дал сервер ни в одном из 6 городов. Сайт работает на одном сервере; сторож повторит попытку через 30 минут."; exit 1; }
           echo "SID=$sid" >> "$GITHUB_ENV"
