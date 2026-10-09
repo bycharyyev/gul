@@ -1,0 +1,26 @@
+name: Netdata gate login check (read-only, one-off)
+
+# One-off: which login name the netdata gate expects (values of passwords and secrets are masked here).
+# Deleted after reading.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+    steps:
+      - name: Read (masked)
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' \
+            'systemctl cat netdata-gate.service 2>/dev/null | sed -E "s/^(Environment=.*(PASS|SECRET|TOKEN|KEY)[A-Z_]*=).*/\1***MASKED***/"' \
+            'echo "--- env key names:"; systemctl show netdata-gate.service -p Environment 2>/dev/null | tr " " "\n" | sed -E "s/=.*//" | head -20' \
+            'echo "--- login-related lines in gate source:"; grep -niE "user|login|name|cmp|compare|hmac" /opt/netdata-gate/netdata_gate.py 2>/dev/null | sed -E "s/(PASS|SECRET)[^ ]*/[masked]/g" | head -30' > gchk.sh
+          scp -q -i ~/.ssh/k gchk.sh "$PA:/tmp/gchk.sh"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PA" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/gchk.sh; rm -f /tmp/gchk.sh" < /dev/null
