@@ -1,0 +1,30 @@
+name: Netdata stale-node check (read-only, one-off)
+
+# One-off: why the secondary's netdata shows as stale on the primary's dashboard. Deleted after reading.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Read
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' \
+            'hostname; systemctl is-active netdata' \
+            'echo "-- stream lines (netdata journal):"; journalctl -u netdata --no-pager -n 400 2>/dev/null | grep -iE "stream|child|parent|connect|reject|denied|auth|key|sending|error" | tail -15 | sed -E "s/[0-9a-f]{8}-[0-9a-f-]{27}/[uuid]/g"' \
+            'echo "-- stream.conf (no secrets):"; grep -vE "^\s*#" /etc/netdata/stream.conf 2>/dev/null | sed -E "s/(api key|key) *= *[0-9a-f-]+/\1 = [masked]/" | grep -v "^\s*$" | head -30' \
+            'echo "-- netdata error.log tail:"; tail -n 15 /var/log/netdata/error.log 2>/dev/null | sed -E "s/[0-9a-f]{8}-[0-9a-f-]{27}/[uuid]/g"' > chk.sh
+          for t in "$PA" "$PB"; do
+            echo "================ $t"
+            scp -q -i ~/.ssh/k chk.sh "$t:/tmp/chk.sh"
+            ssh -i ~/.ssh/k -o BatchMode=yes "$t" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/chk.sh; rm -f /tmp/chk.sh" < /dev/null
+          done
