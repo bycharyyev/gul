@@ -28,6 +28,8 @@ jobs:
           printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' > ~/.ssh/config
 
       - name: Inspect both nodes
+        # A dead node must not hide the live one: keep going past an unreachable host.
+        shell: bash {0}
         run: |
           for t in "$PA:/opt/gul" "$PB:/opt/gul-secondary"; do
             host=${t%%:*}; dir=${t#*:}
@@ -62,5 +64,6 @@ jobs:
           done
 
       - name: Witness watcher
+        if: always()
         run: |
           ssh "$PW" "docker ps --format '{{.Names}}	{{.Status}}' | sort; echo '--- gul-witness-watch log ---'; docker logs --tail 40 gul-witness-watch 2>&1" < /dev/null
