@@ -1,0 +1,33 @@
+name: Remove old standby volumes on the secondary (one-off)
+
+# One-off, approved in chat 2026-10-09: the pre-Patroni replica data left on the secondary
+# (pg-standby-data and its stale copy). Refuses unless no container mounts either volume.
+# Deleted by the follow-up commit after it has run.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    env:
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Check and remove
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' \
+            'set -e' \
+            'for v in pg-standby-data pg-standby-data-stale-20261007191644; do' \
+            '  if docker volume inspect "$v" >/dev/null 2>&1; then' \
+            '    users=$(docker ps -a --filter "volume=$v" --format "{{.Names}}")' \
+            '    if [ -n "$users" ]; then echo "REFUSING $v: used by $users" >&2; exit 1; fi' \
+            '    docker volume rm "$v" && echo "removed $v"' \
+            '  else echo "$v: not present"; fi' \
+            'done' \
+            'docker system df' > rm.sh
+          scp -q -i ~/.ssh/k rm.sh "$PB:/tmp/rm.sh"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PB" "sh /tmp/rm.sh; rm -f /tmp/rm.sh" < /dev/null
