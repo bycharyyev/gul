@@ -7,7 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
+import { JwtService, type JwtSignOptions } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import { randomBytes, createHash } from "crypto";
 import { countryFromPhone } from "../common/phone-country";
@@ -52,7 +52,8 @@ export class AuthService {
       { sub: userId, role },
       {
         secret: ACCESS_TOKEN_SECRET,
-        expiresIn: process.env.JWT_ACCESS_TTL ?? "15m",
+        // @nestjs/jwt 11 types expiresIn as a jsonwebtoken duration; the env value is the same string.
+        expiresIn: (process.env.JWT_ACCESS_TTL ?? "15m") as JwtSignOptions["expiresIn"],
       },
     );
 
