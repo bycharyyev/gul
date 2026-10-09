@@ -94,7 +94,7 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' '  ConnectTimeout 10' > ~/.ssh/config
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' '  ServerAliveCountMax 12' '  ConnectTimeout 10' > ~/.ssh/config
           if [ "$ROLE" = secondary ]; then
             { echo "DEAD=$B"; echo "SURV=$A"; echo "SURV_DIR=/opt/gul"; echo "DIR=/opt/gul-secondary"
               echo "NAME=gul-b"; echo "SURV_NAME=gul-a"; echo "HOST_SECRET=SECONDARY_HOST"; echo "COMPOSE=docker-compose.secondary.yml"; } >> "$GITHUB_ENV"
@@ -127,16 +127,25 @@ jobs:
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
-          auto=$(api https://api.timeweb.cloud/api/v1/servers | jq -r '[.servers[] | select(.name | startswith("gul-auto-"))] | length')
-          if [ "$auto" != 0 ]; then
-            tg "⛔ Gulyaly: $ROLE сервер мёртв, но автозамена заблокирована — уже есть автокупленный сервер (gul-auto-*). Переименуйте его в панели Timeweb, чтобы разрешить следующую."
-            echo "an auto-bought server already exists -- refusing" >&2; exit 1
+          autoip=$(api https://api.timeweb.cloud/api/v1/servers | jq -r '.servers[] | select(.name | startswith("gul-auto-"))
+            | [.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // empty' | head -1)
+          if [ -n "$autoip" ]; then
+            case " $A $B " in
+              *" $autoip "*)
+                tg "⛔ Gulyaly: $ROLE сервер мёртв, но автозамена заблокирована — автокупленный сервер (gul-auto-*) уже в работе. Переименуйте его в панели Timeweb, чтобы разрешить следующую."
+                echo "an auto-bought server is already serving -- refusing" >&2; exit 1 ;;
+            esac
+            # Bought by an earlier run that stopped part-way (a dropped SSH session in the drill):
+            # finish the job on it instead of leaving the site on one node.
+            echo "USE_HOST=$autoip" >> "$GITHUB_ENV"
+            tg "🛠 Gulyaly: продолжаю замену ($ROLE) на уже купленном сервере."
+            exit 0
           fi
           api https://api.timeweb.cloud/api/v1/account/finances | jq -c '.finances | {balance, hours_left}'
           tg "🛠 Gulyaly: $ROLE сервер мёртв. Покупаю замену на Timeweb и настраиваю автоматически (~20–30 мин)."
 
       - name: Provision (presets in order until one has capacity)
-        if: inputs.use_host == ''
+        if: inputs.use_host == '' && env.USE_HOST == ''
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
@@ -375,10 +384,14 @@ jobs:
             echo 'nginx -t && systemctl enable --now nginx && systemctl reload nginx'
           } > ngx.sh
           scp -q ngx.sh "deploy@$H:/tmp/ngx.sh"
-          ssh "deploy@$H" "DIR='$DIR' bash -s" <<'REMOTE'
+          # Everything below is idempotent, and pulling the app images across the country has dropped
+          # the SSH session once (drill, 2026-10-09): on a dropped connection (255), run it again.
+          cat > app.sh <<'REMOTE'
           set -e
-          docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/ngx.sh
-          rm -f /tmp/ngx.sh
+          if [ -f /tmp/ngx.sh ]; then
+            docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/ngx.sh
+            rm -f /tmp/ngx.sh
+          fi
           cd "$DIR"
           docker network create gul-net >/dev/null 2>&1 || true
           docker compose pull -q
@@ -389,6 +402,12 @@ jobs:
           done
           echo "app healthy"
           REMOTE
+          for attempt in 1 2 3; do
+            rc=0; ssh "deploy@$H" "DIR='$DIR' bash -s" < app.sh || rc=$?
+            [ "$rc" = 0 ] && break
+            [ "$rc" = 255 ] && [ "$attempt" -lt 3 ] || exit "$rc"
+            echo "SSH dropped (attempt $attempt), running the app step again"; sleep 10
+          done
           code=$(curl -s -o /dev/null -m 15 --resolve "api.gulyaly.com:443:$H" -w '%{http_code}:%{ssl_verify_result}' https://api.gulyaly.com/api/health/ready)
           echo "new host over HTTPS: $code"
           [ "$code" = "200:0" ]
@@ -407,7 +426,8 @@ jobs:
           # FENCED_HOST tells the witness which cut-off machine to watch for: when it answers again it
           # is rebuilt in place (fresh copy of the database, nothing stale kept) and the auto-bought
           # stand-in goes. A rebuild onto a given host (use_host) closes that loop.
-          if [ -z "${{ inputs.use_host }}" ]; then
+          standin=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.timeweb.cloud/api/v1/servers | jq -r --arg ip "$H"             '[.servers[] | select(.name | startswith("gul-auto-")) | select([.networks[]? | .ips[]? | .ip] | index($ip))] | length')
+          if [ "$standin" != 0 ]; then
             printf '%s' "$ROLE:$DEAD" | gh secret set FENCED_HOST --repo "${{ github.repository }}"
           else
             printf '%s' "none" | gh secret set FENCED_HOST --repo "${{ github.repository }}"
