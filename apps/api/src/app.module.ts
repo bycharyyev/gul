@@ -118,6 +118,6 @@ import { StoreTelegramBotModule } from "./store-telegram-bot/store-telegram-bot.
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestIdMiddleware).forRoutes("*");
+    consumer.apply(RequestIdMiddleware).forRoutes("{*path}");
   }
 }
