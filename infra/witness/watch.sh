@@ -60,9 +60,11 @@ while :; do
   for n in a b; do
     o=b; role=primary; [ "$n" = b ] && { o=a; role=secondary; }
     eval "since=\$since_$n; asked=\$asked_$n; other=\$state_$o"
-    if [ "$since" -gt 0 ] && [ "$asked" = 0 ] && [ "$other" = up ] && [ $(( $(date +%s) - since )) -ge "$REPLACE_AFTER" ]; then
-      dispatch replace-node.yml "node $n down for $REPLACE_AFTER s" "{\"node\":\"$role\",\"mode\":\"auto\",\"confirm\":\"REPLACE\"}"
-      eval "asked_$n=1"
+    # asked_<n> holds when the replacement was requested; still down 30 min later (Timeweb had no
+    # server, the run failed) means ask again.
+    if [ "$since" -gt 0 ] && [ "$other" = up ] && [ $(( $(date +%s) - since )) -ge "$REPLACE_AFTER" ]        && { [ "$asked" = 0 ] || [ $(( $(date +%s) - asked )) -ge 1800 ]; }; then
+      dispatch replace-node.yml "node $n down for $(( $(date +%s) - since )) s" "{\"node\":\"$role\",\"mode\":\"auto\",\"confirm\":\"REPLACE\"}"
+      eval "asked_$n=\$(date +%s)"
     fi
   done
 
