@@ -1,0 +1,33 @@
+name: Host diagnostics (read-only)
+
+# Disk, architecture, kernel I/O errors and Docker's state on one host -- for a node that misbehaves
+# in a way the app logs cannot explain (e.g. "exec format error" from freshly pulled images).
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host address (deploy key must be authorised there)'
+        required: true
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect
+        env:
+          H: ${{ inputs.host }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          ssh -i ~/.ssh/k -o StrictHostKeyChecking=accept-new -o BatchMode=yes "deploy@$H" bash -s <<'REMOTE'
+          echo "--- arch / kernel ---"; uname -m; uname -r
+          echo "--- disk ---"; df -h / /var/lib/docker 2>/dev/null
+          echo "--- docker ---"; docker info --format 'driver={{.Driver}} root={{.DockerRootDir}} arch={{.Architecture}} images={{.Images}} version={{.ServerVersion}}'
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | head -20
+          echo "--- a known binary inside the api image ---"
+          img=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep gul-api | head -1)
+          [ -n "$img" ] && docker run --rm --entrypoint sh "$img" -c 'head -c 64 /usr/local/bin/docker-entrypoint.sh | od -c | head -3' 2>&1 | head -5
+          echo "--- kernel errors (I/O, filesystem) ---"
+          docker run --rm --privileged --pid=host alpine nsenter -t 1 -m -- dmesg 2>/dev/null | grep -iE 'error|ext4|i/o|corrupt' | tail -15
+          REMOTE
