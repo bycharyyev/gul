@@ -92,9 +92,8 @@ export class ReferralsService {
     // and nothing stops that code from being a number the sequence has not reached yet. Checking
     // costs one indexed lookup and turns a hard registration failure into another draw.
     for (let attempt = 0; attempt < 10; attempt++) {
-      const rows = await this.prisma.$queryRawUnsafe<Array<{ value: bigint }>>(
-        `SELECT nextval('${CODE_SEQUENCE}') AS value`,
-      );
+      // CODE_SEQUENCE is a module constant; the tagged form keeps the query parameterised anyway.
+      const rows = await this.prisma.$queryRaw<Array<{ value: bigint }>>`SELECT nextval(${CODE_SEQUENCE}::regclass) AS value`;
       const username = String(rows[0].value);
       if (!(await this.isUsernameTaken(username))) return username;
     }

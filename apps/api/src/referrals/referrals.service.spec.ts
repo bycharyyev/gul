@@ -23,7 +23,7 @@ function makePrismaMock() {
     },
     $transaction: jest.fn(),
     // Referral codes come from a Postgres sequence, which Prisma only reaches through raw SQL.
-    $queryRawUnsafe: jest.fn(),
+    $queryRaw: jest.fn(),
   };
   // Executes the callback (or array) form with `prisma` itself standing in as `tx`, since the
   // mock methods are the same either way -- lets tests that go through $transaction assert on
@@ -117,7 +117,7 @@ describe("ReferralsService", () => {
 
   describe("generateUsername", () => {
     it("issues the next number from the sequence", async () => {
-      prisma.$queryRawUnsafe.mockResolvedValueOnce([{ value: BigInt(1000) }]);
+      prisma.$queryRaw.mockResolvedValueOnce([{ value: BigInt(1000) }]);
       prisma.user.findUnique.mockResolvedValueOnce(null);
       prisma.seller.findUnique.mockResolvedValueOnce(null);
 
@@ -127,7 +127,7 @@ describe("ReferralsService", () => {
     it("draws again when a number is already taken by a hand-set code", async () => {
       // Staff can give a partner any code that fits the pattern, including a number the sequence
       // has not reached. Without this retry that account would break the next registration.
-      prisma.$queryRawUnsafe
+      prisma.$queryRaw
         .mockResolvedValueOnce([{ value: BigInt(1007) }])
         .mockResolvedValueOnce([{ value: BigInt(1008) }]);
       prisma.user.findUnique
@@ -136,7 +136,7 @@ describe("ReferralsService", () => {
       prisma.seller.findUnique.mockResolvedValueOnce(null);
 
       expect(await service.generateUsername()).toBe("1008");
-      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
     });
   });
 

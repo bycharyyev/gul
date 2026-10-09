@@ -19,7 +19,7 @@ function makePrismaMock() {
     cargoPickupRequest: { create: jest.fn(), update: jest.fn() },
     shipmentTrackingEvent: { create: jest.fn() },
     $transaction: jest.fn(),
-    $queryRawUnsafe: jest.fn(),
+    $queryRaw: jest.fn(),
   };
   // Same double-duty mock as referrals.service.spec.ts: handles both the array form
   // ($transaction([...])) and the callback form ($transaction(async (tx) => ...)) that
@@ -205,7 +205,7 @@ describe("CargoService", () => {
       ]);
       prisma.cargoExchangeRate.findUnique.mockResolvedValue({ rubPerUsd: "100", tmtPerUsd: "20" });
       prisma.paymentMethod.findUnique.mockResolvedValue({ id: "method-1", isEnabled: true });
-      prisma.$queryRawUnsafe.mockResolvedValue([{ value: BigInt(7) }]);
+      prisma.$queryRaw.mockResolvedValue([{ value: BigInt(7) }]);
       prisma.shipment.create.mockResolvedValue({ id: "shipment-1", declaredWeightKg: "2", totalPriceTmt: "50" });
 
       await service.createShipment("user-1", { ...baseDto, deliveryMode: "WAREHOUSE_PICKUP" });
@@ -261,7 +261,7 @@ describe("CargoService", () => {
       ]);
       prisma.cargoExchangeRate.findUnique.mockResolvedValue({ rubPerUsd: "1", tmtPerUsd: "1" });
       prisma.paymentMethod.findUnique.mockResolvedValue({ id: "method-1", isEnabled: true });
-      prisma.$queryRawUnsafe.mockResolvedValue([{ value: BigInt(42) }]);
+      prisma.$queryRaw.mockResolvedValue([{ value: BigInt(42) }]);
       prisma.shipment.create.mockResolvedValue({ id: "shipment-1" });
 
       await service.createShipment("user-1", { ...baseDto, deliveryMode: "WAREHOUSE_PICKUP" });
