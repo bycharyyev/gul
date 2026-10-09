@@ -1,0 +1,29 @@
+name: Netdata debug log for streaming (read-only, one-off)
+
+# One-off: stream sender/receiver lines from netdata's debug.log on both nodes. Keys masked. Deleted after reading.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  dbg:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Read
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' \
+            'echo "== stream lines in debug.log:"; grep -iE "STREAM|receiv|sender|reject|denied|api key|key|child|parent|destination" /var/log/netdata/debug.log 2>/dev/null | tail -25 | sed -E "s/[0-9a-f]{8}-[0-9a-f-]{27}/[uuid]/g" | cut -c1-260' \
+            'echo "== stream.conf destination host (ip masked to last octet):"; grep -E "destination" /etc/netdata/stream.conf | sed -E "s/[0-9]+\.[0-9]+\.[0-9]+\.([0-9]+)/x.x.x.\1/g"' \
+            'echo "== ufw 19999 rules:"; ufw status 2>/dev/null | grep -E "19999" | sed -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/x.x.x.x/g" | head -5' > dbg.sh
+          for t in "$PA" "$PB"; do
+            echo "================ $t"
+            scp -q -i ~/.ssh/k dbg.sh "$t:/tmp/dbg.sh"
+            ssh -i ~/.ssh/k -o BatchMode=yes "$t" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/dbg.sh; rm -f /tmp/dbg.sh" < /dev/null
+          done
