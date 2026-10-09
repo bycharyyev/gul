@@ -1,0 +1,27 @@
+name: Firewall check for netdata streaming (read-only, one-off)
+
+# One-off: are the primary's firewall rules letting the secondary reach port 19999, and can it connect?
+# Deleted after reading.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Read
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'ufw status numbered 2>&1 | head -40 | sed -E "s/([0-9]+\.[0-9]+\.[0-9]+\.)[0-9]+/\1x/g"' > fw.sh
+          scp -q -i ~/.ssh/k fw.sh "$PA:/tmp/fw.sh"
+          echo "== primary ufw:"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PA" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/fw.sh; rm -f /tmp/fw.sh" < /dev/null
+          echo "== can secondary reach primary:19999 ?"
+          ssh -i ~/.ssh/k -o BatchMode=yes "$PB" "timeout 6 bash -c '</dev/tcp/109.238.95.125/19999' && echo OPEN || echo CLOSED" < /dev/null
