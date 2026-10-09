@@ -5,6 +5,15 @@ module.exports = {
   rootDir: "src",
   testRegex: ".*\\.spec\\.ts$",
   moduleFileExtensions: ["js", "json", "ts"],
+  // uuid 14 (pulled in by firebase-admin and gaxios) ships only ESM. Let ts-jest transpile that one
+  // package to CommonJS instead of failing with "Unexpected token 'export'". Everything else in
+  // node_modules stays untransformed. Patterns accept both path separators (Windows, pnpm layout).
+  transform: {
+    "^.+\\.[tj]sx?$": ["ts-jest", { tsconfig: { allowJs: true, esModuleInterop: true } }],
+  },
+  transformIgnorePatterns: [
+    "[\\/]node_modules[\\/](?!(?:\.pnpm[\\/]uuid@[^\\/]+[\\/]node_modules[\\/])?uuid[\\/])",
+  ],
   // The workspace packages ship as ESM (module: NodeNext, explicit .js extensions) -- see
   // CLAUDE.md's build-order note. Unit tests never noticed, because they import narrow modules;
   // app.boot.spec.ts pulls in the whole AppModule, which reaches them through the DTOs and then
