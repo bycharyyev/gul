@@ -22,6 +22,6 @@ import { PerformanceController } from "./performance.controller";
 })
 export class MetricsModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(PerfMetricsMiddleware).forRoutes("*");
+    consumer.apply(PerfMetricsMiddleware).forRoutes("{*path}");
   }
 }
