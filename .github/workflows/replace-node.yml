@@ -127,7 +127,9 @@ jobs:
         run: |
           set -e
           api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
-          # A stand-in an earlier run created but never got an IPv4 for is useless: delete it.
+          # A stand-in that never got an IPv4 (status no_paid, or no IP) is useless and billed: delete
+          # it without asking -- it was created by this automation, never by a person.
+          # (Timeweb left one in no_paid on 2026-10-09 and the replacement stalled for 25 minutes.)
           for dead in $(api https://api.timeweb.cloud/api/v1/servers | jq -r '.servers[] | select(.name | startswith("gul-auto-"))
             | select(([.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4")] | length) == 0) | .id'); do
             api -X DELETE "https://api.timeweb.cloud/api/v1/servers/$dead" >/dev/null || true
