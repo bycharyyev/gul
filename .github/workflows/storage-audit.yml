@@ -1,6 +1,6 @@
 name: Storage audit (read-only, one-off)
 
-# One-off: where the disk space goes on each node (volumes, images, WAL, logs). Deleted after reading.
+# One-off: where the disk space goes on each node (volumes, images, journal). Deleted after reading.
 
 on:
   workflow_dispatch: {}
@@ -18,8 +18,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          s() { ssh -i ~/.ssh/k -o ConnectTimeout=10 -o BatchMode=yes "$1" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c '$2'" < /dev/null; }
+          echo "ZGYgLWggLyB8IHRhaWwgLTEKZWNobyAiLS0gL3ZhciB0b3A6IjsgZHUgLXhoIC0tbWF4LWRlcHRoPTIgL3ZhciAyPi9kZXYvbnVsbCB8IHNvcnQgLXJoIHwgaGVhZCAtMTAKZWNobyAiLS0gL29wdCB0b3A6IjsgZHUgLXhoIC0tbWF4LWRlcHRoPTIgL29wdCAyPi9kZXYvbnVsbCB8IHNvcnQgLXJoIHwgaGVhZCAtOAplY2hvICItLSBkb2NrZXIgZGY6IjsgZG9ja2VyIHN5c3RlbSBkZiAyPi9kZXYvbnVsbAplY2hvICItLSB2b2x1bWVzOiIKZm9yIHYgaW4gJChkb2NrZXIgdm9sdW1lIGxzIC1xKTsgZG8gZWNobyAiJChkdSAtc2ggL3Zhci9saWIvZG9ja2VyL3ZvbHVtZXMvJHYvX2RhdGEgMj4vZGV2L251bGwgfCBjdXQgLWYxKSAkdiI7IGRvbmUgfCBzb3J0IC1yaCB8IGhlYWQgLTIwCmVjaG8gIi0tIGpvdXJuYWw6Ijsgam91cm5hbGN0bCAtLWRpc2stdXNhZ2UgMj4vZGV2L251bGwK" | base64 -d > st.sh
           for t in "$PA" "$PB"; do
             echo "================ $t"
-            s "$t" "df -h / | tail -1; echo; echo '-- top dirs under /var:'; du -xh --max-depth=2 /var 2>/dev/null | sort -rh | head -12; echo; echo '-- top dirs under /opt:'; du -xh --max-depth=2 /opt 2>/dev/null | sort -rh | head -10; echo; echo '-- docker system df:'; docker system df 2>/dev/null; echo; echo '-- volumes:'; docker volume ls -q | while read v; do echo \"\$(du -sh /var/lib/docker/volumes/\$v/_data 2>/dev/null | cut -f1)  \$v\"; done | sort -rh | head -20; echo; echo '-- journal:'; journalctl --disk-usage 2>/dev/null; echo '-- apt cache:'; du -sh /var/cache/apt 2>/dev/null"
+            scp -q -i ~/.ssh/k st.sh "$t:/tmp/st.sh"
+            ssh -i ~/.ssh/k -o BatchMode=yes "$t" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/st.sh; rm -f /tmp/st.sh" < /dev/null
           done
