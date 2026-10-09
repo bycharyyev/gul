@@ -113,7 +113,8 @@ rooms, threads and channels; email into sending, templates and alerts.
 ### A-04 · One writer, manual failover
 
 PostgreSQL has one writer and an asynchronous standby; Redis is one instance shared by both API
-nodes; promotion and failback are manual (`failover-to-secondary.yml`). The application tier is
+nodes; promotion and failback were manual at the time of this review; they are automatic now (Patroni,
+Sentinel, `replace-node.yml`), see `docs/architecture/HIGH_AVAILABILITY.md`. The application tier is
 genuinely active/active, so a crashed app container costs nothing, but the loss of the primary host
 means minutes of manual work and a small window of lost writes.
 **Fix in order:** (1) settle A-09 first, then keep the scheduled restore check green (it restores the

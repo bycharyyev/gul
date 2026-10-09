@@ -7,8 +7,8 @@ name: Provision a Timeweb Cloud server (paid)
 # stage is timed, so this doubles as the "how fast can we stand up a replacement node" test.
 #
 # COSTS MONEY: Timeweb bills hourly until the server is DELETED (stopping it does not stop
-# billing). It is the app-level workflows (setup-replication, enable-active-active,
-# prepare-secondary-failover) that turn this into a secondary; this one only creates the machine.
+# billing). Turning it into a database node is migrate-to-patroni / migrate-redis-ha / replace-node;
+# this one only creates the machine.
 
 on:
   workflow_dispatch:

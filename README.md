@@ -127,14 +127,10 @@ Two VPS instances, both provisioned identically from GitHub Actions (no manual s
   its health check (`/health/live` vs `/health/ready` — liveness has zero dependencies on purpose,
   readiness checks Postgres and Redis).
 - **Secondary** — on a different subnet, runs the **same app tier continuously** (api/web/admin),
-  connected to the primary's Postgres over the network rather than a local database. Postgres
-  itself stays a single primary + streaming replica (no multi-primary complexity), but the app
-  tier is genuinely active/active: a crash of primary's containers alone doesn't need any
-  failover procedure, since the secondary is already serving correctly. A harder failure (primary's
-  database itself gone) still needs a manual, explicitly-confirmed promotion
-  (`failover-to-secondary.yml`) — full reasoning in
-  [`HIGH_AVAILABILITY.md`](docs/architecture/HIGH_AVAILABILITY.md), including the one manual DNS
-  step (a second A record) still needed for both nodes to actually receive live traffic today.
+  connected to the primary's database over the network. Database, Redis and the vote are all
+  clustered across three servers (Patroni, Sentinel, etcd); a dead node is removed from DNS in
+  about two minutes and replaced automatically after fifteen. The design, the drills and the
+  limits are in [`HIGH_AVAILABILITY.md`](docs/architecture/HIGH_AVAILABILITY.md).
 
 Domains are split by subdomain (`gulyaly.com` → web, `admin.` → admin, `api.` → api), routed by
 host nginx.

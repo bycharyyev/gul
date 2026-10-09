@@ -44,8 +44,8 @@ does real work when a domain is missing from the cert's SAN list.
 **What it does not automate:** creating the nginx vhost file itself (you still
 write a `server { server_name ...; proxy_pass ...; }` block and
 `nginx -t && systemctl reload nginx`) — this only takes care of the certbot
-step after that. See `.github/workflows/certbot-once.yml` for the original
-manual one-off bootstrap this replaces for the "run certbot by hand" part.
+step after that. The `certbot-once.yml` workflow (the one-off HTTP-01 bootstrap that the wildcard flow in
+`renew-certs.yml` replaced) was removed on 2026-10-09.
 
 ## Reinstalling after a server rebuild / migration
 
