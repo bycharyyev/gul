@@ -1,0 +1,30 @@
+name: Restore the netdata streaming key on the secondary (one-off)
+
+# One-off: the secondary's stream.conf had an empty "api key", so the primary rejected its data and the
+# dashboard showed it as stale. Copies the streaming key the primary already accepts into the secondary's
+# stream.conf and restarts netdata there. The key is masked and never printed. Deleted after running.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      PB: ${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}
+    steps:
+      - name: Copy the key and restart netdata on the secondary
+        shell: bash {0}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/k && chmod 600 ~/.ssh/k
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          ssh_run() { ssh -i ~/.ssh/k -o BatchMode=yes "$1" "docker run --rm --pid=host --uts=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c '$2'" < /dev/null; }
+          KEY=$(ssh -i ~/.ssh/k -o BatchMode=yes "$PA" "docker run --rm --pid=host --network=host --privileged -v /:/host alpine chroot /host /bin/sh -c \"grep -oE '^\[[0-9a-f-]{36}\]' /etc/netdata/stream.conf | head -1 | tr -d '[]'\"" < /dev/null)
+          [ -n "$KEY" ] || { echo "no streaming key found on the primary" >&2; exit 1; }
+          echo "::add-mask::$KEY"
+          ssh_run "$PB" "sed -i -E 's/^(\s*api key\s*=).*/\1 $KEY/' /etc/netdata/stream.conf && grep -q 'api key *= *$KEY' /etc/netdata/stream.conf && echo 'key set (masked)' && systemctl restart netdata && echo 'netdata restarted'"
+          sleep 60
+          echo "-- secondary streaming state (last lines):"
+          ssh_run "$PB" "journalctl -u netdata --no-pager -n 40 2>/dev/null | grep -iE 'stream|connect|reject|denied' | tail -6"
