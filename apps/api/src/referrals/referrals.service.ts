@@ -6,7 +6,7 @@ import type { ReferrerType } from "@prisma/client";
 import { SellerLedgerService } from "../seller-ledger/seller-ledger.service";
 
 const SETTINGS_ID = "singleton";
-export const USERNAME_PATTERN = /^[a-z0-9_]{2,32}$/;
+const USERNAME_PATTERN = /^[a-z0-9_]{2,32}$/;
 
 /// Codes are numbers issued in order from this sequence, starting at 1000. A random string is
 /// unreadable over the phone and impossible to dictate without spelling it out; a number is the
