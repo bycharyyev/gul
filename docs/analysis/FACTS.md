@@ -11,7 +11,7 @@
 | API (NestJS) | 27004 | 380 |
 | Web (Next.js) | 11431 | 94 |
 | Admin (Vite) | 14633 | 74 |
-| Mobile (Flutter) | 27495 | 132 |
+| Mobile (Flutter) | 27504 | 132 |
 | packages/types | 2451 | 14 |
 | packages/api-client | 2312 | 6 |
 | packages/i18n | 5392 | 12 |
@@ -73,12 +73,12 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 
 | Metric | Value |
 | --- | --- |
-| GitHub Actions workflows | 59 |
+| GitHub Actions workflows | 63 |
 |   of which run on a schedule | 8 |
 | nginx vhosts (infra/nginx) | 5 |
 | Docker compose files | 3 |
 
-Workflows: api-logs.yml, audit-servers.yml, bake-node-image.yml, build-patroni-image.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, delete-timeweb-server.yml, deploy.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-wal-archive.yml, fetch-latest-backup.yml, fetch-pitr-set.yml, ha-diag.yml, harden-ssh.yml, host-diag.yml, host-keys.yml, incident-state.yml, install-backup-credentials.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, install-witness-watch.yml, manage-dns.yml, migrate-redis-ha.yml, migrate-to-patroni.yml, mobile-ci.yml, patroni-drill.yml, provision-subdomain.yml, provision-timeweb-server.yml, prune-images.yml, redis-force-failover.yml, renew-certs.yml, replace-node.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, secondary-netcheck.yml, set-cryptocloud-credentials.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-heleket-credentials.yml, set-redis-sentinels.yml, set-topup-gateway.yml, setup-etcd.yml, setup-observability.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, timeweb-server-catalog.yml, watchdog.yml.
+Workflows: api-logs.yml, audit-servers.yml, bake-node-image.yml, build-patroni-image.yml, check-exposed-ports.yml, check-mail-blacklist.yml, db-check.yml, delete-timeweb-server.yml, deploy.yml, diagnose.yml, docs-check.yml, edge-latency.yml, email-dns-monitor.yml, emergency-disk-recovery.yml, enable-wal-archive.yml, fetch-latest-backup.yml, fetch-pitr-set.yml, ha-diag.yml, harden-ssh.yml, host-diag.yml, host-keys.yml, incident-state.yml, install-backup-credentials.yml, install-db-backup-s3.yml, install-disk-alert.yml, install-docker-firewall.yml, install-primary-db-alert.yml, install-watchdog.yml, install-witness-watch.yml, manage-dns.yml, migrate-redis-ha.yml, migrate-to-patroni.yml, mobile-ci.yml, netdata-logs.yml, netdata-restart-both.yml, netdata-three-nodes.yml, patroni-drill.yml, provision-subdomain.yml, provision-timeweb-server.yml, prune-images.yml, redis-force-failover.yml, renew-certs.yml, replace-node.yml, restart-api.yml, rotate-netdata-gate.yml, rotate-unsubscribe-secret.yml, secondary-netcheck.yml, set-cryptocloud-credentials.yml, set-firebase-credentials.yml, set-freekassa-credentials.yml, set-heleket-credentials.yml, set-redis-sentinels.yml, set-topup-gateway.yml, setup-etcd.yml, setup-observability.yml, smtp-integration-test.yml, switch-alerts-to-regru.yml, switch-mail-to-regru.yml, sync-mail-config.yml, sync-nginx.yml, timeweb-server-catalog.yml, ufw-check.yml, watchdog.yml.
 
 Scheduled: audit-servers.yml, bake-node-image.yml, check-exposed-ports.yml, edge-latency.yml, email-dns-monitor.yml, prune-images.yml, renew-certs.yml, watchdog.yml.
 

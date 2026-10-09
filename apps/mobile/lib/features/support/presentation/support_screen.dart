@@ -22,6 +22,9 @@ class _SupportScreenState extends ConsumerState<SupportScreen>
     with WidgetsBindingObserver {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  // Captured while the state is live, so dispose() never touches `ref` (Riverpod forbids that after
+  // dispose: "Cannot use ref after the widget was disposed", Crashlytics 1.0.6).
+  void Function() _stopPolling = () {};
 
   @override
   void initState() {
@@ -32,6 +35,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final controller = ref.read(supportControllerProvider.notifier);
+      _stopPolling = controller.stopPolling;
       controller.load();
       controller.startPolling();
     });
@@ -54,7 +58,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(supportControllerProvider.notifier).stopPolling();
+    _stopPolling();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
