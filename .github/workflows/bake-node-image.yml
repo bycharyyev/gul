@@ -1,0 +1,190 @@
+name: Bake the node image (Timeweb, weekly)
+
+# A "golden image" for replace-node.yml: a Timeweb server image with everything a node needs that
+# is slow or fragile to install during an outage -- Docker, nginx (nginx.org mainline), ufw,
+# qemu-guest-agent, and every container image the node runs at the current release -- so a
+# replacement starts from it in minutes and pulls only the difference to the current release.
+#
+# NOT in the image, by construction: the database, Redis data, .env / passwords / tokens, the TLS
+# certificate, the registry login, and the SSH host keys (cloud-init regenerates them on first
+# boot of every server made from it). Those come from the live survivor at replacement time.
+#
+# Every image is test-run before the snapshot (a corrupted Docker store produced "exec format
+# error" from freshly pulled images on 2026-10-09; an image like that must never be baked).
+# Builds on a temporary server named gul-bake-*, which is always deleted with its IPv4. Keeps the
+# newest image only. Images are tied to the location they were made in (replace-node knows that).
+# Weekly so the difference to the current release stays small.
+
+on:
+  schedule:
+    - cron: '23 3 * * 0'
+  workflow_dispatch: {}
+
+concurrency:
+  group: bake-image
+  cancel-in-progress: false
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CURL_HOME: ${{ github.workspace }}/.github/curl
+      TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
+      PA: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: SSH, current release tag, leftovers from an earlier bake
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/deploy_key' '  ServerAliveInterval 15' '  ServerAliveCountMax 12' '  ConnectTimeout 10' > ~/.ssh/config
+          tag=$(ssh "$PA" "grep -E '^IMAGE_TAG=' /opt/gul/.env | tail -1 | cut -d= -f2" < /dev/null)
+          [ -n "$tag" ] || { echo "cannot read IMAGE_TAG from the primary" >&2; exit 1; }
+          echo "TAG=$tag" >> "$GITHUB_ENV"; echo "release: $tag"
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          for sid in $(api https://api.timeweb.cloud/api/v1/servers | jq -r '.servers[] | select(.name | startswith("gul-bake-")) | .id'); do
+            api -X DELETE "https://api.timeweb.cloud/api/v1/servers/$sid" >/dev/null || true
+            echo "removed leftover bake server $sid"
+          done
+
+      - name: Temporary server (same preset order as replace-node)
+        run: |
+          set -e
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          ssh-keygen -y -f ~/.ssh/deploy_key > /tmp/k.pub
+          body=$(cut -d' ' -f1,2 /tmp/k.pub)
+          key=$(api https://api.timeweb.cloud/api/v1/ssh-keys | jq -r --arg b "$body" '.ssh_keys[] | select((.body | split(" ")[0:2] | join(" ")) == $b) | .id' | head -1)
+          printf '%s\n' '#cloud-config' 'users:' '  - default' '  - name: deploy' '    shell: /bin/bash' \
+            '    ssh_authorized_keys:' "      - $(cat /tmp/k.pub)" > /tmp/ci.yml
+          sid=""
+          for preset in 4801 2453 2579 4243 6825 6811; do
+            payload=$(jq -n --arg n "gul-bake-$(date -u +%Y%m%d%H%M)" --argjson p "$preset" --argjson k "$key" --rawfile ci /tmp/ci.yml \
+              '{name: $n, preset_id: $p, os_id: 99, ssh_keys_ids: [$k], is_ddos_guard: false, cloud_init: $ci}')
+            if resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload" 2>/dev/null); then
+              sid=$(echo "$resp" | jq -r '.server.id'); echo "preset $preset: server $sid"; break
+            fi
+            echo "preset $preset refused: $(echo "$resp" | jq -r '.error_code // .message // .' 2>/dev/null | head -c 120)"
+          done
+          [ -n "$sid" ] || { echo "Timeweb has no capacity anywhere -- no image this week" >&2; exit 1; }
+          echo "SID=$sid" >> "$GITHUB_ENV"
+          ordered=0
+          for i in $(seq 1 120); do
+            s=$(api "https://api.timeweb.cloud/api/v1/servers/$sid")
+            st=$(echo "$s" | jq -r '.server.status')
+            ip=$(echo "$s" | jq -r '[.server.networks[]? | select(.type == "public") | .ips[]? | select(.type == "ipv4") | .ip][0] // empty')
+            if [ "$st" = on ] && [ -z "$ip" ] && [ "$ordered" = 0 ]; then api -X POST "https://api.timeweb.cloud/api/v1/servers/$sid/ips" -d '{"type":"ipv4"}' >/dev/null; ordered=1; fi
+            [ "$st" = on ] && [ -n "$ip" ] && break
+            sleep 10
+          done
+          [ -n "$ip" ] || { echo "no IP" >&2; exit 1; }
+          echo "IP=$ip" >> "$GITHUB_ENV"
+          echo "LOCATION=$(api "https://api.timeweb.cloud/api/v1/servers/$sid" | jq -r '.server.location')" >> "$GITHUB_ENV"
+          for i in $(seq 1 90); do ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes "root@$ip" true < /dev/null 2>/dev/null && break; sleep 10; done
+          ssh -o BatchMode=yes "root@$ip" 'cloud-init status --wait >/dev/null; true' < /dev/null
+
+      - name: Install the node software (as root)
+        run: |
+          set -e
+          ssh "root@$IP" bash -s <<'REMOTE'
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -y >/dev/null
+          apt-get install -y qemu-guest-agent ufw curl gnupg lsb-release >/dev/null
+          systemctl enable qemu-guest-agent
+          curl -fsSL https://get.docker.com | sh >/tmp/docker.log 2>&1 || { tail -20 /tmp/docker.log; exit 1; }
+          usermod -aG docker deploy
+          curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor --yes -o /usr/share/keyrings/nginx-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/mainline/ubuntu $(lsb_release -cs) nginx" > /etc/apt/sources.list.d/nginx.list
+          apt-get update -y >/dev/null && apt-get install -y -o Dpkg::Options::=--force-confnew nginx >/dev/null
+          mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /var/www/certbot /var/cache/nginx/gul /opt/gul /opt/gul-secondary
+          echo 'include /etc/nginx/sites-enabled/*;' > /etc/nginx/conf.d/00-sites-enabled.conf
+          rm -f /etc/nginx/conf.d/default.conf
+          sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf
+          chown -R www-data:www-data /var/cache/nginx
+          chown deploy:deploy /opt/gul /opt/gul-secondary
+          systemctl disable nginx    # enabled by replace-node once certificates and vhosts are in place
+          swapoff -a; sed -i '/swap/d' /etc/fstab; rm -f /swap.img
+          docker --version; nginx -v
+          REMOTE
+
+      - name: Pull every image the node runs, and prove each one starts
+        run: |
+          set -e
+          ssh "deploy@$IP" "OWNER='$OWNER' TAG='$TAG' bash -s" <<'REMOTE'
+          set -e
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          imgs="ghcr.io/$OWNER/gul-api:$TAG ghcr.io/$OWNER/gul-web:$TAG ghcr.io/$OWNER/gul-admin:$TAG ghcr.io/$OWNER/gul-patroni:16 redis:7-alpine haproxy:3.0-alpine quay.io/coreos/etcd:v3.5.17 alpine:latest"
+          for i in $imgs; do docker pull -q "$i" >/dev/null; done
+          # A corrupted layer shows up as "exec format error" the first time anything runs.
+          for i in $imgs; do
+            case "$i" in quay.io/coreos/etcd*) cmd="etcd --version";; *) cmd="sh -c true";; esac
+            docker run --rm --entrypoint "" "$i" $cmd >/dev/null 2>&1 || docker run --rm --entrypoint /bin/sh "$i" -c true >/dev/null
+            echo "ok  $i"
+          done
+          docker logout ghcr.io >/dev/null
+          rm -f ~/.docker/config.json
+          REMOTE
+
+      - name: Strip host identity and leftovers, power off
+        run: |
+          set -e
+          ssh "root@$IP" bash -s <<'REMOTE'
+          set -e
+          apt-get clean
+          rm -rf /tmp/* /var/tmp/* /root/.bash_history /home/deploy/.bash_history /home/deploy/.docker
+          journalctl --rotate >/dev/null 2>&1 || true; journalctl --vacuum-time=1s >/dev/null 2>&1 || true
+          rm -f /etc/ssh/ssh_host_*
+          truncate -s 0 /etc/machine-id; rm -f /var/lib/dbus/machine-id
+          # Next boot is a new instance to cloud-init: new host keys, new machine-id, the new
+          # server's own user-data.
+          cloud-init clean --logs --seed
+          sync
+          REMOTE
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          api -X POST "https://api.timeweb.cloud/api/v1/servers/$SID/shutdown" >/dev/null || true
+          for i in $(seq 1 60); do
+            [ "$(api "https://api.timeweb.cloud/api/v1/servers/$SID" | jq -r '.server.status')" = off ] && break; sleep 5
+          done
+          echo "server off"
+
+      - name: Snapshot the system disk into an image; keep only the newest
+        run: |
+          set -e
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          disk=$(api "https://api.timeweb.cloud/api/v1/servers/$SID" | jq -r '[.server.disks[] | select(.is_system)][0].id')
+          name="gul-node-$(date -u +%Y%m%d%H%M)"
+          img=$(api -X POST https://api.timeweb.cloud/api/v1/images -d "$(jq -n --arg n "$name" --argjson d "$disk" \
+            --arg desc "Gulyaly node, release $TAG" '{name: $n, disk_id: $d, description: $desc}')" | jq -r '.image.id')
+          echo "image $img ($name) creating"
+          for i in $(seq 1 120); do
+            st=$(api "https://api.timeweb.cloud/api/v1/images/$img" | jq -r '.image | "\(.status) \(.progress // 0)% \(.size // 0)MB \(.location)"')
+            case "$st" in created*) echo "image ready: $st"; break;; failed*) echo "image failed" >&2; exit 1;; esac
+            sleep 15
+          done
+          case "$st" in created*) ;; *) echo "image not ready after 30 min: $st" >&2; exit 1;; esac
+          for old in $(api https://api.timeweb.cloud/api/v1/images | jq -r --arg keep "$img" '.images[] | select(.name | startswith("gul-node-")) | select(.id != $keep) | .id'); do
+            api -X DELETE "https://api.timeweb.cloud/api/v1/images/$old" >/dev/null && echo "deleted older image $old"
+          done
+
+      - name: Delete the temporary server and its IPv4
+        if: always()
+        run: |
+          [ -n "${SID:-}" ] || exit 0
+          api() { curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+          api -X DELETE "https://api.timeweb.cloud/api/v1/servers/$SID" >/dev/null || true
+          for i in $(seq 1 30); do
+            [ "$(curl -q -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/servers/$SID")" = 404 ] && break; sleep 10
+          done
+          [ -n "${IP:-}" ] && for id in $( (api https://api.timeweb.cloud/api/v1/floating-ips || echo '{}') | jq -r --arg ip "$IP" '.ips[]? | select(.ip == $ip) | .id'); do
+            api -X DELETE "https://api.timeweb.cloud/api/v1/floating-ips/$id" >/dev/null || true
+          done
+          echo "bake server $SID removed"
