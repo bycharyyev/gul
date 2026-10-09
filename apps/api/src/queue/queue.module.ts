@@ -35,14 +35,14 @@ function queueProvider(token: string, queueName: string) {
   };
 }
 
-export const topupQueueProvider = queueProvider(TOPUP_QUEUE, TOPUP_QUEUE);
-export const emailCriticalQueueProvider = queueProvider(EMAIL_QUEUE_CRITICAL, EMAIL_QUEUE_CRITICAL);
-export const emailTransactionalQueueProvider = queueProvider(EMAIL_QUEUE_TRANSACTIONAL, EMAIL_QUEUE_TRANSACTIONAL);
-export const emailMarketingQueueProvider = queueProvider(EMAIL_QUEUE_MARKETING, EMAIL_QUEUE_MARKETING);
+const topupQueueProvider = queueProvider(TOPUP_QUEUE, TOPUP_QUEUE);
+const emailCriticalQueueProvider = queueProvider(EMAIL_QUEUE_CRITICAL, EMAIL_QUEUE_CRITICAL);
+const emailTransactionalQueueProvider = queueProvider(EMAIL_QUEUE_TRANSACTIONAL, EMAIL_QUEUE_TRANSACTIONAL);
+const emailMarketingQueueProvider = queueProvider(EMAIL_QUEUE_MARKETING, EMAIL_QUEUE_MARKETING);
 
 /** Shared Redis client for things that aren't queues -- the daily send quota counter. */
 export const REDIS_CLIENT = "redis-client";
-export const redisClientProvider = {
+const redisClientProvider = {
   provide: REDIS_CLIENT,
   useFactory: () => redisConnection(),
 };

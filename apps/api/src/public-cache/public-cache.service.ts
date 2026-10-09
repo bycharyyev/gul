@@ -7,7 +7,7 @@ import { createRedis } from "../queue/redis-connection";
  * groups are small and edits are rare, so precision here would buy nothing but bugs.
  */
 export type CacheGroup = "catalog" | "gallery" | "content";
-export const CACHE_GROUPS: CacheGroup[] = ["catalog", "gallery", "content"];
+const CACHE_GROUPS: CacheGroup[] = ["catalog", "gallery", "content"];
 
 export type CacheOutcome = "hit" | "miss" | "error";
 

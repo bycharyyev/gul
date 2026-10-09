@@ -17,7 +17,7 @@ const CYRILLIC: Record<string, string> = {
   ä: "a", ç: "ch", ž: "zh", ň: "n", ö: "o", ş: "sh", ü: "u", ý: "y",
 };
 
-export const SLUG_MAX = 60;
+const SLUG_MAX = 60;
 
 export function slugify(value: string): string {
   const lower = value.trim().toLowerCase();

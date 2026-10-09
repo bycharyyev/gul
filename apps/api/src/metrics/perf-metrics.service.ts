@@ -5,7 +5,7 @@ import * as os from "node:os";
 import { appRole } from "../common/app-role";
 
 /** Latency histogram bucket upper bounds, ms. The last bucket is everything slower. */
-export const LATENCY_BUCKETS_MS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000] as const;
+const LATENCY_BUCKETS_MS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000] as const;
 
 export type PerfPeriod = "5m" | "1h" | "24h" | "7d";
 export const PERF_PERIODS: PerfPeriod[] = ["5m", "1h", "24h", "7d"];
