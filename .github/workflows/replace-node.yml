@@ -148,8 +148,10 @@ jobs:
             '    ssh_authorized_keys:' "      - $(cat /tmp/deploy_key.pub)" 'runcmd:' \
             '  - [sh, -c, "curl -fsSL https://get.docker.com | sh"]' '  - [usermod, -aG, docker, deploy]' > /tmp/ci.yml
           name="gul-auto-$ROLE-$(date -u +%Y%m%d%H%M)"
-          # 4801 Cloud MSK 50, 2453 Cloud-50 (SPb), 2579 SSD-50 (SPb), 4243 Cloud NSK 50.
-          for preset in 4801 2453 2579 4243; do
+          # 4801 Cloud MSK 50, 2453 Cloud-50 (SPb), 2579 SSD-50 (SPb), 4243 Cloud NSK 50; then, dearer
+          # but usually with capacity, 6825 Cloud DE-50 (Frankfurt) and 6811 Cloud NL-50 (Amsterdam).
+          # In the first drill only Novosibirsk had room.
+          for preset in 4801 2453 2579 4243 6825 6811; do
             payload=$(jq -n --arg n "$name" --argjson p "$preset" --argjson k "$key" --rawfile ci /tmp/ci.yml \
               '{name: $n, preset_id: $p, os_id: 99, ssh_keys_ids: [$k], is_ddos_guard: false, cloud_init: $ci}')
             if resp=$(api -X POST https://api.timeweb.cloud/api/v1/servers -d "$payload" 2>/dev/null); then
@@ -158,7 +160,7 @@ jobs:
             echo "preset $preset refused: $(echo "$resp" | jq -r '.error_code // .message // .' 2>/dev/null | head -c 200)"
             sid=""
           done
-          [ -n "$sid" ] || { tg "❌ Gulyaly: Timeweb не дал сервер ни в одном городе. Сайт работает на одном сервере; нужна ручная замена."; exit 1; }
+          [ -n "$sid" ] || { tg "❌ Gulyaly: Timeweb не дал сервер ни в одном из 6 городов. Сайт работает на одном сервере; сторож повторит попытку через 30 минут."; exit 1; }
           echo "SID=$sid" >> "$GITHUB_ENV"
           ordered=0
           for i in $(seq 1 120); do
