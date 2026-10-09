@@ -112,8 +112,8 @@ safe way to distinguish "primary is down" from "the link to primary is down", an
 on that ambiguity risks split-brain with real money involved
 ([`HIGH_AVAILABILITY.md`](HIGH_AVAILABILITY.md#whats-automatic-vs-manual-and-why)):
 
-- `failover-to-secondary.yml` requires provider-level fencing plus two confirmation strings
-  (`confirm=FAILOVER`, `fence_confirm=PRIMARY_POWERED_OFF`).
+- The manual failover workflow was removed on 2026-10-09: failover and replacement are automatic
+  now, with fencing done by the replacement workflow (see `docs/architecture/HIGH_AVAILABILITY.md`).
 - Patroni + an etcd witness node was considered and deliberately deferred until scale or on-call
   coverage justifies the added moving parts.
 - **Failback is not automated**: after a promotion the old primary's WAL has diverged and needs a

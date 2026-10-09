@@ -18,7 +18,8 @@ One reg.ru S3 account, two buckets, shared access key pair:
 (`S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BUCKET`,
 `S3_PRIVATE_BUCKET`) are optional — unset, everything falls back to local disk exactly as before
 (same pattern as `MAIL_HOST` being optional). Wired into both `/opt/gul/.env` and
-`/opt/gul-secondary/.env` via `.github/workflows/wire-s3-env.yml`.
+`/opt/gul-secondary/.env` by hand: the `wire-s3-env.yml` workflow was removed on 2026-10-09, so after changing the S3 variables
+set them in both hosts' `.env` yourself (primary via `install-backup-credentials.yml`).
 
 `avatarPath` distinguishes local-vs-S3 by format alone (a stored URL vs. a bare filename) — no
 migration needed for existing rows, `auth.service.ts`'s `toAvatarUrl()` handles both. `Document`
@@ -77,4 +78,4 @@ The S3 access key/secret are account-wide (not per-bucket) — same pair authent
 buckets, `stor`'s lack of a public policy is what actually keeps it private. Stored as GitHub
 repo secrets (`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, etc.) and in both hosts' `.env` files —
 never committed. If these ever need rotating, it's a reg.ru Cloud panel action (regenerate the key
-pair there), then update the GitHub secrets and re-run `wire-s3-env.yml`.
+pair there), then update the GitHub secrets, run `install-backup-credentials.yml`, and edit the secondary's `.env` by hand.
