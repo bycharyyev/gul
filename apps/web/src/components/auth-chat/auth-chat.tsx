@@ -372,9 +372,18 @@ export function AuthChat({ start }: { start: "register" | "ask" }) {
 
   useEffect(() => {
     void restart();
-    // Once per mount; the language switcher changes the next messages, not the conversation.
+    // Once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Bubbles are stored as finished text, so switching language mid-conversation would leave the
+  // earlier ones in the old language. Start over in the new one; anything typed but not sent is dropped.
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    if (localeRef.current === locale) return;
+    localeRef.current = locale;
+    void restart();
+  }, [locale, restart]);
 
   useEffect(() => {
     const el = feedRef.current;
