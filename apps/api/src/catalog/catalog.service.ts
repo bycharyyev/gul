@@ -4,12 +4,14 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 import type { UpsertServiceDto } from "./dto/upsert-service.dto";
 import type { UpsertRateDto } from "./dto/upsert-rate.dto";
 import type { CreatePaymentMethodDto, SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
 
 @Injectable()
 export class CatalogService {
   constructor(
     private prisma: PrismaService,
     private auditLog: AuditLogService,
+    private uploadCleanup: UploadCleanupService,
   ) {}
 
   listServices(includeDisabled = false) {
@@ -115,7 +117,9 @@ export class CatalogService {
     const min = dto.minAmountTmt ?? Number(existing.minAmountTmt);
     const max = dto.maxAmountTmt ?? Number(existing.maxAmountTmt);
     if (min > max) throw new BadRequestException("minAmountTmt must be <= maxAmountTmt");
-    return this.prisma.service.update({ where: { id }, data: dto });
+    const updated = await this.prisma.service.update({ where: { id }, data: dto });
+    await this.uploadCleanup.removeIfReplaced(existing.logoUrl, updated.logoUrl);
+    return updated;
   }
 
   async upsertRate(serviceId: string, dto: UpsertRateDto, adminId: string) {

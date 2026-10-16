@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
@@ -21,6 +22,7 @@ export class SellersService {
     private referrals: ReferralsService,
     private auditLog: AuditLogService,
     private email: EmailService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   // ---- Admin ----
@@ -89,13 +91,15 @@ export class SellersService {
   }
 
   async updateSellerAdmin(id: string, dto: UpdateSellerDto) {
-    await this.getSellerOrThrow(id);
+    const existing = await this.getSellerOrThrow(id);
     if (dto.handle) await this.assertHandleFree(dto.handle, id);
-    return this.prisma.seller.update({
+    const updated = await this.prisma.seller.update({
       where: { id },
       data: dto,
       include: { user: { select: USER_SELECT } },
     });
+    await this.uploadCleanup?.removeIfReplaced(existing.logoUrl, updated.logoUrl);
+    return updated;
   }
 
   private async getSellerOrThrow(id: string) {
@@ -195,7 +199,9 @@ export class SellersService {
     const seller = await this.prisma.seller.findUnique({ where: { userId } });
     if (!seller) throw new NotFoundException("Seller profile not found");
     if (dto.handle) await this.assertHandleFree(dto.handle, seller.id);
-    return this.prisma.seller.update({ where: { userId }, data: dto });
+    const updated = await this.prisma.seller.update({ where: { userId }, data: dto });
+    await this.uploadCleanup?.removeIfReplaced(seller.logoUrl, updated.logoUrl);
+    return updated;
   }
 
   async getMyStats(userId: string) {

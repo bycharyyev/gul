@@ -1,10 +1,10 @@
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
-  Optional,
-} from "@nestjs/common";
+  Optional,, Optional } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -100,6 +100,7 @@ export class ChatService {
     private prisma: PrismaService,
     private storage: StorageService,
     @Optional() private push?: PushEventsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   /** The shop this account owns, if it owns one. Null for everybody else. */
@@ -336,7 +337,7 @@ export class ChatService {
   async setRoomImage(roomId: string, userId: string, imageUrl: string | null) {
     const room = await this.prisma.chatRoom.findUnique({
       where: { id: roomId },
-      select: { id: true, createdById: true },
+      select: { id: true, createdById: true, imageUrl: true },
     });
     if (!room) throw new NotFoundException("CHAT_ROOM_NOT_FOUND");
     if (room.createdById !== userId) await this.assertPublisher(userId);
@@ -348,11 +349,13 @@ export class ChatService {
       if (!trusted) throw new BadRequestException("CHAT_ROOM_IMAGE_INVALID");
     }
 
-    return this.prisma.chatRoom.update({
+    const updated = await this.prisma.chatRoom.update({
       where: { id: roomId },
       data: { imageUrl: url },
       select: { id: true, title: true, imageUrl: true },
     });
+    await this.uploadCleanup?.removeIfReplaced(room.imageUrl, updated.imageUrl);
+    return updated;
   }
 
   /** Replaces the code, so a link that reached the wrong person stops working. Owner only. */

@@ -1,3 +1,4 @@
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -39,6 +40,7 @@ export class GalleryService {
     private ledger: SellerLedgerService,
     private marketplaceSettings: MarketplaceSettingsService,
     @Optional() private push?: PushEventsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   // ---- Public ----
@@ -224,7 +226,9 @@ export class GalleryService {
     const product = await this.prisma.galleryProduct.findUnique({ where: { id } });
     if (!product) throw new NotFoundException("Product not found");
     if (dto.sku) await this.assertSkuFree(dto.sku, id);
-    return this.prisma.galleryProduct.update({ where: { id }, data: dto, include: PRODUCT_INCLUDE });
+    const updated = await this.prisma.galleryProduct.update({ where: { id }, data: dto, include: PRODUCT_INCLUDE });
+    await this.uploadCleanup?.removeIfReplaced(product.imageUrl, updated.imageUrl);
+    return updated;
   }
 
   async deleteProduct(id: string) {
@@ -426,7 +430,7 @@ export class GalleryService {
     const slug =
       name && name !== existing.name ? await this.freeSlug(sellerId, name, id) : undefined;
 
-    return this.prisma.storefront.update({
+    const updated = await this.prisma.storefront.update({
       where: { id },
       data: {
         ...(name ? { name } : {}),
@@ -438,6 +442,8 @@ export class GalleryService {
       },
       include: { _count: { select: { products: true } } },
     });
+    await this.uploadCleanup?.removeIfReplaced(existing.coverUrl, updated.coverUrl);
+    return updated;
   }
 
   /**
@@ -537,14 +543,16 @@ export class GalleryService {
   }
 
   async updateMyProduct(sellerId: string, id: string, dto: Partial<UpsertGalleryProductDto>) {
-    await this.getOwnedProductOrThrow(sellerId, id);
+    const product = await this.getOwnedProductOrThrow(sellerId, id);
     if (dto.sku) await this.assertSkuFree(dto.sku, id);
     const storefrontId = await this.ownStorefrontId(sellerId, dto.storefrontId);
-    return this.prisma.galleryProduct.update({
+    const updated = await this.prisma.galleryProduct.update({
       where: { id },
       data: { ...dto, ...(storefrontId === undefined ? {} : { storefrontId }) },
       include: PRODUCT_INCLUDE,
     });
+    await this.uploadCleanup?.removeIfReplaced(product.imageUrl, updated.imageUrl);
+    return updated;
   }
 
   async deleteMyProduct(sellerId: string, id: string) {

@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpsertStoryDto } from "./dto/upsert-story.dto";
 import type { CreateStoryAdDto } from "./dto/create-story-ad.dto";
@@ -21,6 +22,7 @@ export class StoriesService {
     private prisma: PrismaService,
     private ledger: SellerLedgerService,
     private marketplaceSettings: MarketplaceSettingsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   listActive() {
@@ -106,7 +108,7 @@ export class StoriesService {
       linkType,
     );
     const { startsAt, endsAt, ...rest } = this.sanitizeForeignKeys(dto);
-    return this.prisma.story.update({
+    const updated = await this.prisma.story.update({
       where: { id },
       data: {
         ...rest,
@@ -114,6 +116,8 @@ export class StoriesService {
         endsAt: endsAt === undefined ? undefined : endsAt ? new Date(endsAt) : null,
       },
     });
+    await this.uploadCleanup?.removeIfReplaced(existing.imageUrl, updated.imageUrl);
+    return updated;
   }
 
   async deleteStory(id: string) {

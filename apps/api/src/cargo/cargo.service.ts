@@ -1,3 +1,4 @@
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -60,6 +61,7 @@ export class CargoService {
     private auditLog: AuditLogService,
     private email: EmailService,
     @Optional() private push?: PushEventsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -473,9 +475,13 @@ export class CargoService {
     if (data.startsAt && data.endsAt && data.startsAt > data.endsAt) {
       throw new BadRequestException("startsAt must be before endsAt");
     }
+    const previous = dto.id
+      ? await this.prisma.cargoBanner.findUnique({ where: { id: dto.id }, select: { imageUrl: true } })
+      : null;
     const banner = dto.id
       ? await this.prisma.cargoBanner.update({ where: { id: dto.id }, data })
       : await this.prisma.cargoBanner.create({ data });
+    await this.uploadCleanup?.removeIfReplaced(previous?.imageUrl, banner.imageUrl);
     this.auditLog.record(adminId, dto.id ? "cargo.banner.update" : "cargo.banner.create", "CargoBanner", banner.id, dto);
     return banner;
   }

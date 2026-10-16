@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpsertHomeSlideDto } from "./dto/upsert-home-slide.dto";
 import type { CreateSlideAdDto } from "./dto/create-slide-ad.dto";
@@ -21,6 +22,7 @@ export class HomeSlidesService {
     private prisma: PrismaService,
     private ledger: SellerLedgerService,
     private marketplaceSettings: MarketplaceSettingsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   listActive() {
@@ -103,7 +105,7 @@ export class HomeSlidesService {
       linkType,
     );
     const { startsAt, endsAt, ...rest } = this.sanitizeForeignKeys(dto);
-    return this.prisma.homeSlide.update({
+    const updated = await this.prisma.homeSlide.update({
       where: { id },
       data: {
         ...rest,
@@ -111,6 +113,8 @@ export class HomeSlidesService {
         endsAt: endsAt === undefined ? undefined : endsAt ? new Date(endsAt) : null,
       },
     });
+    await this.uploadCleanup?.removeIfReplaced(existing.imageUrl, updated.imageUrl);
+    return updated;
   }
 
   async deleteSlide(id: string) {
