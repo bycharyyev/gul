@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  Optional,, Optional } from "@nestjs/common";
+  Optional } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { PushEventsService } from "../notifications/push-events.service";
 import { PrismaService } from "../prisma/prisma.service";
