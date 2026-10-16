@@ -51,6 +51,7 @@ import { SellerLedgerModule } from "./seller-ledger/seller-ledger.module";
 import { SocialFeedModule } from "./social-feed/social-feed.module";
 import { SentryAlertsModule } from "./sentry-alerts/sentry-alerts.module";
 import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
+import { AssistantSettingsModule } from "./assistant-settings/assistant-settings.module";
 import { StoreTelegramBotModule } from "./store-telegram-bot/store-telegram-bot.module";
 
 @Module({
@@ -108,6 +109,7 @@ import { StoreTelegramBotModule } from "./store-telegram-bot/store-telegram-bot.
     SocialFeedModule,
     SentryAlertsModule,
     PlatformSettingsModule,
+    AssistantSettingsModule,
     StoreTelegramBotModule,
     NotificationsModule,
   ],

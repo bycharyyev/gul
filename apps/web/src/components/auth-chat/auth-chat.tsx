@@ -71,6 +71,10 @@ export function AuthChat({ start }: { start: "register" | "ask" }) {
   const [chips, setChips] = useState<Chip[]>([]);
   const [step, setStep] = useState<Step>("busy");
   const [typing, setTyping] = useState(false);
+  const [brand, setBrand] = useState<{ logoUrl: string | null; name: string; statusText: string } | null>(null);
+  useEffect(() => {
+    api.getAssistantSettings().then(setBrand).catch(() => {});
+  }, []);
   const [value, setValue] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -411,14 +415,18 @@ export function AuthChat({ start }: { start: "register" | "ask" }) {
   return (
     <div className="crystal-panel flex h-[calc(100dvh_-_10.5rem_-_env(safe-area-inset-bottom))] min-h-[420px] flex-col overflow-hidden rounded-[28px] sm:h-[min(680px,calc(100dvh_-_7rem))]">
       <header className="flex items-center gap-3 border-b border-brand-100/70 px-5 py-4 dark:border-white/10">
-        <div className="crystal-gem relative h-11 w-11 shrink-0 rotate-45 rounded-[12px]" aria-hidden="true">
-          <span className="absolute inset-0 flex -rotate-45 items-center justify-center text-base font-bold text-white">G</span>
-        </div>
+        {brand?.logoUrl ? (
+          <img src={brand.logoUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+        ) : (
+          <div className="crystal-gem relative h-11 w-11 shrink-0 rotate-45 rounded-[12px]" aria-hidden="true">
+            <span className="absolute inset-0 flex -rotate-45 items-center justify-center text-base font-bold text-white">G</span>
+          </div>
+        )}
         <div className="min-w-0">
-          <p className="font-semibold leading-tight">{t("authChat.name")}</p>
+          <p className="font-semibold leading-tight">{brand?.name || t("authChat.name")}</p>
           <p className="flex items-center gap-1.5 text-xs text-accent-600 dark:text-accent-400">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-500" aria-hidden="true" />
-            {typing ? t("authChat.typing") : t("authChat.online")}
+            {typing ? t("authChat.typing") : brand?.statusText || t("authChat.online")}
           </p>
         </div>
         <button
