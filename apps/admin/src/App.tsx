@@ -15,6 +15,7 @@ import HomeSlidesPage from "@/pages/home-slides";
 import SocialLinksPage from "@/pages/social-links";
 import ManagedLinksPage from "@/pages/managed-links";
 import ContentPagesPage from "@/pages/content-pages";
+import AssistantSettingsPage from "@/pages/assistant-settings";
 import SupportPage from "@/pages/support";
 import MailPage from "@/pages/mail";
 import MailTemplatesPage from "@/pages/mail-templates";
@@ -201,6 +202,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ContentPagesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/assistant-settings"
+        element={
+          <ProtectedRoute>
+            <AssistantSettingsPage />
           </ProtectedRoute>
         }
       />

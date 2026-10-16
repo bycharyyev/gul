@@ -846,6 +846,15 @@ model PlatformSettings {
   updatedAt             DateTime @updatedAt
 }
 
+// Look of the sign-in assistant. Singleton row id "singleton", created on first read.
+model AssistantSettings {
+  id         String   @id @default("singleton")
+  logoUrl    String?
+  name       String   @default("")
+  statusText String   @default("")
+  updatedAt  DateTime @updatedAt
+}
+
 // ---------- Support ----------
 
 enum SupportThreadStatus {

@@ -21,6 +21,8 @@ import type {
   PerformanceOverviewDto,
   PerfPeriod,
   MarketplaceSettingsDto,
+  AssistantSettingsDto,
+  UpdateAssistantSettingsInput,
   UpdateMarketplaceSettingsInput,
   AdminStoryInput,
   AdPricingDto,
@@ -1042,6 +1044,23 @@ export class ApiClient {
   deleteSocialLink(id: string) {
     return this.request<void>(`/social-links/admin/${id}`, {
       method: "DELETE",
+    });
+  }
+
+  // ---- Sign-in assistant ----
+
+  getAssistantSettings() {
+    return this.request<AssistantSettingsDto>("/assistant-settings", { auth: false });
+  }
+
+  getAdminAssistantSettings() {
+    return this.request<AssistantSettingsDto>("/admin/assistant-settings");
+  }
+
+  updateAssistantSettings(input: UpdateAssistantSettingsInput) {
+    return this.request<AssistantSettingsDto>("/admin/assistant-settings", {
+      method: "PATCH",
+      body: JSON.stringify(input),
     });
   }
 
