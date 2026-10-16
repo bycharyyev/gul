@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpsertSocialLinkDto } from "./dto/upsert-social-link.dto";
+import { normalizeSocialUrl } from "./social-url";
 
 @Injectable()
 export class SocialLinksService {
@@ -18,12 +19,18 @@ export class SocialLinksService {
   }
 
   createLink(dto: UpsertSocialLinkDto) {
-    return this.prisma.socialLink.create({ data: dto });
+    return this.prisma.socialLink.create({
+      data: { ...dto, url: normalizeSocialUrl(dto.platform, dto.url) },
+    });
   }
 
   async updateLink(id: string, dto: Partial<UpsertSocialLinkDto>) {
-    await this.getLinkOrThrow(id);
-    return this.prisma.socialLink.update({ where: { id }, data: dto });
+    const existing = await this.getLinkOrThrow(id);
+    const data =
+      dto.url === undefined
+        ? dto
+        : { ...dto, url: normalizeSocialUrl(dto.platform ?? existing.platform, dto.url) };
+    return this.prisma.socialLink.update({ where: { id }, data });
   }
 
   async deleteLink(id: string) {
