@@ -13,7 +13,7 @@ function setup(method: Method | null, codeTaken = false) {
     },
   };
   const auditLog = { record: jest.fn() };
-  return { catalog: new CatalogService(prisma as never, auditLog as never, { publicBase: null, deletePublic: jest.fn() } as never), prisma, auditLog };
+  return { catalog: new CatalogService(prisma as never, auditLog as never, { removeIfReplaced: jest.fn() } as never), prisma, auditLog };
 }
 
 const providers = (configured: string[], known = ["manual", "freekassa", "heleket", "cryptocloud"]) => ({

@@ -1,10 +1,10 @@
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
-  Optional,
-} from "@nestjs/common";
+  Optional,, Optional } from "@nestjs/common";
 import { PushEventsService } from "../notifications/push-events.service";
 import type {
   Prisma,
@@ -83,6 +83,7 @@ export class SocialFeedService {
     private audit: AuditLogService,
     private storage: StorageService,
     @Optional() private push?: PushEventsService,
+    @Optional() private uploadCleanup?: UploadCleanupService,
   ) {}
 
   private trustedMedia(url: string | undefined) {
@@ -205,32 +206,33 @@ export class SocialFeedService {
     if (!this.trustedMedia(mediaUrl) || !this.trustedMedia(thumbnailUrl))
       throw new BadRequestException("Only trusted uploaded media may be used");
     if (dto.productIds) await this.assertTagProducts(dto.productIds);
-    return this.publicShape(
-      await this.prisma.socialPost.update({
-        where: { id },
-        data: {
-          body,
-          mediaType,
-          mediaUrl,
-          thumbnailUrl,
-          status: "PENDING",
-          moderationNote: null,
-          publishedAt: null,
-          ...(dto.productIds
-            ? {
-                products: {
-                  deleteMany: {},
-                  create: dto.productIds.map((productId, sortOrder) => ({
-                    productId,
-                    sortOrder,
-                  })),
-                },
-              }
-            : {}),
-        },
-        include: POST_INCLUDE,
-      }),
-    );
+    const saved = await this.prisma.socialPost.update({
+      where: { id },
+      data: {
+        body,
+        mediaType,
+        mediaUrl,
+        thumbnailUrl,
+        status: "PENDING",
+        moderationNote: null,
+        publishedAt: null,
+        ...(dto.productIds
+          ? {
+              products: {
+                deleteMany: {},
+                create: dto.productIds.map((productId, sortOrder) => ({
+                  productId,
+                  sortOrder,
+                })),
+              },
+            }
+          : {}),
+      },
+      include: POST_INCLUDE,
+    });
+    await this.uploadCleanup?.removeIfReplaced(post.mediaUrl, saved.mediaUrl);
+    await this.uploadCleanup?.removeIfReplaced(post.thumbnailUrl, saved.thumbnailUrl);
+    return this.publicShape(saved);
   }
 
   async removeMine(id: string, userId: string) {

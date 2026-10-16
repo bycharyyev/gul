@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { UploadCleanupService } from "../storage/upload-cleanup.service";
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import { AuditLogService } from "../audit-log/audit-log.service";
@@ -53,6 +54,7 @@ export class PushCampaignService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditLogService,
+    @Optional() private readonly uploadCleanup?: UploadCleanupService,
   ) {}
 
   // ---- Templates ----
@@ -100,6 +102,7 @@ export class PushCampaignService {
         isEnabled: dto.isEnabled,
       },
     });
+    await this.uploadCleanup?.removeIfReplaced(existing.imageUrl, template.imageUrl);
     this.audit.record(adminId, "push.template.update", "PushTemplate", id);
     return template;
   }
