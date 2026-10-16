@@ -36,7 +36,9 @@ export default function SocialLinksPage() {
   const { t } = useTranslation();
   const PLATFORM_LABELS = usePlatformLabels();
   const [links, setLinks] = useState<SocialLinkDto[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  // Set while the form is editing an existing link; null means the form adds a new one.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AdminSocialLinkInput>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,15 +49,50 @@ export default function SocialLinksPage() {
 
   useEffect(load, []);
 
-  async function create(e: React.FormEvent) {
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setDraft(emptyDraft);
+    setError(null);
+  }
+
+  function startEdit(link: SocialLinkDto) {
+    setEditingId(link.id);
+    setDraft({
+      platform: link.platform,
+      url: link.url,
+      label: link.label ?? "",
+      isEnabled: link.isEnabled,
+      sortOrder: link.sortOrder,
+    });
+    setError(null);
+    setShowForm(true);
+  }
+
+  function openAdd() {
+    setEditingId(null);
+    setDraft(emptyDraft);
+    setError(null);
+    setShowForm(true);
+  }
+
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createSocialLink({ ...draft, sortOrder: links.length });
-      setLinks((prev) => [...prev, created]);
-      setDraft(emptyDraft);
-      setShowCreate(false);
+      if (editingId) {
+        const updated = await api.updateSocialLink(editingId, {
+          platform: draft.platform,
+          url: draft.url,
+          label: draft.label,
+        });
+        setLinks((prev) => prev.map((l) => (l.id === editingId ? updated : l)));
+      } else {
+        const created = await api.createSocialLink({ ...draft, sortOrder: links.length });
+        setLinks((prev) => [...prev, created]);
+      }
+      closeForm();
     } catch (err) {
       setError(err instanceof ApiError ? translateError(t, err.message) : t("admin.socialLinks.createError"));
     } finally {
@@ -78,17 +115,20 @@ export default function SocialLinksPage() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("admin.socialLinks.title")}</h1>
-        <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
-          {showCreate ? t("common.cancel") : t("admin.socialLinks.addLink")}
+        <Button
+          size="sm"
+          onClick={() => (showForm ? closeForm() : openAdd())}
+        >
+          {showForm ? t("common.cancel") : t("admin.socialLinks.addLink")}
         </Button>
       </div>
       <p className="text-sm text-slate-500">
         {t("admin.socialLinks.footerHint")}
       </p>
 
-      {showCreate && (
+      {showForm && (
         <Card className="p-5">
-          <form onSubmit={create} className="grid grid-cols-2 gap-4">
+          <form onSubmit={save} className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">{t("admin.socialLinks.platformLabel")}</label>
               <Select
@@ -119,7 +159,11 @@ export default function SocialLinksPage() {
             )}
             {error && <p className="col-span-2 text-sm text-rose-600">{error}</p>}
             <Button className="col-span-2" type="submit" disabled={busy}>
-              {busy ? t("admin.socialLinks.adding") : t("admin.socialLinks.addSubmit")}
+              {editingId
+                ? t("common.save")
+                : busy
+                  ? t("admin.socialLinks.adding")
+                  : t("admin.socialLinks.addSubmit")}
             </Button>
           </form>
         </Card>
@@ -149,6 +193,9 @@ export default function SocialLinksPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => startEdit(link)}>
+                      {t("common.edit")}
+                    </Button>
                     <Button variant="secondary" size="sm" onClick={() => toggleEnabled(link)}>
                       {link.isEnabled ? t("admin.socialLinks.disable") : t("admin.socialLinks.enable")}
                     </Button>
