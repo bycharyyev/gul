@@ -4,12 +4,17 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 import type { UpsertServiceDto } from "./dto/upsert-service.dto";
 import type { UpsertRateDto } from "./dto/upsert-rate.dto";
 import type { CreatePaymentMethodDto, SetPaymentMethodEnabledDto } from "./dto/set-payment-method-enabled.dto";
+import { StorageService } from "../storage/storage.service";
+
+/** Only files written by UploadsService.upload land under this prefix with a uuid name. */
+const OWN_UPLOAD_KEY = /^uploads\/[0-9a-f-]{36}\.[a-z0-9]+$/;
 
 @Injectable()
 export class CatalogService {
   constructor(
     private prisma: PrismaService,
     private auditLog: AuditLogService,
+    private storage: StorageService,
   ) {}
 
   listServices(includeDisabled = false) {
@@ -115,7 +120,47 @@ export class CatalogService {
     const min = dto.minAmountTmt ?? Number(existing.minAmountTmt);
     const max = dto.maxAmountTmt ?? Number(existing.maxAmountTmt);
     if (min > max) throw new BadRequestException("minAmountTmt must be <= maxAmountTmt");
-    return this.prisma.service.update({ where: { id }, data: dto });
+    const updated = await this.prisma.service.update({ where: { id }, data: dto });
+    if (dto.logoUrl !== undefined && existing.logoUrl && existing.logoUrl !== dto.logoUrl) {
+      await this.deleteReplacedLogo(existing.logoUrl);
+    }
+    return updated;
+  }
+
+  /** Removes the previous logo from the public bucket after it was replaced, but only when it is
+   *  one of our own uploads and no record still points at it. Uploads are a shared pool (stories,
+   *  slides, chat and so on can all reuse a URL), so the check is what keeps this from breaking an
+   *  image somebody else is still showing. */
+  private async deleteReplacedLogo(url: string): Promise<void> {
+    const base = this.storage.publicBase;
+    if (!base || !url.startsWith(`${base}/`)) return;
+    const key = url.slice(base.length + 1);
+    if (!OWN_UPLOAD_KEY.test(key)) return;
+
+    const [services, sellers, stories, homeSlides, chatRooms, chatMessages, supportMessages,
+      galleryProducts, storefronts, socialPosts, cargoBanners, pushTemplates, pushCampaigns,
+      purchaseItems] = await Promise.all([
+      this.prisma.service.count({ where: { logoUrl: url } }),
+      this.prisma.seller.count({ where: { logoUrl: url } }),
+      this.prisma.story.count({ where: { imageUrl: url } }),
+      this.prisma.homeSlide.count({ where: { imageUrl: url } }),
+      this.prisma.chatRoom.count({ where: { imageUrl: url } }),
+      this.prisma.chatMessage.count({ where: { attachmentUrl: url } }),
+      this.prisma.supportMessage.count({ where: { attachmentUrl: url } }),
+      this.prisma.galleryProduct.count({ where: { imageUrl: url } }),
+      this.prisma.storefront.count({ where: { coverUrl: url } }),
+      this.prisma.socialPost.count({ where: { OR: [{ mediaUrl: url }, { thumbnailUrl: url }] } }),
+      this.prisma.cargoBanner.count({ where: { imageUrl: url } }),
+      this.prisma.pushTemplate.count({ where: { imageUrl: url } }),
+      this.prisma.pushCampaign.count({ where: { imageUrl: url } }),
+      this.prisma.marketplacePurchaseItem.count({ where: { imageUrlSnapshot: url } }),
+    ]);
+    const referenced = [services, sellers, stories, homeSlides, chatRooms, chatMessages,
+      supportMessages, galleryProducts, storefronts, socialPosts, cargoBanners, pushTemplates,
+      pushCampaigns, purchaseItems].some((n) => n > 0);
+    if (referenced) return;
+
+    await this.storage.deletePublic(key);
   }
 
   async upsertRate(serviceId: string, dto: UpsertRateDto, adminId: string) {

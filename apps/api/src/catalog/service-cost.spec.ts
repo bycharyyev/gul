@@ -13,7 +13,7 @@ function setup(service: { id: string } | null = { id: "s1" }) {
     serviceCost: { upsert: jest.fn(), deleteMany: jest.fn() },
   };
   const auditLog = { record: jest.fn() };
-  return { catalog: new CatalogService(prisma as never, auditLog as never), prisma, auditLog };
+  return { catalog: new CatalogService(prisma as never, auditLog as never, { publicBase: null, deletePublic: jest.fn() } as never), prisma, auditLog };
 }
 
 describe("CatalogService cost basis (E-01)", () => {
