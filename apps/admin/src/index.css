@@ -34,7 +34,7 @@ main {
   container-type: inline-size;
 }
 
-@container (max-width: 1040px) {
+@container (max-width: 1280px) {
   table.w-full thead {
     display: none;
   }
