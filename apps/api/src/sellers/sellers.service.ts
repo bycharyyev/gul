@@ -14,6 +14,16 @@ import type { ReviewApplicationDto } from "./dto/review-application.dto";
 import type { SellerApplicationStatus } from "@prisma/client";
 
 const USER_SELECT = { id: true, phone: true, fullName: true, isBlocked: true } as const;
+// The admin console needs contact details; everything else on the user stays out of the response.
+const ADMIN_USER_SELECT = {
+  id: true,
+  email: true,
+  phone: true,
+  fullName: true,
+  isBlocked: true,
+  emailVerified: true,
+  createdAt: true,
+} as const;
 
 @Injectable()
 export class SellersService {
@@ -207,16 +217,20 @@ export class SellersService {
   async getMyStats(userId: string) {
     const seller = await this.prisma.seller.findUnique({ where: { userId } });
     if (!seller) throw new NotFoundException("Seller profile not found");
+    return this.statsFor(seller.id);
+  }
 
+  /** Totals for one shop. Shared by the seller's own panel and the admin detail view. */
+  private async statsFor(sellerId: string) {
     const [productCount, ordersByStatusRaw, deliveredOrders] = await Promise.all([
-      this.prisma.galleryProduct.count({ where: { sellerId: seller.id } }),
+      this.prisma.galleryProduct.count({ where: { sellerId } }),
       this.prisma.galleryOrder.groupBy({
         by: ["status"],
-        where: { product: { sellerId: seller.id } },
+        where: { product: { sellerId } },
         _count: { _all: true },
       }),
       this.prisma.galleryOrder.aggregate({
-        where: { product: { sellerId: seller.id }, status: "DELIVERED" },
+        where: { product: { sellerId }, status: "DELIVERED" },
         _sum: { amountTmt: true },
       }),
     ]);
@@ -225,6 +239,38 @@ export class SellersService {
       productCount,
       ordersByStatus: Object.fromEntries(ordersByStatusRaw.map((r) => [r.status, r._count._all])),
       totalRevenueTmt: Number(deliveredOrders._sum.amountTmt ?? 0),
+    };
+  }
+
+  /** One shop as the admin console shows it: contact details, sections and the same totals the
+   *  seller sees. The one-time Telegram link code and the saved payout requisites are left out. */
+  async getAdminSellerDetail(id: string) {
+    const seller = await this.prisma.seller.findUnique({
+      where: { id },
+      include: {
+        user: { select: ADMIN_USER_SELECT },
+        storefronts: {
+          select: { id: true, name: true, isEnabled: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
+      },
+    });
+    if (!seller) throw new NotFoundException("Seller not found");
+    const stats = await this.statsFor(seller.id);
+    return {
+      id: seller.id,
+      userId: seller.userId,
+      handle: seller.handle,
+      shopName: seller.shopName,
+      description: seller.description,
+      logoUrl: seller.logoUrl,
+      balanceTmt: seller.balanceTmt.toString(),
+      isEnabled: seller.isEnabled,
+      telegramLinked: Boolean(seller.telegramChatId),
+      createdAt: seller.createdAt,
+      user: seller.user,
+      storefronts: seller.storefronts,
+      stats,
     };
   }
 

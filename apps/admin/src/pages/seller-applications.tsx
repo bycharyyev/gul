@@ -222,6 +222,16 @@ export default function SellerApplicationsPage() {
               <p className="font-semibold">Проверка перед решением</p>
               <p className="mt-1">Сверьте телефон, email, профиль и описание. Автоматическая проверка не доказывает, что заявка является спамом.</p>
             </div>
+            {(selected.email || selected.phone) && (
+              <div className="mt-4 flex flex-wrap gap-3">
+                {selected.email && (
+                  <a className="inline-flex h-9 items-center rounded-lg bg-white px-3 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50" href={`mailto:${selected.email}?subject=${encodeURIComponent("Gulyaly: ваша заявка продавца")}`}>Написать на почту</a>
+                )}
+                {selected.phone && (
+                  <a className="inline-flex h-9 items-center rounded-lg bg-white px-3 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50" href={`tel:${selected.phone}`}>Позвонить</a>
+                )}
+              </div>
+            )}
             {selected.reviewNote && <p className="mt-4 text-sm text-slate-500"><span className="font-semibold">Комментарий модератора:</span> {selected.reviewNote}</p>}
             {selected.status === "PENDING" && <div className="mt-6 flex flex-wrap justify-end gap-3">
               <Button variant="ghost" className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" onClick={() => reject(selected.id)} disabled={busyId === selected.id}>{t("admin.sellerApplications.reject")}</Button>

@@ -59,6 +59,13 @@ export class SupportController {
 
   @UseGuards(RolesGuard)
   @Roles("ADMIN", "MANAGER", "SUPPORT")
+  @Post("admin/users/:userId/thread")
+  openStaffThread(@Param("userId") userId: string) {
+    return this.support.openStaffThread(userId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles("ADMIN", "MANAGER", "SUPPORT")
   @Get("admin/threads")
   listThreads() {
     return this.support.listThreadsForStaff();

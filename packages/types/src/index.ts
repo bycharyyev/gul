@@ -8,6 +8,7 @@ export * from "./content.js";
 export * from "./referrals.js";
 export * from "./platform.js";
 export * from "./assistant.js";
+export * from "./seller-admin.js";
 export * from "./social-feed.js";
 export * from "./chat.js";
 export * from "./push.js";

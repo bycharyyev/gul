@@ -91,6 +91,19 @@ export class SupportService {
 
   // ---- Staff: platform support only ----
 
+  /** Staff open a conversation with a user: reuses their platform thread, or opens one. */
+  async openStaffThread(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException("User not found");
+    const existing = await this.prisma.supportThread.findFirst({
+      where: { userId, sellerId: null },
+      orderBy: { lastMessageAt: "desc" },
+      select: { id: true },
+    });
+    if (existing) return existing;
+    return this.prisma.supportThread.create({ data: { userId }, select: { id: true } });
+  }
+
   async listThreadsForStaff() {
     const threads = await this.prisma.supportThread.findMany({
       where: { sellerId: null },
