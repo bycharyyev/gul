@@ -365,7 +365,10 @@ export default function UsersPage() {
             ]}
           />
         </Card>
-        <Card className="overflow-hidden xl:sticky xl:top-5">
+        <Card className={`overflow-hidden xl:sticky xl:top-5 ${selectedId ? "fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-b-none rounded-t-2xl shadow-2xl xl:static xl:z-auto xl:max-h-none xl:overflow-hidden xl:rounded-xl xl:shadow-sm" : "hidden xl:block"}`}>
+          {selectedId && (
+            <button type="button" aria-label="Закрыть" className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-white text-xl text-slate-500 shadow ring-1 ring-slate-200 xl:hidden" onClick={() => setSelectedId(null)}>×</button>
+          )}
           {!detail && (
             <div className="grid min-h-[420px] place-items-center p-8 text-center">
               <CircleUserRound className="mb-3 h-10 w-10 text-slate-200" />
