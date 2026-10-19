@@ -27,3 +27,34 @@ body {
 .bg-gradient-brand-soft {
   background-image: linear-gradient(135deg, rgba(109, 75, 255, 0.1) 0%, rgba(20, 184, 166, 0.08) 100%);
 }
+
+/* Admin tables: when the content area is narrow, each row stacks into a block (one cell per line)
+   instead of running past the right edge. Measured on the nearest <main>, so every page follows it. */
+main {
+  container-type: inline-size;
+}
+
+@container (max-width: 1040px) {
+  table.w-full thead {
+    display: none;
+  }
+  table.w-full,
+  table.w-full tbody,
+  table.w-full tr,
+  table.w-full td {
+    display: block;
+    width: 100%;
+  }
+  table.w-full tr {
+    padding: 0.75rem 1rem;
+  }
+  table.w-full td {
+    padding: 0.25rem 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+    word-break: break-word;
+  }
+  table.w-full td:empty {
+    display: none;
+  }
+}
