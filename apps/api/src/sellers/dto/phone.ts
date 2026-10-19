@@ -3,7 +3,7 @@ import { Transform } from "class-transformer";
 import { Matches } from "class-validator";
 
 // 7–15 digits, optionally with a leading "+". Spaces, dashes and brackets are accepted on input and
-// dropped before the value is stored, so "+993 (61) 12-34-56" saves as "+993611234567".
+// dropped before the value is stored, so "+993 (61) 12-34-56" saves as "+99361123456".
 export const PHONE_PATTERN = /^\+?\d{7,15}$/;
 
 export function normalizePhone(value: unknown): unknown {

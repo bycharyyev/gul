@@ -2,7 +2,7 @@ import { normalizePhone, PHONE_PATTERN } from "./phone";
 
 describe("seller phone", () => {
   it("drops spaces, dashes and brackets before storing", () => {
-    expect(normalizePhone("+993 (61) 12-34-56")).toBe("+993611234567");
+    expect(normalizePhone("+993 (61) 12-34-56")).toBe("+99361123456");
   });
 
   it("accepts a plain or plus-prefixed number of 7 to 15 digits", () => {
