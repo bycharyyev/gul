@@ -145,8 +145,6 @@ export default function SellerApplicationsPage() {
               <th className="px-4 py-3">{t("admin.sellerApplications.colContact")}</th>
               <th className="px-4 py-3">{t("admin.sellerApplications.colSubmitted")}</th>
               <th className="px-4 py-3">{t("admin.sellerApplications.colStatus")}</th>
-              <th className="px-4 py-3">{t("admin.sellerApplications.colProcessed")}</th>
-              <th className="px-4 py-3">{t("admin.sellerApplications.colComment")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -163,10 +161,6 @@ export default function SellerApplicationsPage() {
                 <td className={`px-4 py-3 text-xs font-medium ${STATUS_LABEL[a.status].className}`}>
                   {STATUS_LABEL[a.status].text}
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-400">
-                  {a.reviewedAt ? new Date(a.reviewedAt).toLocaleString(LOCALE_BCP47[locale]) : "—"}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500">{a.reviewNote ?? "—"}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setSelected(a)}>
@@ -194,7 +188,7 @@ export default function SellerApplicationsPage() {
             ))}
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   {t("admin.sellerApplications.empty")}
                 </td>
               </tr>
