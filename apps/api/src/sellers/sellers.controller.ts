@@ -42,6 +42,14 @@ export class SellersController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN", "MANAGER")
+  @Get("admin/:id")
+  getSellerAdmin(@Param("id") id: string) {
+    return this.sellers.getAdminSellerDetail(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("ADMIN")
   @Patch("admin/:id")
   @InvalidatesPublicCache("gallery")

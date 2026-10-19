@@ -125,6 +125,7 @@ import type {
   EmailHealthDto,
   SetDeliveryNoteInput,
   SocialLinkDto,
+  AdminSellerDetailDto,
   StaffUserDto,
   StoryDetailDto,
   SupportMessageDto,
@@ -1165,6 +1166,16 @@ export class ApiClient {
   }
 
   // ---- Support chat (staff) ----
+  getAdminSeller(id: string) {
+    return this.request<AdminSellerDetailDto>(`/sellers/admin/${encodeURIComponent(id)}`);
+  }
+
+  openStaffSupportThread(userId: string) {
+    return this.request<{ id: string }>(`/support/admin/users/${encodeURIComponent(userId)}/thread`, {
+      method: "POST",
+    });
+  }
+
   listSupportThreads() {
     return this.request<SupportThreadWithUnreadDto[]>("/support/admin/threads");
   }

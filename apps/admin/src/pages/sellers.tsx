@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SellerDetailPanel } from "@/components/seller-detail-panel";
 
 const emptyDraft: CreateSellerInput = {
   email: "",
@@ -25,6 +26,7 @@ export default function SellersPage() {
   const [draft, setDraft] = useState<CreateSellerInput>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openedId, setOpenedId] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -138,6 +140,8 @@ export default function SellersPage() {
         </Card>
       )}
 
+      {openedId && <SellerDetailPanel sellerId={openedId} onClose={() => setOpenedId(null)} />}
+
       <Card className="overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
@@ -188,6 +192,9 @@ export default function SellersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
+                  <Button variant="secondary" size="sm" onClick={() => setOpenedId(seller.id)}>
+                    Статистика и контакты
+                  </Button>
                   <Button variant="secondary" size="sm" onClick={() => toggleEnabled(seller)}>
                     {seller.isEnabled ? t("admin.sellers.disable") : t("admin.sellers.enable")}
                   </Button>
