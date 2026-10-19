@@ -8,7 +8,7 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 27568 | 392 |
+| API (NestJS) | 27566 | 392 |
 | Web (Next.js) | 11448 | 94 |
 | Admin (Vite) | 15128 | 77 |
 | Mobile (Flutter) | 27504 | 132 |

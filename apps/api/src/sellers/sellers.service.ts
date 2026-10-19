@@ -195,8 +195,6 @@ export class SellersService {
     return updated;
   }
 
-  async approveApplication(id: string, dto: ReviewApplicationDto, adminId: string) {
-
   private async getSellerOrThrow(id: string) {
     const seller = await this.prisma.seller.findUnique({ where: { id } });
     if (!seller) throw new NotFoundException("Seller not found");
