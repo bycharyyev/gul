@@ -4,6 +4,8 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { SellersService } from "./sellers.service";
 import { CreateSellerDto } from "./dto/create-seller.dto";
 import { UpdateSellerDto } from "./dto/update-seller.dto";
+import { UpdateSellerAdminDto } from "./dto/update-seller-admin.dto";
+import { UpdateSellerApplicationDto } from "./dto/update-seller-application.dto";
 import { CreateSellerApplicationDto } from "./dto/create-seller-application.dto";
 import { ApplyAsMeDto } from "./dto/apply-as-me.dto";
 import { ReviewApplicationDto } from "./dto/review-application.dto";
@@ -53,8 +55,8 @@ export class SellersController {
   @Roles("ADMIN")
   @Patch("admin/:id")
   @InvalidatesPublicCache("gallery")
-  updateSellerAdmin(@Param("id") id: string, @Body() dto: UpdateSellerDto) {
-    return this.sellers.updateSellerAdmin(id, dto);
+  updateSellerAdmin(@Param("id") id: string, @Body() dto: UpdateSellerAdminDto, @CurrentUser() user: AuthedUser) {
+    return this.sellers.updateSellerAdmin(id, dto, user.userId);
   }
 
   // ---- Seller self-service ----
@@ -126,6 +128,18 @@ export class SellersController {
   }
 
   // ---- Seller applications (public self-signup, admin-moderated) ----
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
+  @Patch("applications/:id")
+  updateSellerApplication(
+    @Param("id") id: string,
+    @Body() dto: UpdateSellerApplicationDto,
+    @CurrentUser() user: AuthedUser,
+  ) {
+    return this.sellers.updateApplication(id, dto, user.userId);
+  }
 
   // Public applications are a high-value abuse target: keep retries bounded per client.
   @Throttle({ default: { limit: 3, ttl: 60 * 60 * 1000 } })

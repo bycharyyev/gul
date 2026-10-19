@@ -8,6 +8,8 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 import { EmailService } from "../email/email.service";
 import type { CreateSellerDto } from "./dto/create-seller.dto";
 import type { UpdateSellerDto } from "./dto/update-seller.dto";
+import type { UpdateSellerAdminDto } from "./dto/update-seller-admin.dto";
+import type { UpdateSellerApplicationDto } from "./dto/update-seller-application.dto";
 import type { CreateSellerApplicationDto } from "./dto/create-seller-application.dto";
 import type { ApplyAsMeDto } from "./dto/apply-as-me.dto";
 import type { ReviewApplicationDto } from "./dto/review-application.dto";
@@ -100,17 +102,100 @@ export class SellersService {
     });
   }
 
-  async updateSellerAdmin(id: string, dto: UpdateSellerDto) {
+  async updateSellerAdmin(id: string, dto: UpdateSellerAdminDto, adminId: string) {
     const existing = await this.getSellerOrThrow(id);
-    if (dto.handle) await this.assertHandleFree(dto.handle, id);
+    const { fullName, email, phone, ...sellerFields } = dto;
+    if (sellerFields.handle) await this.assertHandleFree(sellerFields.handle, id);
+    await this.assertOwnerContactFree(existing.userId, { email, phone });
+    if (fullName !== undefined || email !== undefined || phone !== undefined) {
+      await this.prisma.user.update({
+        where: { id: existing.userId },
+        data: {
+          ...(fullName !== undefined ? { fullName } : {}),
+          // A new address has not been proven yet, so it goes back through verification.
+          ...(email !== undefined ? { email, emailVerified: false, emailVerifiedAt: null } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+        },
+      });
+    }
     const updated = await this.prisma.seller.update({
       where: { id },
-      data: dto,
+      data: sellerFields,
       include: { user: { select: USER_SELECT } },
     });
     await this.uploadCleanup?.removeIfReplaced(existing.logoUrl, updated.logoUrl);
+    // Field names only: the values are personal data and do not belong in the audit log.
+    this.auditLog.record(adminId, "seller.update", "Seller", id, { fields: Object.keys(dto) });
     return updated;
   }
+
+  private async assertOwnerContactFree(userId: string, contact: { email?: string; phone?: string }) {
+    if (contact.email) {
+      const taken = await this.prisma.user.findFirst({
+        where: { email: contact.email, NOT: { id: userId } },
+        select: { id: true },
+      });
+      if (taken) throw new ConflictException("Этот email уже используется другим аккаунтом");
+    }
+    if (contact.phone) {
+      const taken = await this.prisma.user.findFirst({
+        where: { phone: contact.phone, NOT: { id: userId } },
+        select: { id: true },
+      });
+      if (taken) throw new ConflictException("Этот телефон уже используется другим аккаунтом");
+    }
+  }
+
+  /** Staff correction of a pending application. Once decided, it is read-only. */
+  async updateApplication(id: string, dto: UpdateSellerApplicationDto, adminId: string) {
+    const app = await this.prisma.sellerApplication.findUnique({ where: { id } });
+    if (!app) throw new NotFoundException("Application not found");
+    if (app.status !== "PENDING") {
+      throw new BadRequestException("Изменить можно только заявку на рассмотрении");
+    }
+    if (dto.handle && dto.handle !== app.handle) {
+      const takenShop = await this.prisma.seller.findUnique({ where: { handle: dto.handle }, select: { id: true } });
+      if (takenShop) throw new ConflictException("Этот username уже занят");
+      const takenApp = await this.prisma.sellerApplication.findFirst({
+        where: { handle: dto.handle, status: "PENDING", NOT: { id } },
+        select: { id: true },
+      });
+      if (takenApp) throw new ConflictException("Этот username уже на рассмотрении в другой заявке");
+    }
+    if (dto.email && dto.email !== app.email) {
+      const takenUser = await this.prisma.user.findFirst({ where: { email: dto.email }, select: { id: true } });
+      if (takenUser) throw new ConflictException("Этот email уже зарегистрирован");
+      const takenApp = await this.prisma.sellerApplication.findFirst({
+        where: { email: dto.email, status: "PENDING", NOT: { id } },
+        select: { id: true },
+      });
+      if (takenApp) throw new ConflictException("Этот email уже на рассмотрении в другой заявке");
+    }
+    const updated = await this.prisma.sellerApplication.update({
+      where: { id },
+      data: dto,
+      // Never return passwordHash: the list endpoint hides it too.
+      select: {
+        id: true,
+        phone: true,
+        email: true,
+        fullName: true,
+        handle: true,
+        shopName: true,
+        description: true,
+        status: true,
+        reviewNote: true,
+        reviewedAt: true,
+        createdAt: true,
+      },
+    });
+    this.auditLog.record(adminId, "seller-application.update", "SellerApplication", id, {
+      fields: Object.keys(dto),
+    });
+    return updated;
+  }
+
+  async approveApplication(id: string, dto: ReviewApplicationDto, adminId: string) {
 
   private async getSellerOrThrow(id: string) {
     const seller = await this.prisma.seller.findUnique({ where: { id } });

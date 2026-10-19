@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ProfileEditForm, type ProfileFormValues } from "@/components/profile-edit-form";
 import type { SellerApplicationAdminDto, SellerApplicationStatus } from "@topup-hub/types";
 import { ApiError } from "@topup-hub/api-client";
 import { useTranslation, translateError, LOCALE_BCP47 } from "@topup-hub/i18n";
@@ -48,6 +49,17 @@ export default function SellerApplicationsPage() {
   }
 
   useEffect(load, []);
+
+  const [editingApp, setEditingApp] = useState(false);
+  useEffect(() => setEditingApp(false), [selected?.id]);
+
+  async function saveApp(values: Partial<ProfileFormValues>) {
+    if (!selected) return;
+    const updated = await api.updateSellerApplication(selected.id, values);
+    setSelected(updated);
+    setEditingApp(false);
+    load();
+  }
 
   async function approve(id: string) {
     if (!(await confirmAction("Одобрить заявку и создать продавца?"))) return;
@@ -204,6 +216,22 @@ export default function SellerApplicationsPage() {
               </div>
               <button className="rounded-lg px-3 py-1 text-2xl text-slate-400 hover:bg-slate-100" onClick={() => setSelected(null)} aria-label="Закрыть">×</button>
             </div>
+            {editingApp ? (
+              <div className="py-5">
+                <ProfileEditForm
+                  initial={{
+                    shopName: selected.shopName,
+                    handle: selected.handle,
+                    description: selected.description ?? "",
+                    fullName: selected.fullName ?? "",
+                    email: selected.email ?? "",
+                    phone: selected.phone ?? "",
+                  }}
+                  onSave={saveApp}
+                  onCancel={() => setEditingApp(false)}
+                />
+              </div>
+            ) : (
             <div className="grid gap-4 py-5 sm:grid-cols-2">
               {[
                 ["Контактное лицо", selected.fullName ?? "Не указано"],
@@ -214,6 +242,7 @@ export default function SellerApplicationsPage() {
                 ["Рассмотрена", selected.reviewedAt ? new Date(selected.reviewedAt).toLocaleString(LOCALE_BCP47[locale]) : "Не рассмотрена"],
               ].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{value}</p></div>)}
             </div>
+            )}
             <div className="rounded-xl border border-slate-200 p-4">
               <p className="text-sm font-semibold text-slate-800">Описание магазина</p>
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{selected.description || "Описание не заполнено — рекомендуется ручная проверка."}</p>
@@ -234,6 +263,7 @@ export default function SellerApplicationsPage() {
             )}
             {selected.reviewNote && <p className="mt-4 text-sm text-slate-500"><span className="font-semibold">Комментарий модератора:</span> {selected.reviewNote}</p>}
             {selected.status === "PENDING" && <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <Button variant="secondary" onClick={() => setEditingApp(true)}>Редактировать</Button>
               <Button variant="ghost" className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" onClick={() => reject(selected.id)} disabled={busyId === selected.id}>{t("admin.sellerApplications.reject")}</Button>
               <Button onClick={() => approve(selected.id)} disabled={busyId === selected.id}>{t("admin.sellerApplications.approve")}</Button>
             </div>}

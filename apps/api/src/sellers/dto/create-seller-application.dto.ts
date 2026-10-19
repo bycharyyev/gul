@@ -1,11 +1,11 @@
 import { Transform } from "class-transformer";
+import { IsPhone } from "./phone";
 import { IsEmail, IsOptional, IsString, Length, MaxLength, Matches } from "class-validator";
 
 export class CreateSellerApplicationDto {
   // Optional contact number; sign-in is by email.
   @IsOptional()
-  @IsString()
-  @Length(6, 20)
+  @IsPhone()
   phone?: string;
 
   @IsString()

@@ -126,6 +126,8 @@ import type {
   SetDeliveryNoteInput,
   SocialLinkDto,
   AdminSellerDetailDto,
+  AdminSellerContactInput,
+  UpdateSellerApplicationInput,
   StaffUserDto,
   StoryDetailDto,
   SupportMessageDto,
@@ -1425,7 +1427,7 @@ export class ApiClient {
     });
   }
 
-  updateSellerAdmin(id: string, input: UpdateSellerInput) {
+  updateSellerAdmin(id: string, input: UpdateSellerInput & AdminSellerContactInput) {
     return this.request<SellerAdminDto>(`/sellers/admin/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -1585,6 +1587,13 @@ export class ApiClient {
   }) {
     return this.request<{ id: string; status: string }>("/sellers/apply-as-me", {
       method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateSellerApplication(id: string, input: UpdateSellerApplicationInput) {
+    return this.request<SellerApplicationAdminDto>(`/sellers/applications/${encodeURIComponent(id)}`, {
+      method: "PATCH",
       body: JSON.stringify(input),
     });
   }

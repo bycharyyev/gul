@@ -27,3 +27,20 @@ export interface AdminSellerDetailDto {
     totalRevenueTmt: number;
   };
 }
+
+// Owner contact details, editable by staff only. Shop fields are in UpdateSellerInput.
+export interface AdminSellerContactInput {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+}
+
+// Staff correction of a pending application. Same rules as the public form.
+export interface UpdateSellerApplicationInput {
+  handle?: string;
+  shopName?: string;
+  description?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+}
