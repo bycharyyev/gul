@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ProfileEditForm, type ProfileFormValues } from "@/components/profile-edit-form";
 
 type SellerDetail = Awaited<ReturnType<typeof api.getAdminSeller>>;
 
@@ -26,6 +27,7 @@ export function SellerDetailPanel({ sellerId, onClose }: { sellerId: string; onC
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +46,12 @@ export function SellerDetailPanel({ sellerId, onClose }: { sellerId: string; onC
       cancelled = true;
     };
   }, [sellerId]);
+
+  async function saveProfile(values: Partial<ProfileFormValues>) {
+    await api.updateSellerAdmin(sellerId, values);
+    setDetail(await api.getAdminSeller(sellerId));
+    setEditing(false);
+  }
 
   async function send() {
     if (!detail || !message.trim()) return;
@@ -82,12 +90,34 @@ export function SellerDetailPanel({ sellerId, onClose }: { sellerId: string; onC
           <h2 className="text-lg font-bold">{detail.shopName}</h2>
           <p className="text-sm text-brand-600">@{detail.handle}</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          Закрыть
-        </Button>
+        <div className="flex gap-2">
+          {!editing && (
+            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+              Редактировать
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Закрыть
+          </Button>
+        </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2">
+      {editing && (
+        <ProfileEditForm
+          initial={{
+            shopName: detail.shopName,
+            handle: detail.handle,
+            description: detail.description ?? "",
+            fullName: detail.user.fullName ?? "",
+            email: detail.user.email ?? "",
+            phone: detail.user.phone ?? "",
+          }}
+          onSave={saveProfile}
+          onCancel={() => setEditing(false)}
+        />
+      )}
+
+      {!editing && <section className="grid gap-4 sm:grid-cols-2">
         <Field label="E-mail">
           {detail.user.email && (
             <a className="text-brand-600 underline" href={`mailto:${detail.user.email}`}>
@@ -114,7 +144,7 @@ export function SellerDetailPanel({ sellerId, onClose }: { sellerId: string; onC
           </span>
           {detail.user.isBlocked && <span className="ml-2 text-xs text-rose-600">аккаунт заблокирован</span>}
         </Field>
-      </section>
+      </section>}
 
       {detail.description && (
         <section>
