@@ -150,7 +150,7 @@ export default function SellerApplicationsPage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {visible.map((a) => (
-              <tr key={a.id} className="transition-colors hover:bg-slate-50/80">
+              <tr key={a.id} className="cursor-pointer transition-colors hover:bg-slate-50/80" onClick={() => setSelected(a)}>
                 <td className="px-4 py-3 font-medium">{a.shopName}</td>
                 <td className="px-4 py-3 text-brand-600">@{a.handle}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{a.phone}</td>
@@ -162,7 +162,7 @@ export default function SellerApplicationsPage() {
                   {STATUS_LABEL[a.status].text}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                     <Button variant="ghost" size="sm" onClick={() => setSelected(a)}>
                       Подробнее
                     </Button>
