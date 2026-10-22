@@ -184,7 +184,7 @@ export default function SellersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <a className="text-brand-600 underline" href={`https://gulyaly.com/${seller.handle}`} target="_blank" rel="noreferrer">
+                  <a className="text-brand-600 underline" href={`https://gulyaly.com/@${seller.handle}`} target="_blank" rel="noreferrer">
                     @{seller.handle}
                   </a>
                 </td>
