@@ -22,6 +22,8 @@ export default function GalleryOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Linked from the sellers list: `/gallery-orders?seller=<id>` shows only that shop's orders.
+  const sellerFilter = new URLSearchParams(window.location.search).get("seller") ?? "";
 
   function load() {
     setLoading(true);
@@ -81,7 +83,7 @@ export default function GalleryOrdersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {orders.map((order) => {
+            {orders.filter((order) => !sellerFilter || order.product.seller?.id === sellerFilter).map((order) => {
               const locked = LOCKED_STATUSES.has(order.status);
               return (
                 <Fragment key={order.id}>
