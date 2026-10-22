@@ -15,6 +15,39 @@ import type { ApplyAsMeDto } from "./dto/apply-as-me.dto";
 import type { ReviewApplicationDto } from "./dto/review-application.dto";
 import type { SellerApplicationStatus } from "@prisma/client";
 
+type OrderCountRow = {
+  sellerId: string;
+  status: string;
+  count: number;
+  avgSeconds: string | number | null;
+};
+
+/**
+ * What a shop's orders say at a glance: totals by status, how many of the finished ones were
+ * delivered, and how long delivery takes. risk is "high" once there are at least three finished
+ * orders and fewer than 80% of them were delivered.
+ */
+function summarizeOrders(rows: OrderCountRow[]) {
+  const byStatus: Record<string, number> = {};
+  let total = 0;
+  let avgSeconds: number | null = null;
+  for (const row of rows) {
+    byStatus[row.status] = row.count;
+    total += row.count;
+    if (row.status === "DELIVERED" && row.avgSeconds !== null) avgSeconds = Number(row.avgSeconds);
+  }
+  const delivered = byStatus.DELIVERED ?? 0;
+  const cancelled = byStatus.CANCELLED ?? 0;
+  const finished = delivered + cancelled;
+  return {
+    total,
+    byStatus,
+    fulfillmentRate: finished > 0 ? Math.round((delivered / finished) * 100) : null,
+    avgFulfillmentHours: avgSeconds === null ? null : Math.round((avgSeconds / 3600) * 10) / 10,
+    risk: finished >= 3 && delivered / finished < 0.8 ? ("high" as const) : ("none" as const),
+  };
+}
+
 const USER_SELECT = { id: true, phone: true, fullName: true, isBlocked: true } as const;
 // The admin console needs contact details; everything else on the user stays out of the response.
 const ADMIN_USER_SELECT = {
@@ -80,11 +113,12 @@ export class SellersService {
     if (existingHandle || handleTakenAsUsername) throw new ConflictException("Handle already taken");
   }
 
-  listSellers() {
-    return this.prisma.seller.findMany({
+  async listSellers() {
+    const [sellers, orderRows] = await Promise.all([
+    this.prisma.seller.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        user: { select: USER_SELECT },
+        user: { select: ADMIN_USER_SELECT },
         // Sections come with the shop so the console can show what a seller has built without a
         // request per row. Names and sizes only -- staff moderate what a shop shows, and the
         // rest of a section is the seller's own arrangement.
@@ -99,7 +133,20 @@ export class SellersService {
         },
         _count: { select: { products: true, storefronts: true } },
       },
-    });
+    }),
+      this.prisma.$queryRaw<OrderCountRow[]>`
+        SELECT p."sellerId" AS "sellerId", o.status::text AS status,
+               COUNT(*)::int AS count,
+               AVG(EXTRACT(EPOCH FROM (o."deliveredAt" - o."createdAt"))) AS "avgSeconds"
+        FROM "GalleryOrder" o
+        JOIN "GalleryProduct" p ON p.id = o."productId"
+        GROUP BY p."sellerId", o.status
+      `,
+    ]);
+    return sellers.map((seller) => ({
+      ...seller,
+      orders: summarizeOrders(orderRows.filter((row) => row.sellerId === seller.id)),
+    }));
   }
 
   async updateSellerAdmin(id: string, dto: UpdateSellerAdminDto, adminId: string) {

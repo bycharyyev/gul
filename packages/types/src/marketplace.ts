@@ -177,7 +177,17 @@ export interface SellerDto {
  * ones and how much is on each. Same concept, two genuinely different answers -- so the shape
  * says so rather than one surface quietly carrying nulls for the other's fields.
  */
+/** A shop's orders as the admin list shows them. Rates are over finished (delivered or cancelled) orders. */
+export interface SellerOrdersSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  fulfillmentRate: number | null;
+  avgFulfillmentHours: number | null;
+  risk: "high" | "none";
+}
+
 export interface SellerAdminDto extends Omit<SellerDto, "storefronts"> {
+  orders?: SellerOrdersSummary;
   balanceTmt: number;
   createdAt: string;
   user: { id: string; phone: string | null; email?: string | null; fullName: string | null; isBlocked: boolean };

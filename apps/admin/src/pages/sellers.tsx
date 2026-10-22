@@ -148,7 +148,9 @@ export default function SellersPage() {
             <tr>
               <th className="px-4 py-3">{t("admin.sellers.colShop")}</th>
               <th className="px-4 py-3">{t("admin.sellers.colUsername")}</th>
-              <th className="px-4 py-3">{t("admin.sellers.colPhone")}</th>
+              <th className="px-4 py-3">Контакты</th>
+              <th className="px-4 py-3">Заказы</th>
+              <th className="px-4 py-3">Выполнение</th>
               <th className="px-4 py-3">{t("admin.sellers.colBalance")}</th>
               <th className="px-4 py-3">{t("admin.sellers.colStatus")}</th>
               <th className="px-4 py-3" />
@@ -181,8 +183,62 @@ export default function SellersPage() {
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-brand-600">@{seller.handle}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{seller.user.email ?? seller.user.phone ?? "—"}</td>
+                <td className="px-4 py-3">
+                  <a className="text-brand-600 underline" href={`https://gulyaly.com/${seller.handle}`} target="_blank" rel="noreferrer">
+                    @{seller.handle}
+                  </a>
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {seller.user.email && (
+                    <a className="block break-all text-brand-600 underline" href={`mailto:${seller.user.email}`}>
+                      {seller.user.email}
+                    </a>
+                  )}
+                  {seller.user.phone && (
+                    <a className="block text-slate-500 underline" href={`tel:${seller.user.phone}`}>
+                      {seller.user.phone}
+                    </a>
+                  )}
+                  {!seller.user.email && !seller.user.phone && "—"}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {seller.orders && seller.orders.total > 0 ? (
+                    <>
+                      <a className="font-semibold text-brand-600 underline" href={`/gallery-orders?seller=${seller.id}`}>
+                        {seller.orders.total}
+                      </a>
+                      <div className="mt-1 space-y-0.5">
+                        <div>доставлено: {seller.orders.byStatus.DELIVERED ?? 0}</div>
+                        <div>
+                          в работе:{" "}
+                          {(seller.orders.byStatus.PENDING_PAYMENT ?? 0) +
+                            (seller.orders.byStatus.PAID ?? 0) +
+                            (seller.orders.byStatus.PROCESSING ?? 0)}
+                        </div>
+                        <div>отменено: {seller.orders.byStatus.CANCELLED ?? 0}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">нет</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {seller.orders?.fulfillmentRate != null ? (
+                    <span className={`font-semibold ${seller.orders.risk === "high" ? "text-rose-600" : "text-emerald-700"}`}>
+                      {seller.orders.fulfillmentRate}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                  {seller.orders?.avgFulfillmentHours != null && (
+                    <div className="mt-1 text-slate-500">в среднем {seller.orders.avgFulfillmentHours} ч</div>
+                  )}
+                  {seller.orders?.risk === "high" && (
+                    <span className="mt-1 inline-block rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                      риск
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{seller.balanceTmt} TMT</td>
                 <td className="px-4 py-3">
                   {seller.isEnabled ? (
