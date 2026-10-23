@@ -28,13 +28,10 @@ body {
   background-image: linear-gradient(135deg, rgba(109, 75, 255, 0.1) 0%, rgba(20, 184, 166, 0.08) 100%);
 }
 
-/* Admin tables: on a phone-width content area each row stacks into a block (one cell per line).
-   Measured on the nearest <main>, so every page follows it. Wider areas keep a real table. */
-main {
-  container-type: inline-size;
-}
-
-@container (max-width: 760px) {
+/* Admin tables: on a phone-width screen each row stacks into a block (one cell per line).
+   Viewport media queries, not container queries: a container with fixed-position descendants
+   would clip every modal to the page area. */
+@media (max-width: 760px) {
   table.w-full thead {
     display: none;
   }
@@ -52,7 +49,7 @@ main {
 
 /* Below 1280px the cells use less side padding and long values wrap, so columns fit without
    sideways scrolling. These selectors are more specific than the Tailwind padding classes. */
-@container (max-width: 1280px) {
+@media (max-width: 1280px) {
   table.w-full th,
   table.w-full td {
     padding-left: 0.5rem;
