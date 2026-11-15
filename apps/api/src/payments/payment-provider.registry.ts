@@ -3,6 +3,7 @@ import { ManualPaymentProvider } from "./providers/manual-payment.provider";
 import { FreeKassaPaymentProvider } from "./providers/freekassa-payment.provider";
 import { HeleketPaymentProvider } from "./providers/heleket-payment.provider";
 import { CryptoCloudPaymentProvider } from "./providers/cryptocloud-payment.provider";
+import { PallyPaymentProvider } from "./providers/pally-payment.provider";
 import type { PaymentProvider } from "./providers/payment-provider.interface";
 
 /**
@@ -27,6 +28,7 @@ export class PaymentProviderRegistry {
     freekassa: FreeKassaPaymentProvider,
     heleket: HeleketPaymentProvider,
     cryptocloud: CryptoCloudPaymentProvider,
+    pally: PallyPaymentProvider,
   ) {
     this.register(manual);
     // Only with credentials in .env: an unconfigured deployment does not expose it at all
@@ -34,11 +36,13 @@ export class PaymentProviderRegistry {
     if (freekassa.isConfigured()) this.register(freekassa);
     if (heleket.isConfigured()) this.register(heleket);
     if (cryptocloud.isConfigured()) this.register(cryptocloud);
+    if (pally.isConfigured()) this.register(pally);
     this.known = [
       { key: manual.key, label: "Ручное подтверждение", configured: true },
       { key: freekassa.key, label: "FreeKassa (карты / СБП)", configured: freekassa.isConfigured() },
       { key: heleket.key, label: "Heleket (криптовалюта)", configured: heleket.isConfigured() },
       { key: cryptocloud.key, label: "CryptoCloud / Trybit (криптовалюта)", configured: cryptocloud.isConfigured() },
+      { key: pally.key, label: "Pally (карты / СБП)", configured: pally.isConfigured() },
     ];
   }
 
