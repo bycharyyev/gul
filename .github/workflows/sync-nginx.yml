@@ -24,6 +24,8 @@ jobs:
             host_secret: SECONDARY_HOST
             user_secret: SECONDARY_USER
     name: sync (${{ matrix.name }})
+    # The secondary entry is non-blocking until a second node exists (SECONDARY_ENABLED); the primary is not.
+    continue-on-error: ${{ matrix.name == 'secondary' && vars.SECONDARY_ENABLED != 'true' }}
     env:
       HOST: ${{ secrets[matrix.host_secret] }}
       USER_NAME: ${{ secrets[matrix.user_secret] }}
