@@ -59,7 +59,7 @@ jobs:
             echo "renew=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           due=false
-          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" $([ "${{ vars.SECONDARY_ENABLED }}" = "true" ] && echo "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"); do
             end=$(ssh -i ~/.ssh/deploy_key "$target" "openssl x509 -enddate -noout -in $CERT_DIR/fullchain.pem 2>/dev/null" < /dev/null | cut -d= -f2)
             if [ -z "$end" ]; then
               echo "no certificate at $CERT_DIR on a host -- issuing"; due=true; continue
@@ -126,13 +126,15 @@ jobs:
               "docker run --rm --pid=host --privileged -v /:/host alpine chroot /host /bin/sh /tmp/cert-install/apply.sh" < /dev/null
           }
           install_on "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          install_on "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"
+          if [ "${{ vars.SECONDARY_ENABLED }}" = "true" ]; then
+            install_on "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"
+          fi
           rm -rf /tmp/cert-install
 
       - name: Verify both hosts
         if: steps.due.outputs.renew == 'true' && !inputs.staging
         run: |
-          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"; do
+          for target in "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" $([ "${{ vars.SECONDARY_ENABLED }}" = "true" ] && echo "${{ secrets.SECONDARY_USER }}@${{ secrets.SECONDARY_HOST }}"); do
             echo "--- $( [ "$target" = "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" ] && echo primary || echo secondary ) ---"
             ssh -i ~/.ssh/deploy_key "$target" \
               "openssl x509 -in $CERT_DIR/fullchain.pem -noout -enddate -ext subjectAltName; \
