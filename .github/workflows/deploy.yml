@@ -247,9 +247,11 @@ jobs:
           ssh-keygen -F "${{ secrets.DEPLOY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
             echo "SSH_KNOWN_HOSTS does not contain DEPLOY_HOST" >&2; exit 1;
           }
-          ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
-            echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
-          }
+          if [ "${{ vars.SECONDARY_ENABLED }}" = "true" ]; then
+            ssh-keygen -F "${{ secrets.SECONDARY_HOST }}" -f ~/.ssh/known_hosts >/dev/null || {
+              echo "SSH_KNOWN_HOSTS does not contain SECONDARY_HOST" >&2; exit 1;
+            }
+          fi
 
       # Both nodes run the app tier against the SAME primary database, and DNS round-robins live
       # traffic across them. So between "primary migrated" and "secondary restarted" the secondary
@@ -259,6 +261,7 @@ jobs:
       # which turns minutes into seconds. Deliberately best-effort: a registry blip must not fail
       # the primary deploy, deploy-secondary retries its own pull anyway.
       - name: Pre-pull the new images on the secondary (shrinks the mixed-version window)
+        if: vars.SECONDARY_ENABLED == 'true'
         continue-on-error: true
         timeout-minutes: 10
         run: |
@@ -498,6 +501,8 @@ jobs:
   # identical, verified-good image rather than two independently-moving tags.
   deploy-secondary:
     needs: deploy
+    # Off until a second node exists: set the repository variable SECONDARY_ENABLED to true.
+    if: vars.SECONDARY_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -627,6 +632,7 @@ jobs:
   # summary rather than in somebody's memory.
   smoke:
     needs: [deploy, deploy-secondary]
+    if: ${{ always() && needs.deploy.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -639,4 +645,5 @@ jobs:
     name: smoke (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v7
-      - run: bash infra/checks/smoke.sh "${{ secrets[matrix.host_secret] }}"
+      - if: matrix.name == 'primary' || vars.SECONDARY_ENABLED == 'true'
+        run: bash infra/checks/smoke.sh "${{ secrets[matrix.host_secret] }}"
