@@ -1,0 +1,134 @@
+name: Restore the primary's .env from repository secrets
+
+# After the primary is rebuilt from scratch its /opt/gul/.env holds only what bootstrap and
+# deploy.yml write. Everything else that lives in repository secrets -- REG.RU mail, application
+# S3, payment providers, Firebase push, the backup bucket, the subdomain callback secret -- is
+# written here in one pass, primary only, and the three API processes are recreated one at a time.
+#
+# Values never reach a log: they go into a 0600 file on the runner, are copied to the host and
+# merged there, and only key names are printed. A group whose secrets are not all set is skipped
+# and reported, never half-written. Safe to re-run: it replaces exactly the keys it writes.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      MAIL_PASS: ${{ secrets.MAIL_PASS_REGRU }}
+      S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+      S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+      S3_PUBLIC_BUCKET: ${{ secrets.S3_PUBLIC_BUCKET }}
+      S3_PRIVATE_BUCKET: ${{ secrets.S3_PRIVATE_BUCKET }}
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      FREEKASSA_SHOP_ID: ${{ secrets.FREEKASSA_SHOP_ID }}
+      FREEKASSA_SECRET_WORD_1: ${{ secrets.FREEKASSA_SECRET_WORD_1 }}
+      FREEKASSA_SECRET_WORD_2: ${{ secrets.FREEKASSA_SECRET_WORD_2 }}
+      FREEKASSA_API_KEY: ${{ secrets.FREEKASSA_API_KEY }}
+      CRYPTOCLOUD_API_KEY: ${{ secrets.CRYPTOCLOUD_API_KEY }}
+      CRYPTOCLOUD_SECRET_KEY: ${{ secrets.CRYPTOCLOUD_SECRET_KEY }}
+      CRYPTOCLOUD_SHOP_ID: ${{ secrets.CRYPTOCLOUD_SHOP_ID }}
+      FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+      PROVISION_CALLBACK_SECRET: ${{ secrets.PROVISION_CALLBACK_SECRET }}
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Build the env fragment (complete groups only, key names printed)
+        run: |
+          umask 077
+          : > /tmp/restore.env
+          put() { # put <KEY> <value>
+            case "$2" in *"'"*|*$'\n'*) echo "$1 contains a quote or newline; regenerate it" >&2; exit 1;; esac
+            printf "%s='%s'\n" "$1" "$2" >> /tmp/restore.env
+          }
+          group() { # group <label> <KEY>... : writes every key from the environment, or none
+            label=$1; shift
+            for key in "$@"; do
+              [ -n "${!key}" ] || { echo "skipped $label: repository secret for $key is not set"; return 0; }
+            done
+            for key in "$@"; do put "$key" "${!key}"; done
+            echo "included $label"
+          }
+          # REG.RU is the only transport app mail may use (docs/EMAIL.md); the fixed values are
+          # the documented ones, only the mailbox password is secret.
+          if [ -n "$MAIL_PASS" ]; then
+            put MAIL_HOST "mail.hosting.reg.ru"
+            put MAIL_PORT "465"
+            put MAIL_SECURE "true"
+            put MAIL_USER "noreply@gulyaly.com"
+            put MAIL_PASS "$MAIL_PASS"
+            put MAIL_FROM "Gulyaly <noreply@gulyaly.com>"
+            put MAIL_SENDER_DOMAIN "gulyaly.com"
+            put MAIL_REPLY_TO "support@gulyaly.com"
+            put EMAIL_DAILY_LIMIT "3000"
+            echo "included mail"
+          else
+            echo "skipped mail: repository secret MAIL_PASS_REGRU is not set"
+          fi
+          group "application S3" S3_ENDPOINT S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY S3_PUBLIC_BUCKET S3_PRIVATE_BUCKET
+          group "backup S3" BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_BUCKET
+          group "FreeKassa" FREEKASSA_SHOP_ID FREEKASSA_SECRET_WORD_1 FREEKASSA_SECRET_WORD_2 FREEKASSA_API_KEY
+          group "CryptoCloud" CRYPTOCLOUD_API_KEY CRYPTOCLOUD_SECRET_KEY CRYPTOCLOUD_SHOP_ID
+          group "Firebase push" FIREBASE_SERVICE_ACCOUNT_BASE64
+          group "subdomain callback" PROVISION_CALLBACK_SECRET
+          [ -s /tmp/restore.env ] || { echo "nothing to write" >&2; exit 1; }
+          echo "keys: $(cut -d= -f1 /tmp/restore.env | tr '\n' ' ')"
+
+      - name: Merge into /opt/gul/.env and recreate the API processes
+        run: |
+          scp -i ~/.ssh/deploy_key /tmp/restore.env "$PRIMARY:/tmp/restore.env"
+          rm -f /tmp/restore.env
+          ssh -i ~/.ssh/deploy_key "$PRIMARY" '
+            set -e
+            cd /opt/gul
+            umask 077
+            cp -p .env ".env.bak-restore-$(date +%Y%m%d%H%M%S)"
+            keys=$(cut -d= -f1 /tmp/restore.env | paste -sd"|")
+            # Marketing overrides are dropped with the mail keys: marketing falls back to REG.RU.
+            { grep -vE "^($keys)=|^MAIL_(HOST|PORT|SECURE|USER|PASS|TLS_CA_BASE64|TLS_SERVERNAME)_MARKETING=|^MAIL_FROM_MARKETING=" .env; cat /tmp/restore.env; } > /tmp/env.new
+            cat /tmp/env.new > .env
+            rm -f /tmp/env.new /tmp/restore.env
+            # One process at a time, as the deploy does, so one HTTP process is always serving.
+            for pair in api-worker:4001 api:4000 api-2:4002; do
+              svc=${pair%%:*}; port=${pair##*:}
+              for attempt in 1 2 3; do
+                docker compose up -d --force-recreate --no-deps "$svc" && break
+                sleep $((attempt * 10))
+              done
+              ok=0
+              for i in $(seq 1 45); do
+                curl -fsS "http://127.0.0.1:$port/api/health/ready" > /dev/null && { ok=1; break; }
+                sleep 2
+              done
+              [ "$ok" = 1 ] || { echo "$svc (port $port) did not come back healthy" >&2; exit 1; }
+              echo "healthy: $svc"
+            done
+            if docker compose logs api --tail=300 2>/dev/null | grep -q "Push delivery disabled"; then
+              echo "PUSH DISABLED (credentials missing or unreadable)"
+            else
+              echo "push enabled"
+            fi' < /dev/null
+
+      - name: Payment providers answer (an unsigned probe must be refused, not "unknown provider")
+        run: |
+          for provider in freekassa cryptocloud; do
+            body=$(curl -s -m 20 -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "probe=1" \
+              "https://api.gulyaly.com/api/payments/webhooks/$provider")
+            if echo "$body" | grep -q "Unknown payment provider"; then
+              echo "$provider: NOT registered"
+            else
+              echo "$provider: registered ($(echo "$body" | head -c 100))"
+            fi
+          done

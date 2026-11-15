@@ -17,6 +17,8 @@ on:
 jobs:
   install:
     runs-on: ubuntu-latest
+    # With no secondary node, its leg is expected to fail and must not fail the run.
+    continue-on-error: ${{ matrix.node == 'secondary' && vars.SECONDARY_ENABLED != 'true' }}
     strategy:
       fail-fast: false
       matrix:
