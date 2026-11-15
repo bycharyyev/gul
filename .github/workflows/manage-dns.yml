@@ -33,6 +33,7 @@ on:
           - spf-add-regru-sending-host
           - add-second-a-records
           - remove-secondary-a-records
+          - repoint-stale-a-records
           - replace-dkim-record
           - add-txt-record
           - verify
@@ -258,6 +259,59 @@ jobs:
           else
             echo "$TOTAL record(s) deleted -- all three names now resolve to the primary only"
           fi
+
+      - name: Repoint names still answering with a stale address (apex/www/api/admin) to the primary
+        if: inputs.step == 'repoint-stale-a-records'
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          TARGET_IP: ${{ inputs.target_ip }}
+        run: |
+          set -e
+          # After the primary moved to a new address, explicit A records for these names kept the
+          # old one (which now belongs to somebody else's server). Deletes every A record that
+          # equals target_ip, then makes sure each name answers with the primary -- from the
+          # wildcard if that is enough, from an explicit record otherwise.
+          [ -n "$TARGET_IP" ] || { echo "target_ip is required" >&2; exit 1; }
+          PRI="${{ secrets.DEPLOY_HOST }}"
+          [ "$TARGET_IP" != "$PRI" ] || { echo "target_ip is the primary itself" >&2; exit 1; }
+          TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
+          stale_ids() { # stale_ids <fqdn>
+            curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$1/dns-records"               | OLD="$TARGET_IP" python3 -c '
+          import json, os, sys
+          try:
+              records = json.load(sys.stdin)["dns_records"]
+          except Exception:
+              records = []
+          for r in records:
+              if r.get("type") == "A" and r.get("data", {}).get("value") == os.environ["OLD"]:
+                  print(r["id"])
+            '
+          }
+          has_a() { dig +short A "$1" @ns1.timeweb.ru 2>/dev/null | grep -qx "$2"; }
+          for fqdn in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
+            echo "--- $fqdn ---"
+            for id in $(stale_ids "$fqdn"); do
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "  would delete stale A record id $id"
+                continue
+              fi
+              for path in gulyaly.com "$fqdn"; do
+                code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/$path/dns-records/$id"                   -H "Authorization: Bearer $TOKEN")
+                echo "  delete id $id via $path -> $code"
+              done
+            done
+          done
+          [ "$DRY_RUN" = "true" ] && { echo "dry run: nothing changed"; exit 0; }
+          sleep 45
+          for fqdn in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
+            if has_a "$fqdn" "$PRI"; then
+              echo "$fqdn: answers with the primary"
+            else
+              echo "$fqdn: adding an explicit A record for the primary"
+              curl -s -X POST "https://api.timeweb.cloud/api/v2/domains/$fqdn/dns-records"                 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"                 -d "{\"type\": \"A\", \"value\": \"$PRI\", \"ttl\": 60}"
+              echo
+            fi
+          done
 
       - name: Replace a DKIM public-key TXT record with a freshly generated one
         if: inputs.step == 'replace-dkim-record'
@@ -539,7 +593,8 @@ jobs:
           inputs.step == 'restore-core-a-records' ||
           inputs.step == 'add-mail-a-record' ||
           inputs.step == 'add-second-a-records' ||
-          inputs.step == 'remove-secondary-a-records'
+          inputs.step == 'remove-secondary-a-records' ||
+          (inputs.step == 'repoint-stale-a-records' && inputs.dry_run == false)
         env:
           PRIMARY: ${{ secrets.DEPLOY_HOST }}
           SECONDARY: ${{ secrets.SECONDARY_HOST }}
@@ -574,6 +629,12 @@ jobs:
               for name in gulyaly.com api.gulyaly.com www.gulyaly.com; do
                 wait_a "$name" "$PRIMARY" present
                 wait_a "$name" "${TARGET_IP:-$SECONDARY}" absent
+              done
+              ;;
+            repoint-stale-a-records)
+              for name in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
+                wait_a "$name" "$PRIMARY" present
+                wait_a "$name" "$TARGET_IP" absent
               done
               ;;
           esac
