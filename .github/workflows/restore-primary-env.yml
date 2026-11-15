@@ -2,7 +2,7 @@ name: Restore the primary's .env from repository secrets
 
 # After the primary is rebuilt from scratch its /opt/gul/.env holds only what bootstrap and
 # deploy.yml write. Everything else that lives in repository secrets -- REG.RU mail, application
-# S3, payment providers, Firebase push, the backup bucket, the subdomain callback secret -- is
+# S3, payment providers (FreeKassa, CryptoCloud, Pally), Firebase push, the backup bucket, the subdomain callback secret -- is
 # written here in one pass, primary only, and the three API processes are recreated one at a time.
 #
 # Values never reach a log: they go into a 0600 file on the runner, are copied to the host and
@@ -34,6 +34,8 @@ jobs:
       CRYPTOCLOUD_API_KEY: ${{ secrets.CRYPTOCLOUD_API_KEY }}
       CRYPTOCLOUD_SECRET_KEY: ${{ secrets.CRYPTOCLOUD_SECRET_KEY }}
       CRYPTOCLOUD_SHOP_ID: ${{ secrets.CRYPTOCLOUD_SHOP_ID }}
+      PALLY_API_TOKEN: ${{ secrets.PALLY_API_TOKEN }}
+      PALLY_SHOP_ID: ${{ secrets.PALLY_SHOP_ID }}
       FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
       PROVISION_CALLBACK_SECRET: ${{ secrets.PROVISION_CALLBACK_SECRET }}
     steps:
@@ -81,6 +83,7 @@ jobs:
           group "backup S3" BACKUP_S3_ENDPOINT BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_BUCKET
           group "FreeKassa" FREEKASSA_SHOP_ID FREEKASSA_SECRET_WORD_1 FREEKASSA_SECRET_WORD_2 FREEKASSA_API_KEY
           group "CryptoCloud" CRYPTOCLOUD_API_KEY CRYPTOCLOUD_SECRET_KEY CRYPTOCLOUD_SHOP_ID
+          group "Pally" PALLY_API_TOKEN PALLY_SHOP_ID
           group "Firebase push" FIREBASE_SERVICE_ACCOUNT_BASE64
           group "subdomain callback" PROVISION_CALLBACK_SECRET
           [ -s /tmp/restore.env ] || { echo "nothing to write" >&2; exit 1; }
@@ -123,7 +126,7 @@ jobs:
 
       - name: Payment providers answer (an unsigned probe must be refused, not "unknown provider")
         run: |
-          for provider in freekassa cryptocloud; do
+          for provider in freekassa cryptocloud pally; do
             body=$(curl -s -m 20 -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "probe=1" \
               "https://api.gulyaly.com/api/payments/webhooks/$provider")
             if echo "$body" | grep -q "Unknown payment provider"; then
