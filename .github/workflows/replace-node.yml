@@ -387,12 +387,14 @@ jobs:
           # Certificates from the survivor (the same wildcard pair both nodes serve).
           # The archive holds the private key: owned by deploy, mode 600, and removed by a container
           # too (a root-owned file in sticky /tmp cannot be deleted by deploy -- first drill).
-          ssh "$PS" "docker run --rm -e U=\$(id -u) -e G=\$(id -g) -v /etc/ssl/gulyaly:/c:ro -v /tmp:/o -v /etc/letsencrypt:/le:ro alpine sh -c 'umask 077 && mkdir -p /tmp/b/le && cp -a /c/. /tmp/b/ && cp /le/options-ssl-nginx.conf /le/ssl-dhparams.pem /tmp/b/le/ && tar czf /o/gulcert.tgz -C /tmp/b . && chown \$U:\$G /o/gulcert.tgz'" < /dev/null
+          # gulyaly.com and gulyaly.pro each have their own pair (renew-certs.yml); both travel.
+          ssh "$PS" "docker run --rm -e U=\$(id -u) -e G=\$(id -g) -v /etc/ssl:/s:ro -v /tmp:/o -v /etc/letsencrypt:/le:ro alpine sh -c 'umask 077 && mkdir -p /tmp/b/le && cp -a /s/gulyaly /tmp/b/ && { [ ! -d /s/gulyaly-pro ] || cp -a /s/gulyaly-pro /tmp/b/; } && cp /le/options-ssl-nginx.conf /le/ssl-dhparams.pem /tmp/b/le/ && tar czf /o/gulcert.tgz -C /tmp/b . && chown \$U:\$G /o/gulcert.tgz'" < /dev/null
           scp -q "$PS:/tmp/gulcert.tgz" gulcert.tgz
           ssh "$PS" "docker run --rm -v /tmp:/o alpine rm -f /o/gulcert.tgz" < /dev/null
-          ssh "deploy@$H" "mkdir -p /tmp/nginx-sync" < /dev/null
+          ssh "deploy@$H" "mkdir -p /tmp/nginx-sync/snippets" < /dev/null
           scp -q gulcert.tgz "deploy@$H:/tmp/gulcert.tgz"; rm -f gulcert.tgz
           scp -q infra/nginx/*.conf "deploy@$H:/tmp/nginx-sync/"
+          scp -q infra/nginx/snippets/*.inc "deploy@$H:/tmp/nginx-sync/snippets/"
           {
             echo '#!/bin/sh'; echo 'set -e'
             echo 'apt-get update -y >/dev/null'
@@ -405,7 +407,8 @@ jobs:
             echo "sed -i 's/^user .*/user www-data;/' /etc/nginx/nginx.conf"
             echo 'chown -R www-data:www-data /var/cache/nginx'
             # The vhosts also include certbot's shared TLS options and dhparams from /etc/letsencrypt.
-            echo 'mkdir -p /tmp/gc /etc/letsencrypt && tar xzf /tmp/gulcert.tgz -C /tmp/gc && mv /tmp/gc/le/* /etc/letsencrypt/ && rmdir /tmp/gc/le && cp -a /tmp/gc/. /etc/ssl/gulyaly/ && rm -rf /tmp/gc /tmp/gulcert.tgz && chmod 600 /etc/ssl/gulyaly/privkey.pem'
+            echo 'mkdir -p /tmp/gc /etc/letsencrypt && tar xzf /tmp/gulcert.tgz -C /tmp/gc && mv /tmp/gc/le/* /etc/letsencrypt/ && rmdir /tmp/gc/le && cp -a /tmp/gc/. /etc/ssl/ && rm -rf /tmp/gc /tmp/gulcert.tgz && chmod 600 /etc/ssl/gulyaly*/privkey.pem'
+            echo 'mkdir -p /etc/nginx/snippets/gul && cp /tmp/nginx-sync/snippets/*.inc /etc/nginx/snippets/gul/'
             echo 'cp /tmp/nginx-sync/*.conf /etc/nginx/sites-available/ && rm -rf /tmp/nginx-sync'
             echo 'for f in /etc/nginx/sites-available/*.conf; do ln -sf "$f" "/etc/nginx/sites-enabled/$(basename "$f")"; done'
             echo 'nginx -t && systemctl enable --now nginx && systemctl reload nginx'

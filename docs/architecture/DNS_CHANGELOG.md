@@ -124,3 +124,20 @@ per-record confirmation while the project has no real customers yet — delegate
 the change is part of the current task and justified. Changing the domain's **NS servers**
 themselves (not individual records) is explicitly excluded from that and still requires
 confirmation, since it could move the domain out from under Timeweb's control entirely.
+
+## 2026-11-18 (later) — gulyaly.pro serves the full site, own certificate
+
+The redirect was replaced the same day: `gulyaly.pro` is now a second working domain for the same
+system, so a payment provider can be connected to it. No DNS change (every `.pro` name already
+resolves to the primary).
+
+- `infra/nginx/gulyaly-pro.conf` (replaces `gulyaly-pro-redirect.conf`): `gulyaly.pro` serves the
+  storefront, `api.gulyaly.pro` the API, `www` → apex, `admin.gulyaly.pro` → `admin.gulyaly.com`,
+  any other name → `gulyaly.pro`. The site and API bodies are shared with the `.com` vhosts through
+  `infra/nginx/snippets/*.inc` (installed at `/etc/nginx/snippets/gul/`).
+- `renew-certs.yml` issues two separate certificates: `gulyaly` (`.com`, `/etc/ssl/gulyaly/`) and
+  `gulyaly-pro` (`.pro`, `/etc/ssl/gulyaly-pro/`).
+- `set-cors-origins.yml` adds `https://gulyaly.pro` to the API's `CORS_ORIGINS`: the storefront
+  bundle calls `api.gulyaly.com` from either domain.
+- `sync-nginx.yml` now removes a repo-owned `gulyaly-*.conf` from the host when it disappears from
+  the repo.
