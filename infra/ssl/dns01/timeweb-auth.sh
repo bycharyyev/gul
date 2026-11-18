@@ -37,16 +37,22 @@ fi
 # whose cache could still hold the previous answer.
 # Timeweb has taken from ~4 to ~8 minutes to publish a new record (measured 2026-10-01), so
 # allow 20 before giving up.
+# Every one of the zone's nameservers, not the first to answer: Let's Encrypt may ask any of them,
+# and on 2026-11-18 it asked one that still had only the apex's value while ns1 already had the
+# wildcard's ("Incorrect TXT record ... found at _acme-challenge.gulyaly.pro").
+NAMESERVERS="ns1.timeweb.ru ns2.timeweb.ru ns3.timeweb.org ns4.timeweb.org"
 for i in $(seq 1 80); do
-  for ns in ns1.timeweb.ru ns2.timeweb.ru; do
-    if dig +short TXT "$FQDN" "@$ns" | tr -d '"' | grep -qx -- "$CERTBOT_VALIDATION"; then
-      echo "visible on $ns after $((i * 15))s"
-      # One more beat so every Timeweb nameserver has it, not just the first to answer.
-      sleep 20
-      exit 0
-    fi
+  missing=""
+  for ns in $NAMESERVERS; do
+    dig +short TXT "$FQDN" "@$ns" | tr -d '"' | grep -qx -- "$CERTBOT_VALIDATION" || missing="$missing $ns"
   done
+  if [ -z "$missing" ]; then
+    echo "visible on all nameservers after $((i * 15))s"
+    sleep 20
+    exit 0
+  fi
   sleep 15
 done
+echo "still missing on:$missing" >&2
 echo "TXT record never appeared on Timeweb's nameservers" >&2
 exit 1
