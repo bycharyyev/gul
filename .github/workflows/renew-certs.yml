@@ -118,7 +118,9 @@ jobs:
           mv -f "$D/fullchain.pem.new" "$D/fullchain.pem"
           mv -f "$D/privkey.pem.new" "$D/privkey.pem"
           rm -rf /tmp/cert-install
-          if grep -rqs "$D/" /etc/nginx/sites-enabled/; then
+          # -R, not -r: sites-enabled holds symlinks, which -r does not follow -- so this said
+          # "staged only" and never reloaded (2026-11-18: new certificate on disk, old one served).
+          if grep -Rqs "$D/" /etc/nginx/sites-enabled/; then
             nginx -t && systemctl reload nginx && echo "nginx reloaded"
           else
             echo "staged only: no vhost references $D yet"
