@@ -287,26 +287,26 @@ jobs:
           # "id fqdn" of every A record equal to TARGET_IP, from the zone's own listing (where a
           # subdomain-attached record carries its `subdomain`) and from each name's listing.
           stale() {
-            for src in "$ZONE" "www.$ZONE" "api.$ZONE" "admin.$ZONE" "*.$ZONE"; do
-              curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$src/dns-records"
-              echo
-            done | OLD="$TARGET_IP" ZONE="$ZONE" python3 -c '
+            # The zone itself last: a record also listed under its own name keeps that name.
+            for src in "www.$ZONE" "api.$ZONE" "admin.$ZONE" "*.$ZONE" "$ZONE"; do
+              curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$src/dns-records" | SRC="$src" OLD="$TARGET_IP" ZONE="$ZONE" python3 -c '
           import json, os, sys
-          seen = set()
-          for line in sys.stdin:
-              try:
-                  records = json.loads(line)["dns_records"]
-              except Exception:
+          try:
+              records = json.load(sys.stdin)["dns_records"]
+          except Exception:
+              records = []
+          for r in records:
+              if r.get("type") != "A" or r.get("data", {}).get("value") != os.environ["OLD"]:
                   continue
-              for r in records:
-                  if r.get("type") != "A" or r.get("data", {}).get("value") != os.environ["OLD"]:
-                      continue
-                  if r["id"] in seen:
-                      continue
-                  seen.add(r["id"])
-                  sub = r.get("data", {}).get("subdomain") or r.get("subdomain")
-                  print(r["id"], f"{sub}.{os.environ['ZONE']}" if sub else os.environ["ZONE"])
+              # A record listed under a name is deleted through that name; one in the zone listing
+              # through its own subdomain (2026-11-18: a zone path answered 404 for www/wildcard).
+              sub = r.get("data", {}).get("subdomain") or r.get("subdomain")
+              src = os.environ["SRC"]
+              if src == os.environ["ZONE"] and sub:
+                  src = f"{sub}.{src}"
+              print(r["id"], src)
             '
+            done | awk '!seen[$1]++'
           }
           has_a() { dig +short A "$1" @ns1.timeweb.ru 2>/dev/null | grep -qx "$2"; }
           stale | while read -r id fqdn; do
