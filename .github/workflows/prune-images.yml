@@ -39,8 +39,10 @@ jobs:
             user_secret: SECONDARY_USER
             app_dir: /opt/gul-secondary
     name: prune (${{ matrix.name }})
+    # The secondary is switched off (vars.SECONDARY_ENABLED): its steps are skipped, not failed.
     steps:
       - name: Set up SSH
+        if: matrix.name == 'primary' || vars.SECONDARY_ENABLED == 'true'
         env:
           HOST: ${{ secrets[matrix.host_secret] }}
         run: |
@@ -50,6 +52,7 @@ jobs:
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Reclaim, then confirm the stack is untouched
+        if: matrix.name == 'primary' || vars.SECONDARY_ENABLED == 'true'
         env:
           HOST: ${{ secrets[matrix.host_secret] }}
           USER_NAME: ${{ secrets[matrix.user_secret] }}
@@ -75,6 +78,7 @@ jobs:
           ' < /dev/null
 
       - name: API still healthy
+        if: matrix.name == 'primary' || vars.SECONDARY_ENABLED == 'true'
         env:
           HOST: ${{ secrets[matrix.host_secret] }}
         run: |
