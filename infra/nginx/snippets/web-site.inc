@@ -1,0 +1,41 @@
+# Shared by the gulyaly.com and gulyaly.pro storefront vhosts (gulyaly-web.conf, gulyaly-pro.conf).
+# Installed to /etc/nginx/snippets/gul/ by sync-nginx.yml; included at server level.
+
+# Security headers (S-03 in docs/analysis/SECURITY.md). `always` so error pages carry them
+# too. nginx drops every server-level add_header in a location that declares its own, so a
+# location added here with an add_header must repeat this block.
+#
+# The Content-Security-Policy is report-only: the site loads Google Analytics, Yandex Metrika
+# with Webvisor, Sentry, and product images from arbitrary https URLs, so an enforced policy
+# written blind would break something. Violations go to Sentry's security endpoint; once they
+# show what the site really needs, rename the header to Content-Security-Policy.
+server_tokens off;
+proxy_hide_header X-Powered-By;
+add_header Strict-Transport-Security "max-age=31536000" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=()" always;
+# connect-src carries both https:// and wss:// for mc.yandex.ru/.com -- Yandex Metrika's
+# tag.js opens a websocket (wss://mc.yandex.ru/solid.ws) for its real-time-visitors feature
+# in addition to plain HTTPS beacons, and CSP treats the two schemes as distinct origins.
+# Caught by this policy's own Report-Only mode (GUL-8) before it was ever switched to enforcing.
+add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://mc.yandex.ru https://mc.yandex.com https://yastatic.net; connect-src 'self' https://api.gulyaly.com wss://api.gulyaly.com https://*.ingest.de.sentry.io https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://mc.yandex.ru https://mc.yandex.com wss://mc.yandex.ru wss://mc.yandex.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' https://mc.yandex.ru https://mc.yandex.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; report-uri https://o4512085236318208.ingest.de.sentry.io/api/4512085921628240/security/?sentry_key=1127fec1696b085767b9ffe997cfa202" always;
+
+# The site that lived here before was static, so Google still requests its /index.html (and
+# 404'd on it -- Search Console "Not found (404)", 2026-10). A permanent redirect to the home
+# page moves that old URL's link equity to the real one instead of a dead end.
+location ~ ^/index\.(html?|php)$ {
+    return 301 https://$host/;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
