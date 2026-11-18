@@ -1,0 +1,78 @@
+name: Add origins to the API's CORS_ORIGINS (primary)
+
+# The storefront bundle calls https://api.gulyaly.com from whatever domain it is served on, so every
+# domain serving it must be in CORS_ORIGINS in /opt/gul/.env (main.ts fails closed otherwise).
+# Added 2026-11-18 for gulyaly.pro (infra/nginx/gulyaly-pro.conf). Idempotent: an origin already in
+# the list is left alone, nothing is removed. Not secret, so the value is printed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      add:
+        description: "Comma-separated origins to add (https://host, no trailing slash)"
+        required: true
+        default: "https://gulyaly.pro"
+
+concurrency:
+  group: primary-env
+  cancel-in-progress: false
+
+jobs:
+  cors:
+    runs-on: ubuntu-latest
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      ADD: ${{ inputs.add }}
+    steps:
+      - name: Validate the input
+        run: |
+          for o in ${ADD//,/ }; do
+            [[ "$o" =~ ^https://[a-z0-9.-]+$ ]] || { echo "not an origin: $o" >&2; exit 1; }
+          done
+
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Merge into /opt/gul/.env and recreate the API processes
+        run: |
+          ssh -i ~/.ssh/deploy_key "$PRIMARY" "ADD='$ADD' bash -s" <<'REMOTE'
+          set -e
+          cd /opt/gul
+          umask 077
+          cur=$(grep -E '^CORS_ORIGINS=' .env | head -1 | cut -d= -f2- | tr -d '\r' | sed -e "s/^[\"']//" -e "s/[\"']$//")
+          echo "before: $cur"
+          new=$cur
+          for o in ${ADD//,/ }; do
+            case ",$new," in *",$o,"*) echo "already present: $o" ;; *) new="${new:+$new,}$o"; echo "adding: $o" ;; esac
+          done
+          if [ "$new" = "$cur" ]; then echo "nothing to change"; exit 0; fi
+          cp -p .env ".env.bak-cors-$(date +%Y%m%d%H%M%S)"
+          { grep -vE '^CORS_ORIGINS=' .env; printf "CORS_ORIGINS='%s'\n" "$new"; } > /tmp/env.new
+          cat /tmp/env.new > .env && rm -f /tmp/env.new
+          echo "after: $new"
+          # One process at a time, as the deploy does, so one HTTP process is always serving.
+          for pair in api-worker:4001 api:4000 api-2:4002; do
+            svc=${pair%%:*}; port=${pair##*:}
+            docker compose up -d --force-recreate --no-deps "$svc" < /dev/null
+            ok=0
+            for i in $(seq 1 45); do
+              curl -fsS "http://127.0.0.1:$port/api/health/ready" > /dev/null && { ok=1; break; }
+              sleep 2
+            done
+            [ "$ok" = 1 ] || { echo "$svc (port $port) did not come back healthy" >&2; exit 1; }
+            echo "healthy: $svc"
+          done
+          REMOTE
+
+      - name: Check the API answers the new origins
+        run: |
+          for o in ${ADD//,/ }; do
+            got=$(curl -s -m 20 -o /dev/null -D - -H "Origin: $o" https://api.gulyaly.com/api/health | tr -d '\r' | grep -i '^access-control-allow-origin:' || true)
+            echo "$o -> ${got:-no Access-Control-Allow-Origin}"
+            grep -qiF "$o" <<<"$got"
+          done
