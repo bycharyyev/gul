@@ -18,7 +18,10 @@ trap 'docker rm -f $CONTAINER >/dev/null 2>&1 || true; rm -rf "$WORKDIR"' EXIT
 env_value() {
   # `|| true`: an absent key is an empty value, not a fatal error (see backup-db.sh). Without it this
   # script died silently, exit 1 and no output, whenever the optional BACKUP_S3_REGION was unset.
-  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | sed -e "s/\"//g" -e "s/'\''//g" || true
+  # Same parsing as backup-db.sh. The old `sed "s/'\''//g"` never removed a single quote (in GNU
+  # sed `\'` is an end-of-buffer anchor), so once restore-primary-env.yml wrote values as KEY='v'
+  # the endpoint reached curl as `'https://...'` and failed "Port number was not a decimal".
+  grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | sed -e "s/^[\"']//" -e "s/[\"']$//" || true
 }
 S3_ENDPOINT=$(env_value BACKUP_S3_ENDPOINT); S3_ENDPOINT=${S3_ENDPOINT%/}
 S3_ACCESS_KEY_ID=$(env_value BACKUP_S3_ACCESS_KEY_ID)
