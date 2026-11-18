@@ -104,6 +104,19 @@ swap. Left as-is since it's an internal ops signal, not user-facing; can be migr
 follow-up if wanted. The `newsletter.gulyaly.pro` marketing identity is likewise untouched for now
 — broadcast mail wasn't part of this pass.
 
+## 2026-11-18 — gulyaly.pro brought back as a redirect
+
+The old domain was still on Timeweb NS but answered nothing useful: no HTTPS (the certificate
+covered only `.com`) and an A record on the switched-off secondary (`91.184.250.89`). Now:
+
+- **`repoint-stale-a-records`** with `zone=gulyaly.pro`, `target_ip=91.184.250.89` — removes the
+  A records on the dead secondary from the `.pro` zone, so every `.pro` name resolves to the
+  primary only. The step takes a `zone` input since this change (default `gulyaly.com`).
+- `renew-certs.yml` issues the shared certificate for `gulyaly.pro` + `*.gulyaly.pro` too, and
+  reissues as soon as an installed certificate lacks a listed name.
+- `infra/nginx/gulyaly-pro-redirect.conf`: every `.pro` host redirects to the same path on
+  `.com` (301; `api.gulyaly.pro` 308 so a POST keeps its body).
+
 ## Test-phase autonomy note
 
 Per the user's 2026-08-28 instruction, DNS-record changes (add/modify/delete) no longer require a

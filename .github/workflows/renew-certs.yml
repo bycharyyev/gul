@@ -1,4 +1,4 @@
-name: Renew the gulyaly.com certificate (DNS-01) on both hosts
+name: Renew the gulyaly.com + gulyaly.pro certificate (DNS-01) on both hosts
 
 # Why this exists: DNS round-robins gulyaly.com/www/api across BOTH hosts, so an HTTP-01
 # challenge lands on whichever node the validator happens to resolve -- and the token only exists
@@ -7,7 +7,8 @@ name: Renew the gulyaly.com certificate (DNS-01) on both hosts
 # 2026-12-17 expiry would have taken half (or all) of HTTPS down.
 #
 # Instead the certificate is issued HERE, on the runner, with a DNS-01 challenge published
-# through the Timeweb API (infra/ssl/dns01/), for gulyaly.com + *.gulyaly.com, and the same
+# through the Timeweb API (infra/ssl/dns01/), for gulyaly.com + *.gulyaly.com (and the old
+# domain gulyaly.pro + *.gulyaly.pro, which only redirects -- infra/nginx/gulyaly-pro-redirect.conf), and the same
 # cert/key pair is installed on both hosts at /etc/ssl/gulyaly/. Neither host takes part in
 # validation, so round-robin no longer matters. The wildcard also covers every managed subdomain
 # and the catch-all vhost. Details and recovery: infra/ssl/README.md.
@@ -67,6 +68,11 @@ jobs:
             days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
             echo "installed certificate expires $end ($days days left)"
             [ "$days" -lt "$RENEW_DAYS" ] && due=true
+            # A name added to the list below must not wait for the next expiry to be covered.
+            sans=$(ssh -i ~/.ssh/deploy_key "$target" "openssl x509 -noout -ext subjectAltName -in $CERT_DIR/fullchain.pem 2>/dev/null" < /dev/null)
+            for name in gulyaly.com '*.gulyaly.com' gulyaly.pro '*.gulyaly.pro'; do
+              grep -qF "DNS:$name" <<<"$sans" || { echo "installed certificate does not cover $name -- reissuing"; due=true; }
+            done
           done
           echo "renew=$due" >> "$GITHUB_OUTPUT"
 
@@ -74,7 +80,7 @@ jobs:
         if: steps.due.outputs.renew == 'true'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq certbot dnsutils jq > /dev/null && certbot --version
 
-      - name: Issue gulyaly.com + *.gulyaly.com via DNS-01
+      - name: Issue gulyaly.com, *.gulyaly.com, gulyaly.pro, *.gulyaly.pro via DNS-01
         if: steps.due.outputs.renew == 'true'
         env:
           TIMEWEB_API_TOKEN: ${{ secrets.TIMEWEB_API_TOKEN }}
@@ -88,7 +94,7 @@ jobs:
             --manual-cleanup-hook "$GITHUB_WORKSPACE/infra/ssl/dns01/timeweb-cleanup.sh" \
             --cert-name gulyaly --key-type ecdsa \
             ${{ inputs.staging && '--staging' || '' }} \
-            -d gulyaly.com -d '*.gulyaly.com'
+            -d gulyaly.com -d '*.gulyaly.com' -d gulyaly.pro -d '*.gulyaly.pro'
           openssl x509 -in "$LE/config/live/gulyaly/fullchain.pem" -noout -issuer -enddate -ext subjectAltName
 
       - name: Install on both hosts and reload nginx
