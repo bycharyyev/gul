@@ -64,6 +64,14 @@ on:
         required: false
         type: string
         default: ''
+      zone:
+        description: 'repoint-stale-a-records only: the zone to clean (gulyaly.com or gulyaly.pro)'
+        required: false
+        type: choice
+        default: gulyaly.com
+        options:
+          - gulyaly.com
+          - gulyaly.pro
       dry_run:
         description: 'remove-secondary-a-records only: true lists what would be deleted without deleting anything'
         required: false
@@ -265,6 +273,7 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           TARGET_IP: ${{ inputs.target_ip }}
+          ZONE: ${{ inputs.zone }}
         run: |
           set -e
           # After the primary moved to a new address, explicit A records for these names kept the
@@ -275,35 +284,44 @@ jobs:
           PRI="${{ secrets.DEPLOY_HOST }}"
           [ "$TARGET_IP" != "$PRI" ] || { echo "target_ip is the primary itself" >&2; exit 1; }
           TOKEN="${{ secrets.TIMEWEB_API_TOKEN }}"
-          stale_ids() { # stale_ids <fqdn>
-            curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$1/dns-records"               | OLD="$TARGET_IP" python3 -c '
+          # "id fqdn" of every A record equal to TARGET_IP, from the zone's own listing (where a
+          # subdomain-attached record carries its `subdomain`) and from each name's listing.
+          stale() {
+            for src in "$ZONE" "www.$ZONE" "api.$ZONE" "admin.$ZONE" "*.$ZONE"; do
+              curl -s -H "Authorization: Bearer $TOKEN" "https://api.timeweb.cloud/api/v1/domains/$src/dns-records"
+              echo
+            done | OLD="$TARGET_IP" ZONE="$ZONE" python3 -c '
           import json, os, sys
-          try:
-              records = json.load(sys.stdin)["dns_records"]
-          except Exception:
-              records = []
-          for r in records:
-              if r.get("type") == "A" and r.get("data", {}).get("value") == os.environ["OLD"]:
-                  print(r["id"])
+          seen = set()
+          for line in sys.stdin:
+              try:
+                  records = json.loads(line)["dns_records"]
+              except Exception:
+                  continue
+              for r in records:
+                  if r.get("type") != "A" or r.get("data", {}).get("value") != os.environ["OLD"]:
+                      continue
+                  if r["id"] in seen:
+                      continue
+                  seen.add(r["id"])
+                  sub = r.get("data", {}).get("subdomain") or r.get("subdomain")
+                  print(r["id"], f"{sub}.{os.environ['ZONE']}" if sub else os.environ["ZONE"])
             '
           }
           has_a() { dig +short A "$1" @ns1.timeweb.ru 2>/dev/null | grep -qx "$2"; }
-          for fqdn in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
-            echo "--- $fqdn ---"
-            for id in $(stale_ids "$fqdn"); do
-              if [ "$DRY_RUN" = "true" ]; then
-                echo "  would delete stale A record id $id"
-                continue
-              fi
-              for path in gulyaly.com "$fqdn"; do
-                code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/$path/dns-records/$id"                   -H "Authorization: Bearer $TOKEN")
-                echo "  delete id $id via $path -> $code"
-              done
+          stale | while read -r id fqdn; do
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "  would delete stale A record id $id ($fqdn)"
+              continue
+            fi
+            for path in "$ZONE" "$fqdn"; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "https://api.timeweb.cloud/api/v2/domains/$path/dns-records/$id"                 -H "Authorization: Bearer $TOKEN")
+              echo "  delete id $id ($fqdn) via $path -> $code"
             done
           done
           [ "$DRY_RUN" = "true" ] && { echo "dry run: nothing changed"; exit 0; }
           sleep 45
-          for fqdn in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
+          for fqdn in "$ZONE" "www.$ZONE" "api.$ZONE" "admin.$ZONE"; do
             if has_a "$fqdn" "$PRI"; then
               echo "$fqdn: answers with the primary"
             else
@@ -599,6 +617,7 @@ jobs:
           PRIMARY: ${{ secrets.DEPLOY_HOST }}
           SECONDARY: ${{ secrets.SECONDARY_HOST }}
           TARGET_IP: ${{ inputs.target_ip }}
+          ZONE: ${{ inputs.zone }}
         run: |
           set -euo pipefail
           has_a() { dig +short A "$1" @ns1.timeweb.ru | grep -qx "$2"; }
@@ -632,14 +651,14 @@ jobs:
               done
               ;;
             repoint-stale-a-records)
-              for name in gulyaly.com www.gulyaly.com api.gulyaly.com admin.gulyaly.com; do
+              for name in "$ZONE" "www.$ZONE" "api.$ZONE" "admin.$ZONE"; do
                 wait_a "$name" "$PRIMARY" present
                 wait_a "$name" "$TARGET_IP" absent
               done
               ;;
           esac
           echo "--- what the authoritative nameserver actually answers ---"
-          for name in gulyaly.com www.gulyaly.com api.gulyaly.com mail.gulyaly.com; do
+          for name in gulyaly.com www.gulyaly.com api.gulyaly.com mail.gulyaly.com $([ "$ZONE" = gulyaly.pro ] && echo gulyaly.pro www.gulyaly.pro api.gulyaly.pro); do
             printf '%-22s ' "$name"
             dig +short A "$name" @ns1.timeweb.ru | tr '\n' ' '
             echo

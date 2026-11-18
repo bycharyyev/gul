@@ -8,7 +8,7 @@ so renewing on the hosts was a coin toss per validation, and the secondary's cer
 one-off copy nothing refreshed. The certificate is therefore issued by
 `.github/workflows/renew-certs.yml` on the GitHub runner:
 
-- **DNS-01** for `gulyaly.com` + `*.gulyaly.com`; `dns01/timeweb-auth.sh` publishes the TXT record
+- **DNS-01** for `gulyaly.com` + `*.gulyaly.com`, plus the old domain `gulyaly.pro` + `*.gulyaly.pro` (it only redirects to `.com`, `infra/nginx/gulyaly-pro-redirect.conf`; added 2026-11-18); `dns01/timeweb-auth.sh` publishes the TXT record
   through the Timeweb API (`TIMEWEB_API_TOKEN`) and waits for Timeweb's nameservers,
   `dns01/timeweb-cleanup.sh` removes exactly that record afterwards. Neither host takes part in
   validation.
