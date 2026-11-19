@@ -41,16 +41,15 @@ jobs:
             echo "status $id: $(call /currencies/$id/status | jq -c '{type, message: (.message // null)}')"
           done
 
-      # Where the hosted form sends a payer, with and without a suggested method (i). A made-up
-      # order id and 10 RUB: nothing is paid, the form is only opened. Prints hosts and paths of
-      # the redirect chain and the page title, no query strings.
-      - name: Hosted form per method
+      # Signed links to the hosted form for a made-up 10 RUB order, with and without a suggested
+      # method (i), to open in a browser. Nothing is paid unless someone pays; the order id is
+      # unknown to our API, so a payment could not be credited anywhere.
+      - name: Hosted form links per method
         run: |
           amount=10.00; cur=RUB; o="diag-$(date +%s)"
           s=$(printf '%s:%s:%s:%s:%s' "$SHOP" "$amount" "$SW1" "$cur" "$o" | md5sum | cut -d' ' -f1)
           for i in none 36 42 4 12; do
             q="m=$SHOP&oa=$amount&currency=$cur&o=$o&s=$s&lang=ru"
             [ "$i" = none ] || q="$q&i=$i"
-            out=$(ssh -i ~/.ssh/deploy_key "$PRIMARY" "curl -s -L -m 25 -A 'Mozilla/5.0' -o /tmp/fkform.html -w '%{url_effective} %{http_code}' 'https://pay.fk.money/?$q'; grep -o '<title>[^<]*' /tmp/fkform.html | head -1; grep -oiE 'fkwallet|сбп|sbp|номер карты|card number|ошибка[^<]{0,60}|error[^<]{0,60}' /tmp/fkform.html | sort | uniq -c | head -8; rm -f /tmp/fkform.html" < /dev/null)
-            echo "=== i=$i"; echo "$out" | sed -E 's/\?[^ ]*//'
+            echo "LINK i=$i https://pay.fk.money/?$q" | sed "s/$SHOP/SHOPID/g"
           done
