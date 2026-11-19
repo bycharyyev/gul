@@ -1,0 +1,41 @@
+name: One-off - FreeKassa payment methods for the shop
+
+# Read-only: asks the FreeKassa API (from the primary, whose address the API sees) which payment
+# methods the shop can take, and whether each is available now. Prints method ids, names and
+# statuses only. Delete after use.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    env:
+      PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+      SHOP: ${{ secrets.FREEKASSA_SHOP_ID }}
+      KEY: ${{ secrets.FREEKASSA_API_KEY }}
+    steps:
+      - name: Set up SSH (pinned host keys)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ask FreeKassa
+        run: |
+          n=0
+          call() { # call <path>
+            n=$((n + 1))
+            nonce=$(( $(date +%s%3N) + n ))
+            sig=$(printf '%s|%s' "$nonce" "$SHOP" | openssl dgst -sha256 -hmac "$KEY" -r | cut -d' ' -f1)
+            body=$(printf '{"shopId":%s,"nonce":%s,"signature":"%s"}' "$SHOP" "$nonce" "$sig")
+            ssh -i ~/.ssh/deploy_key "$PRIMARY" "curl -s -m 20 -X POST -H 'Content-Type: application/json' -d '$body' https://api.fk.life/v1$1" < /dev/null
+          }
+          list=$(call /currencies)
+          echo "type: $(echo "$list" | jq -r '.type') $(echo "$list" | jq -r '.message // empty')"
+          echo "$list" | jq -r '.currencies[]? | "\(.id)\t\(.name)\t\(.currency)\tenabled=\(.is_enabled)\tfavorite=\(.is_favorite)\tlimits=\(.limits // {} | tostring)"'
+          for id in $(echo "$list" | jq -r '.currencies[]?.id'); do
+            echo "status $id: $(call /currencies/$id/status | jq -c '{type, message: (.message // null)}')"
+          done
