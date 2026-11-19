@@ -21,6 +21,14 @@ const DEFAULT_NOTIFY_IPS = ["168.119.157.136", "168.119.60.227", "178.154.197.79
 /** Currencies FreeKassa accepts for the shop amount; our others (TRY, CNY) cannot be charged here. */
 const SUPPORTED_CURRENCIES = new Set(["RUB", "USD", "EUR", "KZT"]);
 
+/**
+ * Our payment method -> FreeKassa's payment system id, sent as `i` on the hosted form. Without it
+ * the form offers only some systems (2026-11-20, desk 78024: FKwallet, YooMoney, SBP and crypto,
+ * no card), so a customer who chose "card" on our site could not pay by card. Ids are from the
+ * shop's own /currencies list: 36 Card RUB, 42 SBP, 12 MIR.
+ */
+const METHOD_SYSTEM_ID: Record<string, number> = { CARD: 36, SBP: 42, MIR: 12 };
+
 /** FreeKassa order status -> our normalised status (docs §2.3). */
 const STATUS: Record<number, PaymentLookupStatus> = {
   0: "PENDING",
@@ -129,7 +137,10 @@ export class FreeKassaPaymentProvider implements PaymentProvider {
     return this.config;
   }
 
-  async initiate(order: Order, idempotencyKey: string): Promise<PaymentInitiationResult> {
+  async initiate(
+    order: Order & { paymentMethod?: { code: string } | null },
+    idempotencyKey: string,
+  ): Promise<PaymentInitiationResult> {
     const { shopId, secretWord1 } = this.cfg();
     const currency = String(order.currency);
     if (!SUPPORTED_CURRENCIES.has(currency)) {
@@ -139,7 +150,11 @@ export class FreeKassaPaymentProvider implements PaymentProvider {
     // Signature: MD5(shop:amount:secret1:currency:order) -- with the exact strings sent below.
     const sign = md5(`${shopId}:${amount}:${secretWord1}:${currency}:${idempotencyKey}`);
     const url = new URL(PAY_URL);
-    url.search = new URLSearchParams({ m: shopId, oa: amount, currency, o: idempotencyKey, s: sign, lang: "ru" }).toString();
+    const params = new URLSearchParams({ m: shopId, oa: amount, currency, o: idempotencyKey, s: sign, lang: "ru" });
+    // Not part of the signature (docs §1.2), so it cannot invalidate one.
+    const system = order.paymentMethod ? METHOD_SYSTEM_ID[order.paymentMethod.code] : undefined;
+    if (system) params.set("i", String(system));
+    url.search = params.toString();
     return { providerRef: idempotencyKey, redirectUrl: url.toString() };
   }
 
