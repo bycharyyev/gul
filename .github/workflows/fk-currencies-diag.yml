@@ -14,6 +14,7 @@ jobs:
       PRIMARY: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
       SHOP: ${{ secrets.FREEKASSA_SHOP_ID }}
       KEY: ${{ secrets.FREEKASSA_API_KEY }}
+      SW1: ${{ secrets.FREEKASSA_SECRET_WORD_1 }}
     steps:
       - name: Set up SSH (pinned host keys)
         run: |
@@ -38,4 +39,18 @@ jobs:
           echo "$list" | jq -r '.currencies[]? | "\(.id)\t\(.name)\t\(.currency)\tenabled=\(.is_enabled)\tfavorite=\(.is_favorite)\tlimits=\(.limits // {} | tostring)"'
           for id in $(echo "$list" | jq -r '.currencies[]?.id'); do
             echo "status $id: $(call /currencies/$id/status | jq -c '{type, message: (.message // null)}')"
+          done
+
+      # Where the hosted form sends a payer, with and without a suggested method (i). A made-up
+      # order id and 10 RUB: nothing is paid, the form is only opened. Prints hosts and paths of
+      # the redirect chain and the page title, no query strings.
+      - name: Hosted form per method
+        run: |
+          amount=10.00; cur=RUB; o="diag-$(date +%s)"
+          s=$(printf '%s:%s:%s:%s:%s' "$SHOP" "$amount" "$SW1" "$cur" "$o" | md5sum | cut -d' ' -f1)
+          for i in none 36 42 4 12; do
+            q="m=$SHOP&oa=$amount&currency=$cur&o=$o&s=$s&lang=ru"
+            [ "$i" = none ] || q="$q&i=$i"
+            out=$(ssh -i ~/.ssh/deploy_key "$PRIMARY" "curl -s -L -m 25 -A 'Mozilla/5.0' -o /tmp/fkform.html -w '%{url_effective} %{http_code}' 'https://pay.fk.money/?$q'; grep -o '<title>[^<]*' /tmp/fkform.html | head -1; grep -oiE 'fkwallet|сбп|sbp|номер карты|card number|ошибка[^<]{0,60}|error[^<]{0,60}' /tmp/fkform.html | sort | uniq -c | head -8; rm -f /tmp/fkform.html" < /dev/null)
+            echo "=== i=$i"; echo "$out" | sed -E 's/\?[^ ]*//'
           done
