@@ -42,7 +42,7 @@ Modules: admin-stats, admin-telegram-bot, analytics-links, api-keys, api-quota, 
 | --- | --- |
 | Models | 75 |
 | Enums | 42 |
-| Migrations | 63 |
+| Migrations | 64 |
 | Migrations carrying allow-destructive | 2 |
 
 ## Clients
