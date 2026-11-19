@@ -8,7 +8,7 @@
 
 | Area | Source lines | Files |
 | --- | --- | --- |
-| API (NestJS) | 27891 | 394 |
+| API (NestJS) | 27906 | 394 |
 | Web (Next.js) | 11477 | 95 |
 | Admin (Vite) | 15183 | 77 |
 | Mobile (Flutter) | 27504 | 132 |
@@ -20,7 +20,7 @@
 
 | Where | Test files | Test lines |
 | --- | --- | --- |
-| API (jest) | 94 | 13222 |
+| API (jest) | 94 | 13239 |
 | Mobile (flutter test) | 54 | 7735 |
 | Web + Admin | 4 | 0 |
 | packages/* | 3 | 0 |

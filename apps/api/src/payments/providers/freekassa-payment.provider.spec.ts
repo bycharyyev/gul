@@ -58,6 +58,23 @@ describe("FreeKassaPaymentProvider.initiate", () => {
     expect(res.providerRef).toBe("idem-1");
   });
 
+  it("asks the form for the payment system the customer chose on our site", async () => {
+    const { provider } = setup();
+    const withMethod = (code: string) =>
+      ({ currency: "RUB", amountCharged: new Prisma.Decimal("100.11"), paymentMethod: { code } }) as never;
+    const system = async (code: string) =>
+      new URL((await provider.initiate(withMethod(code), "idem-1")).redirectUrl!).searchParams.get("i");
+    expect(await system("CARD")).toBe("36");
+    expect(await system("SBP")).toBe("42");
+    expect(await system("MIR")).toBe("12");
+    // No method on the order, or one FreeKassa has no system for: the form offers its own choice.
+    expect(new URL((await provider.initiate(order, "idem-1")).redirectUrl!).searchParams.has("i")).toBe(false);
+    expect(await system("CRYPTO")).toBeNull();
+    // The signature does not cover `i`.
+    const url = new URL((await provider.initiate(withMethod("SBP"), "idem-1")).redirectUrl!);
+    expect(url.searchParams.get("s")).toBe(md5("7012:100.11:secret1:RUB:idem-1"));
+  });
+
   it("refuses a currency FreeKassa cannot charge", async () => {
     const { provider } = setup();
     await expect(provider.initiate({ currency: "TRY", amountCharged: new Prisma.Decimal(5) } as never, "k")).rejects.toThrow(
